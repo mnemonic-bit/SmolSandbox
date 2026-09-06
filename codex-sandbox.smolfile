@@ -40,6 +40,7 @@ workdir = "/workspace"
 # artifacts, fatal when there is no fallback).
 allow_hosts = [
   "api.openai.com",                # Codex model access (API-key auth)
+  "auth.openai.com",               # To authenticate Codex through another device
   "api.nuget.org",                 # NuGet — dotnet restore + global tools
   "registry.npmjs.org",            # npm
   "pypi.org",                      # pip index
