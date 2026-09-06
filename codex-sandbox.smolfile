@@ -40,7 +40,6 @@ workdir = "/workspace"
 # artifacts, fatal when there is no fallback).
 allow_hosts = [
   "api.openai.com",                # Codex model access (API-key auth)
-  "auth.openai.com",               # To authenticate Codex through another device
   "api.nuget.org",                 # NuGet — dotnet restore + global tools
   "registry.npmjs.org",            # npm
   "pypi.org",                      # pip index
@@ -65,6 +64,12 @@ allow_hosts = [
   # "ghcr.io",                     # add if you pull/push GitHub Container Registry
   # "quay.io",                     # add if you pull from Quay
 ]
+
+# Optional: forward your HOST ssh-agent into the guest so `git pull/push`
+# over SSH works without copying private keys into the VM — the hypervisor
+# forwards the agent connection, keys never enter the guest.
+# [auth]
+# ssh_agent = true
 
 [dev]
 # Host paths exposed to the guest:
@@ -108,6 +113,21 @@ init = [
   # config non-interactively (correct even if tzdata was already installed in
   # the base image before the preseed ran)
   "ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime && printf 'Europe/Berlin\\n' > /etc/timezone && dpkg-reconfigure -f noninteractive tzdata",
+
+  # --- Git: the virtiofs-mounted /workspace carries HOST UIDs, which differ
+  # from the guest's root — git >= 2.35.2 then refuses to operate
+  # ("detected dubious ownership", the CVE-2022-24765 check). Explicitly
+  # trust /workspace; the '*' entry also covers nested repos, submodules,
+  # and anything Codex clones to /tmp — same tradeoff CI containers make,
+  # acceptable because the disposable microVM IS the security boundary.
+  "git config --global --add safe.directory /workspace",
+  "git config --global --add safe.directory '*'",
+  "git config --global init.defaultBranch main",
+  # Optional: give Codex a git identity for commits it creates. Personalize,
+  # or drop these lines and set GIT_AUTHOR_NAME/GIT_AUTHOR_EMAIL etc. via
+  # [secrets] from_env instead.
+  # "git config --global user.name 'Codex Sandbox'",
+  # "git config --global user.email 'codex@sandbox.local'",
 
   # Podman/Buildah storage must NOT live on the rootfs (overlay2 cannot nest
   # on the machine's root overlay). Point the graph at the ext4 storage disk,
