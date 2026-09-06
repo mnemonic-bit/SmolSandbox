@@ -1,0 +1,152 @@
+# Smolfile — Codex sandbox for smolvm (smol-machines/smolvm)
+# One declarative microVM: Ubuntu 24.04 + Node 22 + Python 3 + .NET 8 SDK,
+# OpenAI Codex CLI, Matt Pocock's grill-me/grilling skills,
+# DeusData's codebase-memory-mcp, Podman + Buildah for nested containers,
+# and Playwright + per-stack dev/debug tooling for live web-app testing.
+#
+# Create from your repo root so "./" mounts the right project:
+#   smolvm machine create --name codex-sandbox --smolfile ./Smolfile --storage 20
+#
+# NOTE: add `.smolvm/` to your repo's .gitignore — it holds Codex session
+# state that must not be committed.
+
+image = "ubuntu:24.04"
+cpus = 4
+memory = 12288           # MiB; elastic via virtio balloon. Headless Chromium
+                          # plus builds plus the app itself live in RAM together.
+net = true               # required for the egress allowlist below
+workdir = "/workspace"
+
+[network]
+# Everything the guest (and any container inside it) can ever reach.
+# Nested containers NAT through the guest's network stack, so they inherit
+# this allowlist too. Hosts marked "provisioning" are only needed by the init
+# commands; drop them after the first `machine create` for a tighter policy.
+allow_hosts = [
+  "api.openai.com",                # Codex model access (API-key auth)
+  "api.nuget.org",                 # NuGet — dotnet restore + global tools
+  "registry.npmjs.org",            # npm
+  "pypi.org",                      # pip index
+  "files.pythonhosted.org",        # pip wheels
+  "registry-1.docker.io",          # Docker Hub — podman pull / buildah
+  "auth.docker.io",                # Docker Hub auth
+  "production.cloudflare.docker.com", # Docker Hub layer CDN
+  "mcr.microsoft.com",             # Microsoft artifacts (SQL Server container, etc.)
+  "archive.ubuntu.com",            # apt (provisioning)
+  "security.ubuntu.com",           # apt (provisioning)
+  "deb.nodesource.com",            # Node 22 (provisioning)
+  "github.com",                    # skills + codebase-memory-mcp (provisioning)
+  "raw.githubusercontent.com",     # setup scripts (provisioning)
+  "release-assets.githubusercontent.com", # (provisioning)
+  "objects.githubusercontent.com", # release binaries (provisioning)
+  "codeload.github.com",           # repo tarballs (provisioning)
+  # "ghcr.io",                     # add if you pull/push GitHub Container Registry
+  # "quay.io",                     # add if you pull from Quay
+]
+
+[dev]
+# Host paths exposed to the guest:
+#  1. The repo you created the machine from, at /workspace. The ext4 storage
+#     disk stays at /storage for container layers.
+#  2. Codex persistent state, mounted at the DEFAULT CODEX_HOME location
+#     (/root/.codex): config.toml, auth.json, history.jsonl, the state DB,
+#     skills/, and sessions/ (per-session rollout files that make
+#     `codex resume` work across machine rebuilds).
+#
+# It is mounted at /root/.codex on purpose instead of setting CODEX_HOME to
+# a custom path: some tools hardcode ~/.codex (e.g. codebase-memory-mcp's
+# installer writes the MCP server entry into ~/.codex/config.toml), and the
+# default path needs no env plumbing during init or exec. If you prefer an
+# explicit CODEX_HOME=/codex-home, change the guest path below AND prefix
+# every init command and exec that touches Codex with CODEX_HOME=/codex-home.
+volumes = [
+  "./:/workspace",
+  "./.smolvm/codex-home:/root/.codex",
+]
+
+# Host:guest port forwards, symmetric so direction never matters. Codex tests
+# against guest-localhost directly (no forward needed); these let YOU open the
+# running app in your host browser. 3000 Next/React, 5000 ASP.NET default,
+# 5173 Vite, 8000 Django/FastAPI/uvicorn, 8080 generic.
+ports = ["3000:3000", "5000:5000", "5173:5173", "8000:8000", "8080:8080"]
+
+init = [
+  # Toolchains: Python 3, .NET 8 SDK, git, ripgrep, Podman + Buildah, extras
+  "apt-get update",
+  "apt-get install -y --no-install-recommends ca-certificates curl git ripgrep unzip jq sqlite3 httpie pipx python3 python3-pip python3-venv dotnet-sdk-8.0 podman buildah",
+
+  # Podman/Buildah storage must NOT live on the rootfs (overlay2 cannot nest
+  # on the machine's root overlay). Point the graph at the ext4 storage disk,
+  # same pattern smol machines uses for docker-in-a-machine.
+  "mkdir -p /storage/containers && printf 'graphroot = \"/storage/containers/storage\"\\nrunroot = \"/run/containers/storage\"\\n[storage]\\ndriver = \"overlay\"\\n' > /etc/containers/storage.conf",
+
+  # Node 22 from NodeSource (Ubuntu's own nodejs is too old for Codex CLI)
+  "curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/node-setup.sh && bash /tmp/node-setup.sh && apt-get install -y --no-install-recommends nodejs",
+
+  # OpenAI Codex CLI
+  "npm install -g @openai/codex@latest",
+
+  # Codex config — /root/.codex is the mounted state dir, so this survives
+  # rebuilds. On rebuild this rewrite is harmless: codebase-memory-mcp's
+  # `install -y` below re-appends its MCP entry afterwards.
+  "printf 'sandbox_mode = \"danger-full-access\"\\napproval_policy = \"never\"\\n' > /root/.codex/config.toml",
+
+  # Matt Pocock's grill-me + grilling skills — global install for Codex
+  # (lands in /root/.codex/skills, i.e. on the state mount), non-interactive
+  "npx -y skills@latest add mattpocock/skills --skill=grill-me --skill=grilling --agent codex --global --yes",
+
+  # DeusData codebase-memory-mcp — download the release binary, then let it
+  # register itself as an MCP server in Codex's config (on the state mount)
+  "curl -fsSL https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/scripts/setup.sh | bash",
+  "codebase-memory-mcp install -y",
+
+  # --- .NET web-dev tooling (dotnet watch / dotnet run ship with the SDK) ---
+  # dotnet-ef: EF Core migrations for the CLI; dotnet-dump/-trace/-counters:
+  # post-mortem and live diagnostics without a Visual Studio attach
+  "dotnet tool install -g dotnet-ef",
+  "dotnet tool install -g dotnet-dump",
+  "dotnet tool install -g dotnet-trace",
+  "dotnet tool install -g dotnet-counters",
+  "ln -sf /root/.dotnet/tools/* /usr/local/bin/",
+
+  # --- Python tooling: uv (fast venv/deps), pytest, debugpy (DAP debugger),
+  # ruff (lint/format) — installed as isolated CLI apps via pipx
+  "pipx install uv",
+  "pipx install pytest",
+  "pipx install debugpy",
+  "pipx install ruff",
+  "ln -sf /root/.local/bin/* /usr/local/bin/",
+
+  # --- Node helpers: tsx (run/watch TS directly), vitest; node --inspect
+  # and node --watch are built into Node 22
+  "npm install -g tsx vitest",
+
+  # --- Playwright: npm stack + Chromium with all OS dependencies ---
+  # Browsers land in /root/.cache/ms-playwright (versioned per package, so
+  # the Python binding below coexists in the same cache)
+  "npm install -g playwright @playwright/test",
+  "playwright install --with-deps chromium",
+
+  # --- Playwright: Python binding (same browser cache, invoked as a module
+  # to avoid clashing with the npm CLI binary) ---
+  "python3 -m pip install --break-system-packages playwright",
+  "python3 -m playwright install chromium",
+
+  # Smoke test: pull and run a tiny container to prove nested Podman works
+  "podman run --rm docker.io/library/alpine echo nested-podman-ok"
+]
+
+[secrets]
+# Resolved from smolvm's host-side secret store when the machine starts;
+# the API key never appears in this file or in any command line.
+#
+# One-time host setup (stores only a reference to the host env var):
+#   export OPENAI_API_KEY=sk-...
+#   smolvm secret set OPENAI_API_KEY --from-env OPENAI_API_KEY
+#
+# If your smolvm build rejects [secrets], delete this table and inject at
+# exec time instead:
+#   smolvm machine exec --name codex-sandbox -it \
+#     --env OPENAI_API_KEY="$OPENAI_API_KEY" -- codex
+#OPENAI_API_KEY = { from_store = "OPENAI_API_KEY" }
+OPENAI_API_KEY = { from_env = "OPENAI_API_KEY" }
