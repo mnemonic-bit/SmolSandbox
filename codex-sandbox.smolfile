@@ -34,7 +34,10 @@ workdir = "/workspace"
 #
 # Note on Playwright: it ADVERTISES downloads from cdn.playwright.dev, but
 # Chromium ("Chrome for Testing") builds are actually served from
-# storage.googleapis.com — both must be allowed or you get ENOTFOUND.
+# storage.googleapis.com, and FFmpeg & friends are tried first from
+# playwright.download.prss.microsoft.com (fallback mirror: cdn.playwright.dev).
+# All three must be allowed or you get ENOTFOUND (non-fatal for mirrored
+# artifacts, fatal when there is no fallback).
 allow_hosts = [
   "api.openai.com",                # Codex model access (API-key auth)
   "api.nuget.org",                 # NuGet — dotnet restore + global tools
@@ -47,6 +50,7 @@ allow_hosts = [
   "mcr.microsoft.com",             # Microsoft artifacts (SQL Server container, etc.)
   "cdn.playwright.dev",            # Playwright browser downloads (provisioning)
   "storage.googleapis.com",        # Playwright Chrome-for-Testing builds (provisioning)
+  "playwright.download.prss.microsoft.com", # Playwright primary mirror (provisioning)
   "github.com",                    # skills + codebase-memory-mcp (provisioning)
   "api.github.com",                # release metadata / repo lookups (provisioning)
   "raw.githubusercontent.com",     # setup scripts (provisioning)
@@ -107,7 +111,10 @@ init = [
   # Podman/Buildah storage must NOT live on the rootfs (overlay2 cannot nest
   # on the machine's root overlay). Point the graph at the ext4 storage disk,
   # same pattern smol machines uses for docker-in-a-machine.
-  "mkdir -p /storage/containers && printf 'graphroot = \"/storage/containers/storage\"\\nrunroot = \"/run/containers/storage\"\\n[storage]\\ndriver = \"overlay\"\\n' > /etc/containers/storage.conf",
+  # IMPORTANT: graphroot/runroot/driver must ALL be nested under the
+  # [storage] table — containers-storage.conf(5) allows no bare top-level
+  # options. (This was the "runroot must be set" bug.)
+  "mkdir -p /storage/containers && printf '[storage]\\ndriver = \"overlay\"\\ngraphroot = \"/storage/containers/storage\"\\nrunroot = \"/run/containers/storage\"\\n' > /etc/containers/storage.conf",
 
   # Node 22 from NodeSource (Ubuntu's own nodejs is too old for Codex CLI);
   # the setup script runs apt itself, so the env var must be exported into it
@@ -163,11 +170,11 @@ init = [
 
   # --- Playwright: npm stack + Chromium with all OS dependencies ---
   # --with-deps runs apt-get internally, so DEBIAN_FRONTEND is exported too.
-  # Chromium is a "Chrome for Testing" build: advertised from
-  # cdn.playwright.dev but actually served via storage.googleapis.com —
-  # both hosts are in the allowlist. Browsers land in
-  # /root/.cache/ms-playwright (versioned per package, so the Python binding
-  # below coexists in the same cache).
+  # Chromium is a "Chrome for Testing" build (cdn.playwright.dev ->
+  # storage.googleapis.com); FFmpeg is tried first from
+  # playwright.download.prss.microsoft.com and falls back to cdn.playwright.dev.
+  # Browsers land in /root/.cache/ms-playwright, versioned per package, so
+  # the Python binding below coexists there with its own build.
   "npm install -g playwright @playwright/test",
   "DEBIAN_FRONTEND=noninteractive playwright install --with-deps chromium",
 
