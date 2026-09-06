@@ -7,8 +7,17 @@
 # Create from your repo root so "./" mounts the right project:
 #   smolvm machine create --name codex-sandbox --smolfile ./Smolfile --storage 20
 #
+# NOTE: the Smolfile is read ONLY at `machine create`. Editing it has no
+# effect on an existing machine — apply changes with `machine update`
+# (stopped, where supported) or delete + re-create (safe: Codex state lives
+# on the .smolvm/codex-home host mount).
+#
 # NOTE: add `.smolvm/` to your repo's .gitignore — it holds Codex session
 # state that must not be committed.
+#
+# Timezone: Europe/Berlin — see the preseed lines at the top of `init`.
+# API key: [secrets] from_env resolves the HOST environment variable
+# OPENAI_API_KEY at every `machine start` — export it before starting.
 
 image = "ubuntu:24.04"
 cpus = 4
@@ -22,6 +31,10 @@ workdir = "/workspace"
 # Nested containers NAT through the guest's network stack, so they inherit
 # this allowlist too. Hosts marked "provisioning" are only needed by the init
 # commands; drop them after the first `machine create` for a tighter policy.
+#
+# Note on Playwright: it ADVERTISES downloads from cdn.playwright.dev, but
+# Chromium ("Chrome for Testing") builds are actually served from
+# storage.googleapis.com — both must be allowed or you get ENOTFOUND.
 allow_hosts = [
   "api.openai.com",                # Codex model access (API-key auth)
   "api.nuget.org",                 # NuGet — dotnet restore + global tools
@@ -32,14 +45,18 @@ allow_hosts = [
   "auth.docker.io",                # Docker Hub auth
   "production.cloudflare.docker.com", # Docker Hub layer CDN
   "mcr.microsoft.com",             # Microsoft artifacts (SQL Server container, etc.)
+  "cdn.playwright.dev",            # Playwright browser downloads (provisioning)
+  "storage.googleapis.com",        # Playwright Chrome-for-Testing builds (provisioning)
+  "github.com",                    # skills + codebase-memory-mcp (provisioning)
+  "api.github.com",                # release metadata / repo lookups (provisioning)
+  "raw.githubusercontent.com",     # setup scripts (provisioning)
+  "release-assets.githubusercontent.com", # GitHub release binaries (newer layout)
+  "objects.githubusercontent.com", # GitHub release binaries (older redirect layout)
+  "codeload.github.com",           # repo tarballs (provisioning)
   "archive.ubuntu.com",            # apt (provisioning)
   "security.ubuntu.com",           # apt (provisioning)
   "deb.nodesource.com",            # Node 22 (provisioning)
-  "github.com",                    # skills + codebase-memory-mcp (provisioning)
-  "raw.githubusercontent.com",     # setup scripts (provisioning)
-  "release-assets.githubusercontent.com", # (provisioning)
-  "objects.githubusercontent.com", # release binaries (provisioning)
-  "codeload.github.com",           # repo tarballs (provisioning)
+  # "playwright.azureedge.net",    # legacy Playwright CDN, older versions
   # "ghcr.io",                     # add if you pull/push GitHub Container Registry
   # "quay.io",                     # add if you pull from Quay
 ]
@@ -71,34 +88,57 @@ volumes = [
 ports = ["3000:3000", "5000:5000", "5173:5173", "8000:8000", "8080:8080"]
 
 init = [
-  # Toolchains: Python 3, .NET 8 SDK, git, ripgrep, Podman + Buildah, extras
-  "apt-get update",
-  "apt-get install -y --no-install-recommends ca-certificates curl git ripgrep unzip jq sqlite3 httpie pipx python3 python3-pip python3-venv dotnet-sdk-8.0 podman buildah",
+  # --- Unattended apt: preseed tzdata answers BEFORE anything touches apt ---
+  # This is what stops the "Geographic area / city" dialog. For a different
+  # timezone, change Areas and Zones/<Area> (e.g. America + New_York).
+  "printf 'tzdata tzdata/Areas select Europe\\ntzdata tzdata/Zones/Europe select Berlin\\n' | debconf-set-selections",
+
+  # Toolchains: Python 3, .NET 8 SDK, git, ripgrep, Podman + Buildah, extras.
+  # DEBIAN_FRONTEND=noninteractive suppresses ALL debconf dialogs (tzdata,
+  # keyboard-configuration, console-setup, ...), not just tzdata.
+  "DEBIAN_FRONTEND=noninteractive apt-get update",
+  "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl git ripgrep unzip jq sqlite3 httpie pipx python3 python3-pip python3-venv dotnet-sdk-8.0 podman buildah",
+
+  # Belt and suspenders: pin the timezone files explicitly and re-apply tzdata
+  # config non-interactively (correct even if tzdata was already installed in
+  # the base image before the preseed ran)
+  "ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime && printf 'Europe/Berlin\\n' > /etc/timezone && dpkg-reconfigure -f noninteractive tzdata",
 
   # Podman/Buildah storage must NOT live on the rootfs (overlay2 cannot nest
   # on the machine's root overlay). Point the graph at the ext4 storage disk,
   # same pattern smol machines uses for docker-in-a-machine.
   "mkdir -p /storage/containers && printf 'graphroot = \"/storage/containers/storage\"\\nrunroot = \"/run/containers/storage\"\\n[storage]\\ndriver = \"overlay\"\\n' > /etc/containers/storage.conf",
 
-  # Node 22 from NodeSource (Ubuntu's own nodejs is too old for Codex CLI)
-  "curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/node-setup.sh && bash /tmp/node-setup.sh && apt-get install -y --no-install-recommends nodejs",
+  # Node 22 from NodeSource (Ubuntu's own nodejs is too old for Codex CLI);
+  # the setup script runs apt itself, so the env var must be exported into it
+  "curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/node-setup.sh && DEBIAN_FRONTEND=noninteractive bash /tmp/node-setup.sh && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nodejs",
 
-  # OpenAI Codex CLI
+  # OpenAI Codex CLI (installed BEFORE codebase-memory-mcp so its `install`
+  # subcommand can detect the Codex CLI and register itself with it)
   "npm install -g @openai/codex@latest",
 
   # Codex config — /root/.codex is the mounted state dir, so this survives
-  # rebuilds. On rebuild this rewrite is harmless: codebase-memory-mcp's
-  # `install -y` below re-appends its MCP entry afterwards.
+  # rebuilds. On rebuild this rewrite is harmless: the MCP entry is re-added
+  # by codebase-memory-mcp's `install -y` below.
   "printf 'sandbox_mode = \"danger-full-access\"\\napproval_policy = \"never\"\\n' > /root/.codex/config.toml",
 
   # Matt Pocock's grill-me + grilling skills — global install for Codex
   # (lands in /root/.codex/skills, i.e. on the state mount), non-interactive
   "npx -y skills@latest add mattpocock/skills --skill=grill-me --skill=grilling --agent codex --global --yes",
 
-  # DeusData codebase-memory-mcp — download the release binary, then let it
-  # register itself as an MCP server in Codex's config (on the state mount)
+  # DeusData codebase-memory-mcp. setup.sh downloads the binary to
+  # /root/.local/bin — which is NOT on the PATH of init's `sh`, so the
+  # binary must be called by ABSOLUTE PATH (this was the "not found" bug).
+  # Its [y/N] Claude Code prompt harmlessly defaults to N on EOF.
+  # `install -y` then registers the MCP server with all DETECTED agents —
+  # Codex is installed at this point, so it writes the
+  # [mcp_servers.codebase-memory-mcp] entry into /root/.codex/config.toml.
   "curl -fsSL https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/scripts/setup.sh | bash",
-  "codebase-memory-mcp install -y",
+  "/root/.local/bin/codebase-memory-mcp install -y",
+  "ln -sf /root/.local/bin/codebase-memory-mcp /usr/local/bin/",
+  # Deterministic alternative if agent detection ever misses Codex — writes
+  # the same config entry via Codex itself instead of relying on detection:
+  # "codex mcp add codebase-memory-mcp -- /root/.local/bin/codebase-memory-mcp",
 
   # --- .NET web-dev tooling (dotnet watch / dotnet run ship with the SDK) ---
   # dotnet-ef: EF Core migrations for the CLI; dotnet-dump/-trace/-counters:
@@ -122,10 +162,14 @@ init = [
   "npm install -g tsx vitest",
 
   # --- Playwright: npm stack + Chromium with all OS dependencies ---
-  # Browsers land in /root/.cache/ms-playwright (versioned per package, so
-  # the Python binding below coexists in the same cache)
+  # --with-deps runs apt-get internally, so DEBIAN_FRONTEND is exported too.
+  # Chromium is a "Chrome for Testing" build: advertised from
+  # cdn.playwright.dev but actually served via storage.googleapis.com —
+  # both hosts are in the allowlist. Browsers land in
+  # /root/.cache/ms-playwright (versioned per package, so the Python binding
+  # below coexists in the same cache).
   "npm install -g playwright @playwright/test",
-  "playwright install --with-deps chromium",
+  "DEBIAN_FRONTEND=noninteractive playwright install --with-deps chromium",
 
   # --- Playwright: Python binding (same browser cache, invoked as a module
   # to avoid clashing with the npm CLI binary) ---
@@ -137,16 +181,12 @@ init = [
 ]
 
 [secrets]
-# Resolved from smolvm's host-side secret store when the machine starts;
-# the API key never appears in this file or in any command line.
+# The key is resolved from the HOST environment variable OPENAI_API_KEY at
+# every `machine start` — nothing is stored on disk and it never appears on
+# a command line. The launcher fails fast if the variable is not exported.
 #
-# One-time host setup (stores only a reference to the host env var):
-#   export OPENAI_API_KEY=sk-...
-#   smolvm secret set OPENAI_API_KEY --from-env OPENAI_API_KEY
-#
-# If your smolvm build rejects [secrets], delete this table and inject at
-# exec time instead:
+# If your smolvm build rejects [secrets] entirely, delete this table and
+# inject at exec time instead:
 #   smolvm machine exec --name codex-sandbox -it \
 #     --env OPENAI_API_KEY="$OPENAI_API_KEY" -- codex
-#OPENAI_API_KEY = { from_store = "OPENAI_API_KEY" }
 OPENAI_API_KEY = { from_env = "OPENAI_API_KEY" }
