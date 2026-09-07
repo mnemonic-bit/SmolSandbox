@@ -18,6 +18,8 @@
 # Timezone: Europe/Berlin — see the preseed lines at the top of `init`.
 # API key: [secrets] from_env resolves the HOST environment variable
 # OPENAI_API_KEY at every `machine start` — export it before starting.
+# (Not needed if you sign in with your ChatGPT subscription instead —
+# see the auth.openai.com / chatgpt.com entries in the allowlist.)
 
 image = "ubuntu:24.04"
 cpus = 4
@@ -40,6 +42,8 @@ workdir = "/workspace"
 # artifacts, fatal when there is no fallback).
 allow_hosts = [
   "api.openai.com",                # Codex model access (API-key auth)
+  "auth.openai.com",               # ChatGPT subscription sign-in (OAuth flow)
+  "chatgpt.com",                   # ChatGPT backend (subscription-based Codex)
   "api.nuget.org",                 # NuGet — dotnet restore + global tools
   "registry.npmjs.org",            # npm
   "pypi.org",                      # pip index
@@ -212,6 +216,10 @@ init = [
 # The key is resolved from the HOST environment variable OPENAI_API_KEY at
 # every `machine start` — nothing is stored on disk and it never appears on
 # a command line. The launcher fails fast if the variable is not exported.
+#
+# NOT needed if you sign in with your ChatGPT subscription instead: run
+# `codex login` once inside the guest — the resulting auth.json lives on the
+# persistent /root/.codex state mount, so the login survives rebuilds.
 #
 # If your smolvm build rejects [secrets] entirely, delete this table and
 # inject at exec time instead:
