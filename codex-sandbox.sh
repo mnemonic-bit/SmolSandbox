@@ -3,21 +3,20 @@
 # Buildah + Playwright inside), then drop straight into `codex` in the guest.
 #
 # Usage:
-#   ./codex-sandbox.sh [repo-dir]     # defaults to the current directory
+#   OPENAI_API_KEY=sk-... ./codex-sandbox.sh [repo-dir]
 #
 # Requirements:
 #   - smolvm installed (curl -sSL https://smolmachines.com/install.sh | bash)
 #   - codex-sandbox.smolfile reachable via $SMOLFILE (default below)
-#   - OPENAI_API_KEY exported in your host shell
+#   - OPENAI_API_KEY exported in your host shell (the Smolfile's
+#     [secrets] from_env entry resolves it into the guest at machine start);
+#     OR sign in once inside the guest with: codex login --device-auth
 #
 # Codex session state (sessions/, history, skills, config) is persisted on the
 # HOST at <repo-dir>/.smolvm/codex-home and mounted at /root/.codex in the
 # guest, so it survives deleting and re-creating the machine. Make sure
 # `.smolvm/` is in the repo's .gitignore — the script reminds you below.
 set -euo pipefail
-
-# to be removed after we got this to work for the first time:
-OPENAI_API_KEY="${OPENAI_API_KEY:-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}"
 
 MACHINE="codex-sandbox"
 SMOLFILE="${SMOLFILE:-$HOME/.config/smolvm/codex-sandbox.smolfile}"
@@ -34,24 +33,31 @@ if [ -f "$REPO_DIR/.gitignore" ]; then
     echo "NOTE: '.smolvm/' is not in $REPO_DIR/.gitignore — Codex session state may get committed." >&2
 fi
 
-# 1. One-time: register a *reference* to the host env var in smolvm's
-#    secret store (the value is resolved at machine start, never stored).
-if ! smolvm secret list 2>/dev/null | grep -q 'OPENAI_API_KEY'; then
-  smolvm secret set OPENAI_API_KEY --from-env OPENAI_API_KEY
+# 1. Fail fast if the API key is missing — [secrets] from_env resolves it
+#    from the HOST environment at machine start, so it must be exported.
+#    (Skip this check if you authenticate with `codex login --device-auth`
+#    inside the guest instead — adjust to taste.)
+if [ -z "${OPENAI_API_KEY:-}" ]; then
+  echo "ERROR: OPENAI_API_KEY is not set. Export it first, e.g.:" >&2
+  echo "  export OPENAI_API_KEY=sk-..." >&2
+  exit 1
 fi
 
 # 2. One-time: create the machine. Run from the repo dir so the Smolfile's
-#    volumes = ["./:/workspace"] binds the right project.
+#    volumes = ["./:/workspace/myrepo"] binds the right project (mounted one
+#    level below /workspace so codebase-memory-mcp doesn't treat the mount
+#    root as "too broad" to index).
 #    --storage sizes the ext4 disk that backs nested container storage.
 if ! smolvm machine ls | grep -q "$MACHINE"; then
   (cd "$REPO_DIR" && smolvm machine create --name "$MACHINE" --smolfile "$SMOLFILE" --storage "$STORAGE_GIB")
 fi
 
-# 3. Boot (the secret is injected into the guest here) and run Codex.
+# 3. Boot (OPENAI_API_KEY is resolved into the guest from the host env here)
+#    and run Codex.
 smolvm machine start --name "$MACHINE"
 exec smolvm machine exec --name "$MACHINE" -it -- codex
 
-# --- Fallback if your smolvm build has no [secrets] / secret store ----------
+# --- Fallback if your smolvm build has no [secrets] support at all ---------
 # Replace step 3 with (key appears in the host process list while attached):
 #   smolvm machine start --name "$MACHINE"
 #   exec smolvm machine exec --name "$MACHINE" -it \
@@ -62,5 +68,6 @@ exec smolvm machine exec --name "$MACHINE" -it -- codex
 #   smolvm machine shell --name "$MACHINE"
 #   $ codex                      # sessions live in /root/.codex/sessions
 #   $ codex resume               # pick up where a previous session left off
+#   $ codex login --device-auth  # ChatGPT subscription sign-in (once, persists)
 #   $ podman run --rm docker.io/library/alpine echo hi   # nested containers
 #   $ buildah build -t myapp docker.io/library/node:22   # no daemon needed

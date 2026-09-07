@@ -6,6 +6,9 @@
 #
 # Create from your repo root so "./" mounts the right project:
 #   smolvm machine create --name codex-sandbox --smolfile ./Smolfile --storage 20
+# The repo is mounted at /workspace/myrepo — a directory INSIDE /workspace,
+# not the mount root itself, because codebase-memory-mcp treats mount roots
+# as "too broad" repository roots and refuses to index them.
 #
 # NOTE: the Smolfile is read ONLY at `machine create`. Editing it has no
 # effect on an existing machine — apply changes with `machine update`
@@ -26,7 +29,7 @@ cpus = 4
 memory = 12288           # MiB; elastic via virtio balloon. Headless Chromium
                           # plus builds plus the app itself live in RAM together.
 net = true               # required for the egress allowlist below
-workdir = "/workspace"
+workdir = "/workspace/myrepo"
 
 [network]
 # Everything the guest (and any container inside it) can ever reach.
@@ -77,7 +80,11 @@ allow_hosts = [
 
 [dev]
 # Host paths exposed to the guest:
-#  1. The repo you created the machine from, at /workspace. The ext4 storage
+#  1. The repo you created the machine from, mounted at /workspace/myrepo.
+#     It is deliberately NOT the mount root: codebase-memory-mcp sees the
+#     root of a shared mount as "the root of all repos" (a container-style
+#     workspace) and refuses to index it — nesting it one level down makes
+#     it look like the normal, single-project repo it is. The ext4 storage
 #     disk stays at /storage for container layers.
 #  2. Codex persistent state, mounted at the DEFAULT CODEX_HOME location
 #     (/root/.codex): config.toml, auth.json, history.jsonl, the state DB,
@@ -91,7 +98,7 @@ allow_hosts = [
 # explicit CODEX_HOME=/codex-home, change the guest path below AND prefix
 # every init command and exec that touches Codex with CODEX_HOME=/codex-home.
 volumes = [
-  "./:/workspace",
+  "./:/workspace/myrepo",
   "./.smolvm/codex-home:/root/.codex",
 ]
 
@@ -118,13 +125,13 @@ init = [
   # the base image before the preseed ran)
   "ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime && printf 'Europe/Berlin\\n' > /etc/timezone && dpkg-reconfigure -f noninteractive tzdata",
 
-  # --- Git: the virtiofs-mounted /workspace carries HOST UIDs, which differ
-  # from the guest's root — git >= 2.35.2 then refuses to operate
+  # --- Git: the virtiofs-mounted /workspace/myrepo carries HOST UIDs, which
+  # differ from the guest's root — git >= 2.35.2 then refuses to operate
   # ("detected dubious ownership", the CVE-2022-24765 check). Explicitly
-  # trust /workspace; the '*' entry also covers nested repos, submodules,
+  # trust the repo path; the '*' entry also covers nested repos, submodules,
   # and anything Codex clones to /tmp — same tradeoff CI containers make,
   # acceptable because the disposable microVM IS the security boundary.
-  "git config --global --add safe.directory /workspace",
+  "git config --global --add safe.directory /workspace/myrepo",
   "git config --global --add safe.directory '*'",
   "git config --global init.defaultBranch main",
   # Optional: give Codex a git identity for commits it creates. Personalize,
@@ -218,8 +225,11 @@ init = [
 # a command line. The launcher fails fast if the variable is not exported.
 #
 # NOT needed if you sign in with your ChatGPT subscription instead: run
-# `codex login` once inside the guest — the resulting auth.json lives on the
-# persistent /root/.codex state mount, so the login survives rebuilds.
+#   codex login --device-auth
+# once inside the guest. The headless VM has no browser for the default
+# localhost-callback flow; --device-auth prints a code + URL you open on
+# your host machine. The resulting auth.json lives on the persistent
+# /root/.codex state mount, so the login survives machine rebuilds.
 #
 # If your smolvm build rejects [secrets] entirely, delete this table and
 # inject at exec time instead:
