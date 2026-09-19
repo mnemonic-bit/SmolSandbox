@@ -1,0 +1,232 @@
+# Smolfile — Dev tools base image for smolvm (smol-machines/smolvm)
+# One declarative microVM: Ubuntu 24.04 + Node 22 + Python 3 + .NET 8 SDK,
+# OpenAI Codex CLI, Matt Pocock's grill-me/grilling skills,
+# DeusData's codebase-memory-mcp, Podman + Buildah for nested containers,
+# and Playwright + per-stack dev/debug tooling for live web-app testing.
+#
+# Create from your repo root so "./" mounts the right project:
+#   smolvm machine create --name codex-sandbox --smolfile ./Smolfile --storage 20
+# The repo is mounted at /workspace/myrepo — a directory INSIDE /workspace,
+# not the mount root itself, because codebase-memory-mcp treats mount roots
+# as "too broad" repository roots and refuses to index them.
+#
+# NOTE: the Smolfile is read ONLY at `machine create`. Editing it has no
+# effect on an existing machine — apply changes with `machine update`
+# (stopped, where supported) or delete + re-create (safe: Codex state lives
+# on the .smolvm/codex-home host mount).
+#
+# NOTE: add `.smolvm/` to your repo's .gitignore — it holds Codex session
+# state that must not be committed.
+#
+# Timezone: Europe/Berlin — see the preseed lines at the top of `init`.
+# API key: [secrets] from_env resolves the HOST environment variable
+# OPENAI_API_KEY at every `machine start` — export it before starting.
+# (Not needed if you sign in with your ChatGPT subscription instead —
+# see the auth.openai.com / chatgpt.com entries in the allowlist.)
+
+image = "ubuntu:24.04"
+cpus = 4
+memory = 12288           # MiB; elastic via virtio balloon. Headless Chromium
+                          # plus builds plus the app itself live in RAM together.
+net = true               # required for the egress allowlist below
+workdir = "/workspace/myrepo"
+
+[network]
+# Everything the guest (and any container inside it) can ever reach.
+# Nested containers NAT through the guest's network stack, so they inherit
+# this allowlist too. Hosts marked "provisioning" are only needed by the init
+# commands; drop them after the first `machine create` for a tighter policy.
+#
+# Note on Playwright: it ADVERTISES downloads from cdn.playwright.dev, but
+# Chromium ("Chrome for Testing") builds are actually served from
+# storage.googleapis.com, and FFmpeg & friends are tried first from
+# playwright.download.prss.microsoft.com (fallback mirror: cdn.playwright.dev).
+# All three must be allowed or you get ENOTFOUND (non-fatal for mirrored
+# artifacts, fatal when there is no fallback).
+allow_hosts = [
+  "api.openai.com",                # Codex model access (API-key auth)
+  "auth.openai.com",               # ChatGPT subscription sign-in (OAuth flow)
+  "chatgpt.com",                   # ChatGPT backend (subscription-based Codex)
+  "api.nuget.org",                 # NuGet — dotnet restore + global tools
+  "registry.npmjs.org",            # npm
+  "pypi.org",                      # pip index
+  "files.pythonhosted.org",        # pip wheels
+  "registry-1.docker.io",          # Docker Hub — podman pull / buildah
+  "auth.docker.io",                # Docker Hub auth
+  "production.cloudflare.docker.com", # Docker Hub layer CDN
+  "mcr.microsoft.com",             # Microsoft artifacts (SQL Server container, etc.)
+  "cdn.playwright.dev",            # Playwright browser downloads (provisioning)
+  "storage.googleapis.com",        # Playwright Chrome-for-Testing builds (provisioning)
+  "playwright.download.prss.microsoft.com", # Playwright primary mirror (provisioning)
+  "github.com",                    # skills + codebase-memory-mcp (provisioning)
+  "api.github.com",                # release metadata / repo lookups (provisioning)
+  "raw.githubusercontent.com",     # setup scripts (provisioning)
+  "release-assets.githubusercontent.com", # GitHub release binaries (newer layout)
+  "objects.githubusercontent.com", # GitHub release binaries (older redirect layout)
+  "codeload.github.com",           # repo tarballs (provisioning)
+  "archive.ubuntu.com",            # apt (provisioning)
+  "security.ubuntu.com",           # apt (provisioning)
+  "deb.nodesource.com",            # Node 22 (provisioning)
+  # "playwright.azureedge.net",    # legacy Playwright CDN, older versions
+  # "ghcr.io",                     # add if you pull/push GitHub Container Registry
+  # "quay.io",                     # add if you pull from Quay
+]
+
+# Optional: forward your HOST ssh-agent into the guest so `git pull/push`
+# over SSH works without copying private keys into the VM — the hypervisor
+# forwards the agent connection, keys never enter the guest.
+# [auth]
+# ssh_agent = true
+
+[dev]
+# Host paths exposed to the guest:
+#  1. The repo you created the machine from, mounted at /workspace/myrepo.
+#     It is deliberately NOT the mount root: codebase-memory-mcp sees the
+#     root of a shared mount as "the root of all repos" (a container-style
+#     workspace) and refuses to index it — nesting it one level down makes
+#     it look like the normal, single-project repo it is. The ext4 storage
+#     disk stays at /storage for container layers.
+#  2. Codex persistent state, mounted at the DEFAULT CODEX_HOME location
+#     (/root/.codex): config.toml, auth.json, history.jsonl, the state DB,
+#     skills/, and sessions/ (per-session rollout files that make
+#     `codex resume` work across machine rebuilds).
+#
+# It is mounted at /root/.codex on purpose instead of setting CODEX_HOME to
+# a custom path: some tools hardcode ~/.codex (e.g. codebase-memory-mcp's
+# installer writes the MCP server entry into ~/.codex/config.toml), and the
+# default path needs no env plumbing during init or exec. If you prefer an
+# explicit CODEX_HOME=/codex-home, change the guest path below AND prefix
+# every init command and exec that touches Codex with CODEX_HOME=/codex-home.
+volumes = [
+#  "./tmp:/workspace/myrepo",
+  "~/.codex:/root/.codex",
+]
+
+init = [
+  # --- Unattended apt: preseed tzdata answers BEFORE anything touches apt ---
+  # This is what stops the "Geographic area / city" dialog. For a different
+  # timezone, change Areas and Zones/<Area> (e.g. America + New_York).
+  "printf 'tzdata tzdata/Areas select Europe\\ntzdata tzdata/Zones/Europe select Berlin\\n' | debconf-set-selections",
+
+  # Toolchains: Python 3, .NET 8 SDK, git, ripgrep, Podman + Buildah, extras.
+  # DEBIAN_FRONTEND=noninteractive suppresses ALL debconf dialogs (tzdata,
+  # keyboard-configuration, console-setup, ...), not just tzdata.
+  "DEBIAN_FRONTEND=noninteractive apt-get update",
+  "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl git ripgrep unzip jq sqlite3 httpie pipx python3 python3-pip python3-venv dotnet-sdk-8.0 podman buildah",
+
+  # Belt and suspenders: pin the timezone files explicitly and re-apply tzdata
+  # config non-interactively (correct even if tzdata was already installed in
+  # the base image before the preseed ran)
+  "ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime && printf 'Europe/Berlin\\n' > /etc/timezone && dpkg-reconfigure -f noninteractive tzdata",
+
+  # --- Git: the virtiofs-mounted /workspace/myrepo carries HOST UIDs, which
+  # differ from the guest's root — git >= 2.35.2 then refuses to operate
+  # ("detected dubious ownership", the CVE-2022-24765 check). Explicitly
+  # trust the repo path; the '*' entry also covers nested repos, submodules,
+  # and anything Codex clones to /tmp — same tradeoff CI containers make,
+  # acceptable because the disposable microVM IS the security boundary.
+  "git config --global --add safe.directory /workspace/myrepo",
+  "git config --global --add safe.directory '*'",
+  "git config --global init.defaultBranch main",
+  # Optional: give Codex a git identity for commits it creates. Personalize,
+  # or drop these lines and set GIT_AUTHOR_NAME/GIT_AUTHOR_EMAIL etc. via
+  # [secrets] from_env instead.
+  # "git config --global user.name 'Codex Sandbox'",
+  # "git config --global user.email 'codex@sandbox.local'",
+
+  # Podman/Buildah storage must NOT live on the rootfs (overlay2 cannot nest
+  # on the machine's root overlay). Point the graph at the ext4 storage disk,
+  # same pattern smol machines uses for docker-in-a-machine.
+  # IMPORTANT: graphroot/runroot/driver must ALL be nested under the
+  # [storage] table — containers-storage.conf(5) allows no bare top-level
+  # options. (This was the "runroot must be set" bug.)
+  "mkdir -p /storage/containers && printf '[storage]\\ndriver = \"overlay\"\\ngraphroot = \"/storage/containers/storage\"\\nrunroot = \"/run/containers/storage\"\\n' > /etc/containers/storage.conf",
+
+  # Node 22 from NodeSource (Ubuntu's own nodejs is too old for Codex CLI);
+  # the setup script runs apt itself, so the env var must be exported into it
+  "curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/node-setup.sh && DEBIAN_FRONTEND=noninteractive bash /tmp/node-setup.sh && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nodejs",
+
+  # OpenAI Codex CLI (installed BEFORE codebase-memory-mcp so its `install`
+  # subcommand can detect the Codex CLI and register itself with it)
+  "npm install -g @openai/codex@latest",
+
+  # Codex config — /root/.codex is the mounted state dir, so this survives
+  # rebuilds. On rebuild this rewrite is harmless: the MCP entry is re-added
+  # by codebase-memory-mcp's `install -y` below.
+  "printf 'sandbox_mode = \"danger-full-access\"\\napproval_policy = \"never\"\\n' > /root/.codex/config.toml",
+
+  # Matt Pocock's grill-me + grilling skills — global install for Codex
+  # (lands in /root/.codex/skills, i.e. on the state mount), non-interactive
+  "npx -y skills@latest add mattpocock/skills --skill=grill-me --skill=grilling --agent codex --global --yes",
+
+  # DeusData codebase-memory-mcp. setup.sh downloads the binary to
+  # /root/.local/bin — which is NOT on the PATH of init's `sh`, so the
+  # binary must be called by ABSOLUTE PATH (this was the "not found" bug).
+  # Its [y/N] Claude Code prompt harmlessly defaults to N on EOF.
+  # `install -y` then registers the MCP server with all DETECTED agents —
+  # Codex is installed at this point, so it writes the
+  # [mcp_servers.codebase-memory-mcp] entry into /root/.codex/config.toml.
+  "curl -fsSL https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/scripts/setup.sh | bash",
+  "/root/.local/bin/codebase-memory-mcp install -y",
+  "ln -sf /root/.local/bin/codebase-memory-mcp /usr/local/bin/",
+  # Deterministic alternative if agent detection ever misses Codex — writes
+  # the same config entry via Codex itself instead of relying on detection:
+  # "codex mcp add codebase-memory-mcp -- /root/.local/bin/codebase-memory-mcp",
+
+  # --- .NET web-dev tooling (dotnet watch / dotnet run ship with the SDK) ---
+  # dotnet-ef: EF Core migrations for the CLI; dotnet-dump/-trace/-counters:
+  # post-mortem and live diagnostics without a Visual Studio attach
+  "dotnet tool install -g dotnet-ef",
+  "dotnet tool install -g dotnet-dump",
+  "dotnet tool install -g dotnet-trace",
+  "dotnet tool install -g dotnet-counters",
+  "ln -sf /root/.dotnet/tools/* /usr/local/bin/",
+
+  # --- Python tooling: uv (fast venv/deps), pytest, debugpy (DAP debugger),
+  # ruff (lint/format) — installed as isolated CLI apps via pipx
+  "pipx install uv",
+  "pipx install pytest",
+  "pipx install debugpy",
+  "pipx install ruff",
+  "ln -sf /root/.local/bin/* /usr/local/bin/",
+
+  # --- Node helpers: tsx (run/watch TS directly), vitest; node --inspect
+  # and node --watch are built into Node 22
+  "npm install -g tsx vitest",
+
+  # --- Playwright: npm stack + Chromium with all OS dependencies ---
+  # --with-deps runs apt-get internally, so DEBIAN_FRONTEND is exported too.
+  # Chromium is a "Chrome for Testing" build (cdn.playwright.dev ->
+  # storage.googleapis.com); FFmpeg is tried first from
+  # playwright.download.prss.microsoft.com and falls back to cdn.playwright.dev.
+  # Browsers land in /root/.cache/ms-playwright, versioned per package, so
+  # the Python binding below coexists there with its own build.
+  "npm install -g playwright @playwright/test",
+  "DEBIAN_FRONTEND=noninteractive playwright install --with-deps chromium",
+
+  # --- Playwright: Python binding (same browser cache, invoked as a module
+  # to avoid clashing with the npm CLI binary) ---
+  "python3 -m pip install --break-system-packages playwright",
+  "python3 -m playwright install chromium",
+
+  # Smoke test: pull and run a tiny container to prove nested Podman works
+  "podman run --rm docker.io/library/alpine echo nested-podman-ok"
+]
+
+[secrets]
+# The key is resolved from the HOST environment variable OPENAI_API_KEY at
+# every `machine start` — nothing is stored on disk and it never appears on
+# a command line. The launcher fails fast if the variable is not exported.
+#
+# NOT needed if you sign in with your ChatGPT subscription instead: run
+#   codex login --device-auth
+# once inside the guest. The headless VM has no browser for the default
+# localhost-callback flow; --device-auth prints a code + URL you open on
+# your host machine. The resulting auth.json lives on the persistent
+# /root/.codex state mount, so the login survives machine rebuilds.
+#
+# If your smolvm build rejects [secrets] entirely, delete this table and
+# inject at exec time instead:
+#   smolvm machine exec --name codex-sandbox -it \
+#     --env OPENAI_API_KEY="$OPENAI_API_KEY" -- codex
+#OPENAI_API_KEY = { from_env = "OPENAI_API_KEY" }

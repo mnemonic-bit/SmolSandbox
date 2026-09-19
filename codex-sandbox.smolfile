@@ -49,25 +49,12 @@ allow_hosts = [
   "chatgpt.com",                   # ChatGPT backend (subscription-based Codex)
   "api.nuget.org",                 # NuGet — dotnet restore + global tools
   "registry.npmjs.org",            # npm
+  "deb.nodesource.com",            # Node 22 (provisioning)
   "pypi.org",                      # pip index
   "files.pythonhosted.org",        # pip wheels
   "registry-1.docker.io",          # Docker Hub — podman pull / buildah
   "auth.docker.io",                # Docker Hub auth
   "production.cloudflare.docker.com", # Docker Hub layer CDN
-  "mcr.microsoft.com",             # Microsoft artifacts (SQL Server container, etc.)
-  "cdn.playwright.dev",            # Playwright browser downloads (provisioning)
-  "storage.googleapis.com",        # Playwright Chrome-for-Testing builds (provisioning)
-  "playwright.download.prss.microsoft.com", # Playwright primary mirror (provisioning)
-  "github.com",                    # skills + codebase-memory-mcp (provisioning)
-  "api.github.com",                # release metadata / repo lookups (provisioning)
-  "raw.githubusercontent.com",     # setup scripts (provisioning)
-  "release-assets.githubusercontent.com", # GitHub release binaries (newer layout)
-  "objects.githubusercontent.com", # GitHub release binaries (older redirect layout)
-  "codeload.github.com",           # repo tarballs (provisioning)
-  "archive.ubuntu.com",            # apt (provisioning)
-  "security.ubuntu.com",           # apt (provisioning)
-  "deb.nodesource.com",            # Node 22 (provisioning)
-  # "playwright.azureedge.net",    # legacy Playwright CDN, older versions
   # "ghcr.io",                     # add if you pull/push GitHub Container Registry
   # "quay.io",                     # add if you pull from Quay
 ]
@@ -98,141 +85,17 @@ allow_hosts = [
 # explicit CODEX_HOME=/codex-home, change the guest path below AND prefix
 # every init command and exec that touches Codex with CODEX_HOME=/codex-home.
 volumes = [
-  "./:/workspace/myrepo",
-  "./.smolvm/codex-home:/root/.codex",
+  ".:/workspace/myrepo",
+  "~/.codex:/root/.codex",
 ]
 
 # Host:guest port forwards, symmetric so direction never matters. Codex tests
 # against guest-localhost directly (no forward needed); these let YOU open the
 # running app in your host browser. 3000 Next/React, 5000 ASP.NET default,
 # 5173 Vite, 8000 Django/FastAPI/uvicorn, 8080 generic.
-ports = ["3000:3000", "5000:5000", "5173:5173", "8000:8000", "8080:8080"]
+#ports = ["3000:3000", "5000:5000", "5173:5173", "8000:8000", "8080:8080"]
 
-init = [
-  # --- Unattended apt: preseed tzdata answers BEFORE anything touches apt ---
-  # This is what stops the "Geographic area / city" dialog. For a different
-  # timezone, change Areas and Zones/<Area> (e.g. America + New_York).
-  "printf 'tzdata tzdata/Areas select Europe\\ntzdata tzdata/Zones/Europe select Berlin\\n' | debconf-set-selections",
+#init = [
+#  codex login --device-auth
+#]
 
-  # Toolchains: Python 3, .NET 8 SDK, git, ripgrep, Podman + Buildah, extras.
-  # DEBIAN_FRONTEND=noninteractive suppresses ALL debconf dialogs (tzdata,
-  # keyboard-configuration, console-setup, ...), not just tzdata.
-  "DEBIAN_FRONTEND=noninteractive apt-get update",
-  "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl git ripgrep unzip jq sqlite3 httpie pipx python3 python3-pip python3-venv dotnet-sdk-8.0 podman buildah",
-
-  # Belt and suspenders: pin the timezone files explicitly and re-apply tzdata
-  # config non-interactively (correct even if tzdata was already installed in
-  # the base image before the preseed ran)
-  "ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime && printf 'Europe/Berlin\\n' > /etc/timezone && dpkg-reconfigure -f noninteractive tzdata",
-
-  # --- Git: the virtiofs-mounted /workspace/myrepo carries HOST UIDs, which
-  # differ from the guest's root — git >= 2.35.2 then refuses to operate
-  # ("detected dubious ownership", the CVE-2022-24765 check). Explicitly
-  # trust the repo path; the '*' entry also covers nested repos, submodules,
-  # and anything Codex clones to /tmp — same tradeoff CI containers make,
-  # acceptable because the disposable microVM IS the security boundary.
-  "git config --global --add safe.directory /workspace/myrepo",
-  "git config --global --add safe.directory '*'",
-  "git config --global init.defaultBranch main",
-  # Optional: give Codex a git identity for commits it creates. Personalize,
-  # or drop these lines and set GIT_AUTHOR_NAME/GIT_AUTHOR_EMAIL etc. via
-  # [secrets] from_env instead.
-  # "git config --global user.name 'Codex Sandbox'",
-  # "git config --global user.email 'codex@sandbox.local'",
-
-  # Podman/Buildah storage must NOT live on the rootfs (overlay2 cannot nest
-  # on the machine's root overlay). Point the graph at the ext4 storage disk,
-  # same pattern smol machines uses for docker-in-a-machine.
-  # IMPORTANT: graphroot/runroot/driver must ALL be nested under the
-  # [storage] table — containers-storage.conf(5) allows no bare top-level
-  # options. (This was the "runroot must be set" bug.)
-  "mkdir -p /storage/containers && printf '[storage]\\ndriver = \"overlay\"\\ngraphroot = \"/storage/containers/storage\"\\nrunroot = \"/run/containers/storage\"\\n' > /etc/containers/storage.conf",
-
-  # Node 22 from NodeSource (Ubuntu's own nodejs is too old for Codex CLI);
-  # the setup script runs apt itself, so the env var must be exported into it
-  "curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/node-setup.sh && DEBIAN_FRONTEND=noninteractive bash /tmp/node-setup.sh && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nodejs",
-
-  # OpenAI Codex CLI (installed BEFORE codebase-memory-mcp so its `install`
-  # subcommand can detect the Codex CLI and register itself with it)
-  "npm install -g @openai/codex@latest",
-
-  # Codex config — /root/.codex is the mounted state dir, so this survives
-  # rebuilds. On rebuild this rewrite is harmless: the MCP entry is re-added
-  # by codebase-memory-mcp's `install -y` below.
-  "printf 'sandbox_mode = \"danger-full-access\"\\napproval_policy = \"never\"\\n' > /root/.codex/config.toml",
-
-  # Matt Pocock's grill-me + grilling skills — global install for Codex
-  # (lands in /root/.codex/skills, i.e. on the state mount), non-interactive
-  "npx -y skills@latest add mattpocock/skills --skill=grill-me --skill=grilling --agent codex --global --yes",
-
-  # DeusData codebase-memory-mcp. setup.sh downloads the binary to
-  # /root/.local/bin — which is NOT on the PATH of init's `sh`, so the
-  # binary must be called by ABSOLUTE PATH (this was the "not found" bug).
-  # Its [y/N] Claude Code prompt harmlessly defaults to N on EOF.
-  # `install -y` then registers the MCP server with all DETECTED agents —
-  # Codex is installed at this point, so it writes the
-  # [mcp_servers.codebase-memory-mcp] entry into /root/.codex/config.toml.
-  "curl -fsSL https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/scripts/setup.sh | bash",
-  "/root/.local/bin/codebase-memory-mcp install -y",
-  "ln -sf /root/.local/bin/codebase-memory-mcp /usr/local/bin/",
-  # Deterministic alternative if agent detection ever misses Codex — writes
-  # the same config entry via Codex itself instead of relying on detection:
-  # "codex mcp add codebase-memory-mcp -- /root/.local/bin/codebase-memory-mcp",
-
-  # --- .NET web-dev tooling (dotnet watch / dotnet run ship with the SDK) ---
-  # dotnet-ef: EF Core migrations for the CLI; dotnet-dump/-trace/-counters:
-  # post-mortem and live diagnostics without a Visual Studio attach
-  "dotnet tool install -g dotnet-ef",
-  "dotnet tool install -g dotnet-dump",
-  "dotnet tool install -g dotnet-trace",
-  "dotnet tool install -g dotnet-counters",
-  "ln -sf /root/.dotnet/tools/* /usr/local/bin/",
-
-  # --- Python tooling: uv (fast venv/deps), pytest, debugpy (DAP debugger),
-  # ruff (lint/format) — installed as isolated CLI apps via pipx
-  "pipx install uv",
-  "pipx install pytest",
-  "pipx install debugpy",
-  "pipx install ruff",
-  "ln -sf /root/.local/bin/* /usr/local/bin/",
-
-  # --- Node helpers: tsx (run/watch TS directly), vitest; node --inspect
-  # and node --watch are built into Node 22
-  "npm install -g tsx vitest",
-
-  # --- Playwright: npm stack + Chromium with all OS dependencies ---
-  # --with-deps runs apt-get internally, so DEBIAN_FRONTEND is exported too.
-  # Chromium is a "Chrome for Testing" build (cdn.playwright.dev ->
-  # storage.googleapis.com); FFmpeg is tried first from
-  # playwright.download.prss.microsoft.com and falls back to cdn.playwright.dev.
-  # Browsers land in /root/.cache/ms-playwright, versioned per package, so
-  # the Python binding below coexists there with its own build.
-  "npm install -g playwright @playwright/test",
-  "DEBIAN_FRONTEND=noninteractive playwright install --with-deps chromium",
-
-  # --- Playwright: Python binding (same browser cache, invoked as a module
-  # to avoid clashing with the npm CLI binary) ---
-  "python3 -m pip install --break-system-packages playwright",
-  "python3 -m playwright install chromium",
-
-  # Smoke test: pull and run a tiny container to prove nested Podman works
-  "podman run --rm docker.io/library/alpine echo nested-podman-ok"
-]
-
-[secrets]
-# The key is resolved from the HOST environment variable OPENAI_API_KEY at
-# every `machine start` — nothing is stored on disk and it never appears on
-# a command line. The launcher fails fast if the variable is not exported.
-#
-# NOT needed if you sign in with your ChatGPT subscription instead: run
-#   codex login --device-auth
-# once inside the guest. The headless VM has no browser for the default
-# localhost-callback flow; --device-auth prints a code + URL you open on
-# your host machine. The resulting auth.json lives on the persistent
-# /root/.codex state mount, so the login survives machine rebuilds.
-#
-# If your smolvm build rejects [secrets] entirely, delete this table and
-# inject at exec time instead:
-#   smolvm machine exec --name codex-sandbox -it \
-#     --env OPENAI_API_KEY="$OPENAI_API_KEY" -- codex
-OPENAI_API_KEY = { from_env = "OPENAI_API_KEY" }

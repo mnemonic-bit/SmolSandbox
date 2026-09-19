@@ -1,0 +1,57 @@
+# Smolfile — Codex Login for smolvm (smol-machines/smolvm)
+
+image = "ubuntu:24.04"
+cpus = 2
+memory = 4096
+net = true
+workdir = "/workspace/myrepo"
+
+[network]
+# We need to connect to OpenAI for login, and maybe also some npmjs, but that
+# must be tested if its really necessary
+allow_hosts = [
+  "api.openai.com",
+  "auth.openai.com",
+  "chatgpt.com",
+  "registry.npmjs.org",
+  "deb.nodesource.com",
+  "archive.ubuntu.com",
+  "security.ubuntu.com"
+]
+
+[dev]
+volumes = [
+#  ".:/workspace/myrepo",
+  "~/.codex:/root/.codex",
+]
+
+init = [
+  # --- Unattended apt: preseed tzdata answers BEFORE anything touches apt ---
+  # This is what stops the "Geographic area / city" dialog. For a different
+  # timezone, change Areas and Zones/<Area> (e.g. America + New_York).
+  "printf 'tzdata tzdata/Areas select Europe\\ntzdata tzdata/Zones/Europe select Berlin\\n' | debconf-set-selections",
+
+  # Toolchains: Python 3, .NET 8 SDK, git, ripgrep, Podman + Buildah, extras.
+  # DEBIAN_FRONTEND=noninteractive suppresses ALL debconf dialogs (tzdata,
+  # keyboard-configuration, console-setup, ...), not just tzdata.
+  "DEBIAN_FRONTEND=noninteractive apt-get update",
+  "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl tzdata",
+
+  # Belt and suspenders: pin the timezone files explicitly and re-apply tzdata
+  # config non-interactively (correct even if tzdata was already installed in
+  # the base image before the preseed ran)
+  "ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime && printf 'Europe/Berlin\\n' > /etc/timezone && dpkg-reconfigure -f noninteractive tzdata",
+
+  # Node 22 from NodeSource (Ubuntu's own nodejs is too old for Codex CLI);
+  # the setup script runs apt itself, so the env var must be exported into it
+  "curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/node-setup.sh && DEBIAN_FRONTEND=noninteractive bash /tmp/node-setup.sh && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nodejs",
+
+  # OpenAI Codex CLI (installed BEFORE codebase-memory-mcp so its `install`
+  # subcommand can detect the Codex CLI and register itself with it)
+  "npm install -g @openai/codex@latest",
+
+  # Codex config — /root/.codex is the mounted state dir, so this survives
+  # rebuilds. On rebuild this rewrite is harmless: the MCP entry is re-added
+  # by codebase-memory-mcp's `install -y` below.
+  "printf 'sandbox_mode = \"danger-full-access\"\\napproval_policy = \"never\"\\n' > /root/.codex/config.toml",
+]
