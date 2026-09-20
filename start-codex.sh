@@ -1,31 +1,96 @@
 #!/usr/bin/env bash
+# Start Codex in a persistent VM dedicated to the requested workspace.
+# Usage: ./start-codex.sh [workspace] [-- codex arguments...]
+set -euo pipefail
 
-CODEX_MACHINE="codex-sandbox"
-REPO_DIR="${1:-$PWD}"
-CODEX_HOME_DIR="~/.codex"
-SANDBOX_SMOLFILE="codex-sandbox.smolfile"
-REPO_DIR="${1:-$PWD}"
-SANDBOX_DIR="${SANDBOX_DIR:-/home/mruether/projects/ai/codex-sandbox}"
-ARTIFACTS_DIR="${ARTIFACTS_DIR:-$SANDBOX_DIR/artifacts}"
-CODEX_HOME_DIR="~/.codex"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+ARTIFACTS_DIR="${ARTIFACTS_DIR:-$SCRIPT_DIR/artifacts}"
+STATE_ROOT="${STATE_ROOT:-$SCRIPT_DIR/.smolvm}"
+CODEX_MACHINE_OVERRIDE="${CODEX_MACHINE:-}"
 
+if [ "${1:-}" = "--" ]; then
+  WORKSPACE_INPUT="$PWD"
+  shift
+elif [ -n "${1:-}" ]; then
+  WORKSPACE_INPUT="$1"
+  shift
+  if [ "${1:-}" = "--" ]; then
+    shift
+  fi
+else
+  WORKSPACE_INPUT="$PWD"
+fi
 
-# One way to start the sandbox is to create a new machine from
-# the base image, and then just execute coded inside the running
-# machine.
-# if ! smolvm machine ls | grep -q "$CODEX_MACHINE"; then
-#   smolvm machine create --name "$CODEX_MACHINE" --from "$ARTIFACTS_DIR/devtools_base.smolmachine" --volume ~/.codex:/root/.codex --volume "$REPO_DIR:/workspace/myrepo" --allow-host chatgpt.com --allow-host openai.com --allow-host api.openai.com --allow-host registry-1.docker.io --allow-host auth.docker.io --allow-host production.cloudfront.docker.com --allow-host deb.debian.org --allow-host pypi.org --allow-host files.pythonhosted.org --allow-host archive.ubuntu.com --allow-host security.ubuntu.com --allow-host googlevideo.com --allow-host youtube.com --port 5000:5000
-# fi
+if ! command -v smolvm >/dev/null 2>&1; then
+  echo "ERROR: smolvm is not installed or is not on PATH." >&2
+  exit 1
+fi
 
+if [ ! -d "$WORKSPACE_INPUT" ]; then
+  echo "ERROR: workspace is not a directory: $WORKSPACE_INPUT" >&2
+  exit 1
+fi
 
-# mkdir -p "$CODEX_HOME_DIR"
+if [ ! -s "$STATE_ROOT/base-id" ]; then
+  echo "ERROR: no built base generation was found." >&2
+  echo "Run $SCRIPT_DIR/build-sandbox.sh first." >&2
+  exit 1
+fi
 
-# # Just start and stop the sandbox machine, login will happen within this..
-# smolvm machine start --name "$CODEX_MACHINE"
-# smolvm machine exec -it --name "$CODEX_MACHINE" -- codex
-# #smolvm machine stop --name "$CODEX_MACHINE"
+hash_stream() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum | awk '{print $1}'
+  else
+    shasum -a 256 | awk '{print $1}'
+  fi
+}
 
+machine_exists() {
+  smolvm machine status --name "$1" >/dev/null 2>&1
+}
 
-# An alternative way to start the sandbox is to use an ephemeral machine
-# that will be deleted after it is stopped.
-smolvm pack run --sidecar "$ARTIFACTS_DIR/devtools_base.smolmachine" --net -it --volume ~/.codex:/root/.codex --volume "$REPO_DIR:/workspace/myrepo" -p 5000:5000 -- codex
+WORKSPACE_DIR="$(CDPATH= cd -- "$WORKSPACE_INPUT" && pwd -P)"
+BASE_ID="$(sed -n '1p' "$STATE_ROOT/base-id")"
+MACHINE_REVISION="$(sed -n '1p' "$STATE_ROOT/machine-revision" 2>/dev/null || printf '1\n')"
+WORKSPACE_ID="$(printf '%s' "$WORKSPACE_DIR" | hash_stream | cut -c1-12)"
+ARTIFACT_FILE="$ARTIFACTS_DIR/codex-devtools-$BASE_ID.smolmachine"
+CODEX_MACHINE="${CODEX_MACHINE_OVERRIDE:-codex-workspace-$BASE_ID-r$MACHINE_REVISION-$WORKSPACE_ID}"
+
+if [ ! -s "$ARTIFACT_FILE" ]; then
+  echo "ERROR: base artifact is missing: $ARTIFACT_FILE" >&2
+  echo "Run $SCRIPT_DIR/build-sandbox.sh to repair it." >&2
+  exit 1
+fi
+
+if ! machine_exists "$CODEX_MACHINE"; then
+  # This is deliberately a named machine, not `pack run`: SmolVM extracts the
+  # shared base layers once and this workspace keeps its own persistent overlay.
+  "$SCRIPT_DIR/build-sandbox.sh" "$WORKSPACE_DIR"
+
+  # The build may have advanced to a new definition-addressed generation because
+  # the Smolfile or smolvm version changed since the previous run.
+  BASE_ID="$(sed -n '1p' "$STATE_ROOT/base-id")"
+  MACHINE_REVISION="$(sed -n '1p' "$STATE_ROOT/machine-revision" 2>/dev/null || printf '1\n')"
+  CODEX_MACHINE="${CODEX_MACHINE_OVERRIDE:-codex-workspace-$BASE_ID-r$MACHINE_REVISION-$WORKSPACE_ID}"
+fi
+
+stop_codex_machine() {
+  smolvm machine stop --name "$CODEX_MACHINE" >/dev/null 2>&1 || true
+}
+trap stop_codex_machine EXIT INT TERM
+
+smolvm machine start --name "$CODEX_MACHINE"
+
+# The mounted Codex home persists login and sessions outside the VM. Seed it
+# once with the config, skills, and MCP registration baked into the artifact.
+smolvm machine exec --name "$CODEX_MACHINE" -- sh -lc \
+  'if [ -d /opt/codex-home ]; then cp -a -n /opt/codex-home/. /root/.codex/; fi'
+
+CODEX_EXEC=(smolvm machine exec -it --name "$CODEX_MACHINE")
+if [ -n "${OPENAI_API_KEY:-}" ]; then
+  CODEX_EXEC+=(--secret-env OPENAI_API_KEY=OPENAI_API_KEY)
+fi
+CODEX_EXEC+=(-- codex "$@")
+
+echo "Starting Codex in $WORKSPACE_DIR (machine: $CODEX_MACHINE)..."
+"${CODEX_EXEC[@]}"
