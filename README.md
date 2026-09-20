@@ -96,6 +96,24 @@ Docker Hub, and Microsoft Container Registry. Add more `--allow-host` entries
 in `build-sandbox.sh` when a project needs another service; changing an
 existing machine's policy requires recreating or updating that stopped VM.
 
+## Clean and rebuild the current generation
+
+Remove every builder, login, and workspace VM belonging to the current base
+generation, together with its cached artifact:
+
+```bash
+./clean-sandbox.sh
+```
+
+The cleanup leaves `.smolvm/codex-home` intact, so authentication, Codex
+configuration, skills, and sessions survive. Machines and artifacts belonging
+to other base generations are not changed. Build a fresh copy of the cleaned
+generation with:
+
+```bash
+./build-sandbox.sh [workspace]
+```
+
 ## Cache and state layout
 
 - `artifacts/codex-devtools-<base-id>.smolmachine`: reusable prepared base.

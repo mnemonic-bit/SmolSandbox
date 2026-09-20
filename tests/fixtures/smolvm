@@ -4,10 +4,19 @@ set -euo pipefail
 printf '%s\n' "$*" >> "$SMOLVM_TEST_LOG"
 
 case "$*" in
+  "machine ls --quiet")
+    printf '%s\n' "${SMOLVM_TEST_MACHINES:-}"
+    exit 0
+    ;;
   "machine status --name test-machine" | \
   "machine start --name test-machine" | \
   "machine stop --name test-machine")
     exit 0
+    ;;
+  "machine stop --name "* | "machine delete --name "*)
+    if [ "${SMOLVM_TEST_ALLOW_CLEANUP:-}" = "1" ]; then
+      exit 0
+    fi
     ;;
   *"/opt/codex-home"*)
     echo "cp: warning: simulated seed failure" >&2
