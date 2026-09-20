@@ -12,8 +12,8 @@
 
 image = "ubuntu:24.04"
 cpus = 4
-memory = 12288           # MiB; elastic via virtio balloon. Headless Chromium
-                          # plus builds plus the app itself live in RAM together.
+memory = 8192            # MiB; elastic via virtio balloon. For installation this
+                         # is a good starting point
 storage = 20             # GiB; also holds nested Podman/Buildah layers.
 net = true               # required for the egress allowlist below
 workdir = "/workspace/myrepo"

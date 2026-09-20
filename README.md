@@ -12,7 +12,8 @@ That avoids copying the complete pack on every Codex invocation.
 
 ## Prerequisite
 
-Install SmolVM:
+Install SmolVM and ensure Python 3 is available on the host (the lifecycle
+scripts use it to validate SmolVM's JSON inventory):
 
 ```bash
 curl -sSL https://smolmachines.com/install.sh | bash
@@ -87,13 +88,12 @@ Or specify a workspace and optional Codex arguments:
 
 Each absolute workspace path gets a deterministic named machine created from
 the same cached artifact. Reopening that workspace reuses its machine and
-writable overlay. Common development ports (3000, 5000, 5173, 8000, and 8080)
-are forwarded to the host. The launcher stops the VM when Codex exits, so the
-ports are released while the machine's disk state remains available.
+writable overlay. The launcher stops the VM when Codex exits while preserving
+the machine's disk state.
 
 The workspace VM has allowlisted access to OpenAI, GitHub, npm, NuGet, PyPI,
 Docker Hub, and Microsoft Container Registry. Add more `--allow-host` entries
-in `build-sandbox.sh` when a project needs another service; changing an
+in `sandbox-common.sh` when a project needs another service; changing an
 existing machine's policy requires recreating or updating that stopped VM.
 
 ## Clean and rebuild the current generation
@@ -114,15 +114,47 @@ generation with:
 ./build-sandbox.sh [workspace]
 ```
 
+## Inspect and repair workspace machines
+
+The launcher reconstructs the desired base, revision, and workspace identity
+from the current Smolfile, SmolVM version, and canonical workspace path. The
+files under `.smolvm/` are compatibility caches; deleting or corrupting them
+does not prevent an existing matching workspace machine from being recovered.
+
+If an older machine exists for a workspace but no machine matches the current
+sandbox definition, normal startup stops without creating or deleting
+anything. Inspect the candidates with:
+
+```bash
+./repair-sandbox.sh --check /path/to/project
+```
+
+Replace stopped stale machines explicitly with:
+
+```bash
+./repair-sandbox.sh --replace-stale /path/to/project
+```
+
+The repair command refuses to remove a running stale machine. After inspecting
+the report, `--force` permits that machine to be stopped before replacement:
+
+```bash
+./repair-sandbox.sh --replace-stale --force /path/to/project
+```
+
+Only machines positively associated with the workspace by managed labels or a
+strict legacy name are eligible for removal.
+
 ## Cache and state layout
 
 - `artifacts/codex-devtools-<base-id>.smolmachine`: reusable prepared base.
-- `.smolvm/base-id`: the generation used by the launcher scripts.
-- `.smolvm/machine-revision`: the current mounts/ports/network-policy revision.
+- `.smolvm/base-id`: compatibility cache of the derived base generation.
+- `.smolvm/machine-revision`: compatibility cache of the runtime-policy revision.
 - `.smolvm/codex-home`: shared login, configuration, skills, and sessions.
 - `codex-builder-<base-id>`: stopped builder retained for inexpensive repacks.
 - `codex-login-<base-id>-r<revision>`: login-only VM.
 - `codex-workspace-<base-id>-r<revision>-<workspace-id>`: one persistent VM
-  per workspace. Bump `MACHINE_REVISION` when changing its runtime policy.
+  per workspace. Bump `SANDBOX_MACHINE_REVISION` in `sandbox-common.sh` when
+  changing its runtime policy.
 
 Both `artifacts/` and `.smolvm/` are excluded from Git.

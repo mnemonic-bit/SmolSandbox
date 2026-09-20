@@ -3,28 +3,18 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-STATE_ROOT="${STATE_ROOT:-$SCRIPT_DIR/.smolvm}"
+# shellcheck source=sandbox-common.sh
+source "$SCRIPT_DIR/sandbox-common.sh"
 
-if ! command -v smolvm >/dev/null 2>&1; then
-  echo "ERROR: smolvm is not installed or is not on PATH." >&2
-  exit 1
-fi
-
-if [ ! -s "$STATE_ROOT/base-id" ]; then
-  echo "ERROR: no built base generation was found." >&2
-  echo "Run $SCRIPT_DIR/build-sandbox.sh first." >&2
-  exit 1
-fi
-
-BASE_ID="$(sed -n '1p' "$STATE_ROOT/base-id")"
-MACHINE_REVISION="$(sed -n '1p' "$STATE_ROOT/machine-revision" 2>/dev/null || printf '1\n')"
-LOGIN_MACHINE="${LOGIN_MACHINE:-codex-login-$BASE_ID-r$MACHINE_REVISION}"
-
-if ! smolvm machine status --name "$LOGIN_MACHINE" >/dev/null 2>&1; then
+sandbox_prepare_identity "$PWD"
+sandbox_read_inventory
+if ! sandbox_inventory_has_name "$LOGIN_MACHINE"; then
+  sandbox_discard_inventory
   echo "ERROR: login machine $LOGIN_MACHINE does not exist." >&2
   echo "Run $SCRIPT_DIR/build-sandbox.sh first." >&2
   exit 1
 fi
+sandbox_discard_inventory
 
 stop_login_machine() {
   smolvm machine stop --name "$LOGIN_MACHINE" >/dev/null 2>&1 || true

@@ -8,16 +8,21 @@ trap 'rm -rf "$TEST_ROOT"' EXIT
 mkdir -p "$TEST_ROOT/bin" "$TEST_ROOT/state" "$TEST_ROOT/artifacts" "$TEST_ROOT/workspace"
 cp "$REPO_ROOT/tests/fixtures/smolvm" "$TEST_ROOT/bin/smolvm"
 chmod +x "$TEST_ROOT/bin/smolvm"
-printf 'test-base\n' > "$TEST_ROOT/state/base-id"
+SMOLVM_TEST_VERSION='smolvm test 1.0.0'
+BASE_ID="$({ printf '%s\n' "$SMOLVM_TEST_VERSION"; cat "$REPO_ROOT/devtools-base.smolfile"; } | sha256sum | awk '{print substr($1, 1, 12)}')"
+printf '%s\n' "$BASE_ID" > "$TEST_ROOT/state/base-id"
 printf '1\n' > "$TEST_ROOT/state/machine-revision"
-printf 'artifact\n' > "$TEST_ROOT/artifacts/codex-devtools-test-base.smolmachine"
+printf 'artifact\n' > "$TEST_ROOT/artifacts/codex-devtools-$BASE_ID.smolmachine"
 
 set +e
 OUTPUT="$(
   PATH="$TEST_ROOT/bin:$PATH" \
   SMOLVM_TEST_LOG="$TEST_ROOT/smolvm.log" \
+  SMOLVM_TEST_VERSION="$SMOLVM_TEST_VERSION" \
+  SMOLVM_TEST_INVENTORY='[{"name":"test-machine","state":"stopped","labels":{}}]' \
   STATE_ROOT="$TEST_ROOT/state" \
   ARTIFACTS_DIR="$TEST_ROOT/artifacts" \
+  BASE_SMOLFILE="$REPO_ROOT/devtools-base.smolfile" \
   CODEX_MACHINE="test-machine" \
     "$REPO_ROOT/start-codex.sh" "$TEST_ROOT/workspace" -- --help 2>&1
 )"

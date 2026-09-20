@@ -4,19 +4,31 @@ set -euo pipefail
 printf '%s\n' "$*" >> "$SMOLVM_TEST_LOG"
 
 case "$*" in
-  "machine ls --quiet")
-    printf '%s\n' "${SMOLVM_TEST_MACHINES:-}"
+  "--version")
+    printf '%s\n' "${SMOLVM_TEST_VERSION:-smolvm test 1.0.0}"
+    exit 0
+    ;;
+  "machine ls --json")
+    if [ "${SMOLVM_TEST_INVENTORY_FAIL:-}" = 1 ]; then
+      echo 'simulated inventory failure' >&2
+      exit 70
+    elif [ -n "${SMOLVM_TEST_INVENTORY_FILE:-}" ]; then
+      cat "$SMOLVM_TEST_INVENTORY_FILE"
+    elif [ -n "${SMOLVM_TEST_INVENTORY:-}" ]; then
+      printf '%s\n' "$SMOLVM_TEST_INVENTORY"
+    else
+      printf '%s\n' "${SMOLVM_TEST_MACHINES:-}" | awk '
+        BEGIN { printf "["; separator = "" }
+        NF { printf "%s{\"name\":\"%s\",\"state\":\"stopped\",\"labels\":{}}", separator, $0; separator = "," }
+        END { print "]" }
+      '
+    fi
     exit 0
     ;;
   "machine status --name test-machine" | \
   "machine start --name test-machine" | \
   "machine stop --name test-machine")
     exit 0
-    ;;
-  "machine stop --name "* | "machine delete --name "*)
-    if [ "${SMOLVM_TEST_ALLOW_CLEANUP:-}" = "1" ]; then
-      exit 0
-    fi
     ;;
   *"/opt/codex-home"*)
     echo "cp: warning: simulated seed failure" >&2
@@ -26,6 +38,127 @@ case "$*" in
     exit 0
     ;;
 esac
+
+if [ "${1:-}" = machine ] && [ "${2:-}" = create ] && \
+   [ "${SMOLVM_TEST_ALLOW_CREATE:-}" = 1 ]; then
+  name=""
+  labels=()
+  shift 2
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --name)
+        name="$2"
+        shift 2
+        ;;
+      --label)
+        labels+=("$2")
+        shift 2
+        ;;
+      *)
+        shift
+        ;;
+    esac
+  done
+  if [ -n "${SMOLVM_TEST_INVENTORY_FILE:-}" ]; then
+    python3 - "$SMOLVM_TEST_INVENTORY_FILE" "$name" "${labels[@]}" <<'PY'
+import json
+import os
+import sys
+import tempfile
+
+path, name, *raw_labels = sys.argv[1:]
+labels = dict(label.split("=", 1) for label in raw_labels)
+with open(path, encoding="utf-8") as inventory_file:
+    inventory = json.load(inventory_file)
+if not any(machine["name"] == name for machine in inventory):
+    inventory.append({"name": name, "state": "created", "labels": labels})
+fd, temporary = tempfile.mkstemp(dir=os.path.dirname(path), prefix="inventory.")
+with os.fdopen(fd, "w", encoding="utf-8") as inventory_file:
+    json.dump(inventory, inventory_file)
+os.replace(temporary, path)
+PY
+  fi
+  exit 0
+fi
+
+if [ "${1:-}" = machine ] && { [ "${2:-}" = start ] || [ "${2:-}" = stop ]; } && \
+   { [ "${SMOLVM_TEST_ALLOW_LIFECYCLE:-}" = 1 ] || [ "${SMOLVM_TEST_ALLOW_CLEANUP:-}" = 1 ]; }
+then
+  if [ -n "${SMOLVM_TEST_INVENTORY_FILE:-}" ]; then
+    operation="$2"
+    name=""
+    shift 2
+    while [ "$#" -gt 0 ]; do
+      if [ "$1" = --name ]; then
+        name="$2"
+        break
+      fi
+      shift
+    done
+    python3 - "$SMOLVM_TEST_INVENTORY_FILE" "$name" "$operation" <<'PY'
+import json
+import os
+import sys
+import tempfile
+
+path, name, operation = sys.argv[1:]
+with open(path, encoding="utf-8") as inventory_file:
+    inventory = json.load(inventory_file)
+for machine in inventory:
+    if machine["name"] == name:
+        machine["state"] = "running" if operation == "start" else "stopped"
+fd, temporary = tempfile.mkstemp(dir=os.path.dirname(path), prefix="inventory.")
+with os.fdopen(fd, "w", encoding="utf-8") as inventory_file:
+    json.dump(inventory, inventory_file)
+os.replace(temporary, path)
+PY
+  fi
+  exit 0
+fi
+
+if [ "${1:-}" = machine ] && [ "${2:-}" = delete ] && \
+   [ "${SMOLVM_TEST_ALLOW_CLEANUP:-}" = 1 ]; then
+  if [ -n "${SMOLVM_TEST_INVENTORY_FILE:-}" ]; then
+    name=""
+    shift 2
+    while [ "$#" -gt 0 ]; do
+      if [ "$1" = --name ]; then
+        name="$2"
+        break
+      fi
+      shift
+    done
+    python3 - "$SMOLVM_TEST_INVENTORY_FILE" "$name" <<'PY'
+import json
+import os
+import sys
+import tempfile
+
+path, name = sys.argv[1:]
+with open(path, encoding="utf-8") as inventory_file:
+    inventory = [machine for machine in json.load(inventory_file) if machine["name"] != name]
+fd, temporary = tempfile.mkstemp(dir=os.path.dirname(path), prefix="inventory.")
+with os.fdopen(fd, "w", encoding="utf-8") as inventory_file:
+    json.dump(inventory, inventory_file)
+os.replace(temporary, path)
+PY
+  fi
+  exit 0
+fi
+
+if [ "${1:-}" = pack ] && [ "${2:-}" = create ] && \
+   [ "${SMOLVM_TEST_ALLOW_CREATE:-}" = 1 ]; then
+  output=""
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = -o ]; then
+      output="$2"
+      break
+    fi
+    shift
+  done
+  printf 'artifact\n' > "$output.smolmachine"
+  exit 0
+fi
 
 echo "unexpected smolvm invocation: $*" >&2
 exit 64
