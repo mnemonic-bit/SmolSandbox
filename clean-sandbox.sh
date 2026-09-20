@@ -50,7 +50,7 @@ while IFS= read -r machine; do
     "codex-workspace-$BASE_ID"-r*)
       echo "  deleting VM: $machine"
       smolvm machine stop --name "$machine" >/dev/null 2>&1 || true
-      smolvm machine delete --name "$machine"
+      smolvm machine delete --name "$machine" --force
       DELETED_MACHINES=$((DELETED_MACHINES + 1))
       ;;
   esac
