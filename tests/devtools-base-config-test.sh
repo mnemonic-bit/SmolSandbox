@@ -14,21 +14,50 @@ with open(smolfile_path, "rb") as smolfile:
 
 assert definition["image"] == "debian:bookworm-slim"
 
+init_commands = definition["dev"]["init"]
+assert not any(
+    "codebase-memory-mcp/main/scripts/setup.sh" in command
+    for command in init_commands
+)
+cbm_install_command = next(
+    command
+    for command in init_commands
+    if "codebase-memory-mcp/v0.11.0/install.sh" in command
+)
+assert (
+    "CBM_DOWNLOAD_URL=https://github.com/DeusData/codebase-memory-mcp/"
+    "releases/download/v0.11.0"
+) in cbm_install_command
+assert cbm_install_command.endswith("bash -s -- --clients=codex")
+assert "/root/.local/bin/codebase-memory-mcp --version" in init_commands
+
 package_command = next(
     command
-    for command in definition["dev"]["init"]
+    for command in init_commands
     if "apt-get install -y --no-install-recommends" in command
     and "podman" in command
 )
-assert "podman-docker" in package_command.split()
+installed_packages = package_command.split()
+assert "podman-docker" in installed_packages
+for installer_dependency in (
+    "bash",
+    "ca-certificates",
+    "coreutils",
+    "curl",
+    "grep",
+    "gzip",
+    "mawk",
+    "tar",
+):
+    assert installer_dependency in installed_packages
 assert any(
     command.startswith("docker run --rm ")
-    for command in definition["dev"]["init"]
+    for command in init_commands
 )
 
 config_command = next(
     command
-    for command in definition["dev"]["init"]
+    for command in init_commands
     if "> /root/.codex/config.toml" in command
 )
 match = re.search(r"printf '([^']*)' > /root/\.codex/config\.toml", config_command)

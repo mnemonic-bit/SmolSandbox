@@ -82,7 +82,7 @@ init = [
   # DEBIAN_FRONTEND=noninteractive suppresses ALL debconf dialogs (tzdata,
   # keyboard-configuration, console-setup, ...), not just tzdata.
   "DEBIAN_FRONTEND=noninteractive apt-get update",
-  "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl git openssh-client build-essential pkg-config ripgrep unzip jq sqlite3 httpie pipx python3 python3-pip python3-venv tzdata libgssapi-krb5-2 libicu72 libssl3 zlib1g podman podman-docker buildah",
+  "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bash ca-certificates coreutils curl git grep gzip mawk tar openssh-client build-essential pkg-config ripgrep unzip jq sqlite3 httpie pipx python3 python3-pip python3-venv tzdata libgssapi-krb5-2 libicu72 libssl3 zlib1g podman podman-docker buildah",
 
   # Belt and suspenders: pin the timezone files explicitly and re-apply tzdata
   # config non-interactively (correct even if tzdata was already installed in
@@ -135,15 +135,15 @@ init = [
   # (lands in /root/.codex/skills), non-interactive
   "npx -y skills@1.7.0 add mattpocock/skills --skill=grill-me --skill=grilling --agent codex --global --yes",
 
-  # DeusData codebase-memory-mcp. setup.sh downloads the binary to
-  # /root/.local/bin — which is NOT on the PATH of init's `sh`, so the
-  # binary must be called by ABSOLUTE PATH (this was the "not found" bug).
-  # Its [y/N] Claude Code prompt harmlessly defaults to N on EOF.
-  # `install -y` then registers the MCP server with all DETECTED agents —
-  # Codex is installed at this point, so it writes the
-  # [mcp_servers.codebase-memory-mcp] entry into /root/.codex/config.toml.
-  "curl -fsSL https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/scripts/setup.sh | bash",
-  "/root/.local/bin/codebase-memory-mcp install -y",
+  # DeusData codebase-memory-mcp. The maintained installer selects the fully
+  # static Linux "-portable" artifact; the legacy scripts/setup.sh selected a
+  # binary requiring glibc 2.38 and GLIBCXX_3.4.32, which Debian 12 lacks.
+  # Pin both installer and release, verify the upstream checksum, and configure
+  # only the already-installed Codex client without an interactive prompt.
+  "curl -fsSL https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/v0.11.0/install.sh | CBM_DOWNLOAD_URL=https://github.com/DeusData/codebase-memory-mcp/releases/download/v0.11.0 bash -s -- --clients=codex",
+  # Keep an explicit runtime smoke test at the provisioning boundary. The
+  # installer already runs this check before and after activating the binary.
+  "/root/.local/bin/codebase-memory-mcp --version",
   "ln -sf /root/.local/bin/codebase-memory-mcp /usr/local/bin/",
   # Deterministic alternative if agent detection ever misses Codex — writes
   # the same config entry via Codex itself instead of relying on detection:
