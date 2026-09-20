@@ -116,10 +116,12 @@ init = [
   # subcommand can detect the Codex CLI and register itself with it)
   "npm install -g @openai/codex@0.155.1",
 
-  # Full permissions are appropriate inside the microVM boundary. The final
-  # init step snapshots this prepared Codex home so launchers can seed the
-  # persistent host-mounted state directory on first use.
-  "mkdir -p /root/.codex && printf 'sandbox_mode = \"danger-full-access\"\\napproval_policy = \"never\"\\n' > /root/.codex/config.toml",
+  # Sol with high reasoning is the machine default; the footer exposes token,
+  # context, and rate-limit headroom. Full permissions are appropriate inside
+  # the microVM boundary. The final init step snapshots this prepared Codex
+  # home so launchers can seed the persistent host-mounted state directory on
+  # first use.
+  "mkdir -p /root/.codex && printf 'model = \"gpt-5.6-sol\"\\nmodel_reasoning_effort = \"high\"\\nsandbox_mode = \"danger-full-access\"\\napproval_policy = \"never\"\\n\\n[tui]\\nstatus_line = [\\n  \"model-with-reasoning\",\\n  \"current-dir\",\\n  \"context-remaining\",\\n  \"used-tokens\",\\n  \"five-hour-limit\",\\n  \"weekly-limit\",\\n]\\nstatus_line_use_colors = true\\n' > /root/.codex/config.toml",
 
   # Matt Pocock's grill-me + grilling skills — global install for Codex
   # (lands in /root/.codex/skills), non-interactive

@@ -83,10 +83,13 @@ smolvm machine start --name "$CODEX_MACHINE"
 
 # The mounted Codex home persists login and sessions outside the VM. Seed it
 # once with the config, skills, and MCP registration baked into the artifact.
-smolvm machine exec --name "$CODEX_MACHINE" -- sh -lc \
-  'if [ -d /opt/codex-home ]; then cp -a -n /opt/codex-home/. /root/.codex/; fi'
+if ! smolvm machine exec --name "$CODEX_MACHINE" -- sh -lc \
+  'if [ -d /opt/codex-home ]; then cp -a --update=none /opt/codex-home/. /root/.codex/; fi'
+then
+  echo "WARNING: could not seed the persistent Codex home; continuing with its existing contents." >&2
+fi
 
-CODEX_EXEC=(smolvm machine exec -it --name "$CODEX_MACHINE")
+CODEX_EXEC=(smolvm machine exec --name "$CODEX_MACHINE" -it)
 if [ -n "${OPENAI_API_KEY:-}" ]; then
   CODEX_EXEC+=(--secret-env OPENAI_API_KEY=OPENAI_API_KEY)
 fi

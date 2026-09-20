@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$*" >> "$SMOLVM_TEST_LOG"
+
+case "$*" in
+  "machine status --name test-machine" | \
+  "machine start --name test-machine" | \
+  "machine stop --name test-machine")
+    exit 0
+    ;;
+  *"/opt/codex-home"*)
+    echo "cp: warning: simulated seed failure" >&2
+    exit 1
+    ;;
+  *" -- codex --help")
+    exit 0
+    ;;
+esac
+
+echo "unexpected smolvm invocation: $*" >&2
+exit 64
