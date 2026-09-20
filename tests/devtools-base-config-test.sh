@@ -34,6 +34,7 @@ assert config["tui"]["status_line"] == [
     "weekly-limit",
 ]
 assert config["tui"]["status_line_use_colors"] is True
+assert config["projects"]["/workspace/myrepo"]["trust_level"] == "trusted"
 PY
 
-echo 'PASS: base image seeds the requested Codex model and TUI configuration'
+echo 'PASS: base image seeds the requested Codex model, TUI, and project trust configuration'

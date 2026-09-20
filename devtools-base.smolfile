@@ -121,7 +121,7 @@ init = [
   # the microVM boundary. The final init step snapshots this prepared Codex
   # home so launchers can seed the persistent host-mounted state directory on
   # first use.
-  "mkdir -p /root/.codex && printf 'model = \"gpt-5.6-sol\"\\nmodel_reasoning_effort = \"high\"\\nsandbox_mode = \"danger-full-access\"\\napproval_policy = \"never\"\\n\\n[tui]\\nstatus_line = [\\n  \"model-with-reasoning\",\\n  \"current-dir\",\\n  \"context-remaining\",\\n  \"used-tokens\",\\n  \"five-hour-limit\",\\n  \"weekly-limit\",\\n]\\nstatus_line_use_colors = true\\n' > /root/.codex/config.toml",
+  "mkdir -p /root/.codex && printf 'model = \"gpt-5.6-sol\"\\nmodel_reasoning_effort = \"high\"\\nsandbox_mode = \"danger-full-access\"\\napproval_policy = \"never\"\\n\\n[tui]\\nstatus_line = [\\n  \"model-with-reasoning\",\\n  \"current-dir\",\\n  \"context-remaining\",\\n  \"used-tokens\",\\n  \"five-hour-limit\",\\n  \"weekly-limit\",\\n]\\nstatus_line_use_colors = true\\n\\n[projects.\"/workspace/myrepo\"]\\ntrust_level = \"trusted\"\\n' > /root/.codex/config.toml",
 
   # Matt Pocock's grill-me + grilling skills — global install for Codex
   # (lands in /root/.codex/skills), non-interactive
