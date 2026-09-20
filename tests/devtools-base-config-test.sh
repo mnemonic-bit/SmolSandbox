@@ -12,6 +12,20 @@ smolfile_path = sys.argv[1]
 with open(smolfile_path, "rb") as smolfile:
     definition = tomllib.load(smolfile)
 
+assert definition["image"] == "debian:bookworm-slim"
+
+package_command = next(
+    command
+    for command in definition["dev"]["init"]
+    if "apt-get install -y --no-install-recommends" in command
+    and "podman" in command
+)
+assert "podman-docker" in package_command.split()
+assert any(
+    command.startswith("docker run --rm ")
+    for command in definition["dev"]["init"]
+)
+
 config_command = next(
     command
     for command in definition["dev"]["init"]
@@ -39,4 +53,4 @@ assert config["tui"]["status_line_use_colors"] is True
 assert config["projects"]["/workspace/myrepo"]["trust_level"] == "trusted"
 PY
 
-echo 'PASS: base image seeds the requested Codex model, TUI, and project trust configuration'
+echo 'PASS: base image and Codex seed configuration match the requested defaults'

@@ -1,5 +1,5 @@
 # Smolfile — Dev tools base image for smolvm (smol-machines/smolvm)
-# One declarative microVM: Ubuntu 24.04 + Node 22 + Python 3 + .NET 8 SDK,
+# One declarative microVM: Debian 12 slim + Node 22 + Python 3 + .NET 8 SDK,
 # OpenAI Codex CLI, Matt Pocock's grill-me/grilling skills,
 # DeusData's codebase-memory-mcp, Podman + Buildah for nested containers,
 # and Playwright + per-stack dev/debug tooling for live web-app testing.
@@ -10,7 +10,7 @@
 #
 # Timezone: Europe/Berlin — see the preseed lines at the top of `init`.
 
-image = "ubuntu:24.04"
+image = "debian:bookworm-slim"
 cpus = 4
 memory = 8192            # MiB; elastic via virtio balloon. For installation this
                          # is a good starting point
@@ -42,7 +42,12 @@ allow_hosts = [
   "registry-1.docker.io",          # Docker Hub — podman pull / buildah
   "auth.docker.io",                # Docker Hub auth
   "production.cloudflare.docker.com", # Docker Hub layer CDN
+  "production.cloudfront.docker.com", # Docker Hub layer CDN (alternate)
   "mcr.microsoft.com",             # Microsoft artifacts (SQL Server container, etc.)
+  "dot.net",                       # .NET install script (provisioning)
+  "aka.ms",                        # .NET SDK release resolution (provisioning)
+  "builds.dotnet.microsoft.com",   # .NET SDK payloads (provisioning)
+  "ci.dot.net",                     # .NET SDK payload fallback (provisioning)
   "cdn.playwright.dev",            # Playwright browser downloads (provisioning)
   "storage.googleapis.com",        # Playwright Chrome-for-Testing builds (provisioning)
   "playwright.download.prss.microsoft.com", # Playwright primary mirror (provisioning)
@@ -52,9 +57,7 @@ allow_hosts = [
   "release-assets.githubusercontent.com", # GitHub release binaries (newer layout)
   "objects.githubusercontent.com", # GitHub release binaries (older redirect layout)
   "codeload.github.com",           # repo tarballs (provisioning)
-  "archive.ubuntu.com",            # apt (provisioning)
-  "ports.ubuntu.com",              # apt on Ubuntu arm64 (provisioning)
-  "security.ubuntu.com",           # apt (provisioning)
+  "deb.debian.org",                # Debian apt + security updates (provisioning)
   "deb.nodesource.com",            # Node 22 (provisioning)
   # "playwright.azureedge.net",    # legacy Playwright CDN, older versions
   # "ghcr.io",                     # add if you pull/push GitHub Container Registry
@@ -74,16 +77,21 @@ init = [
   # timezone, change Areas and Zones/<Area> (e.g. America + New_York).
   "printf 'tzdata tzdata/Areas select Europe\\ntzdata tzdata/Zones/Europe select Berlin\\n' | debconf-set-selections",
 
-  # Toolchains: Python 3, .NET 8 SDK, git, ripgrep, Podman + Buildah, extras.
+  # Toolchains: Python 3, git, ripgrep, Podman + Buildah, Docker-compatible
+  # command aliases, and extras. .NET 8 is installed below.
   # DEBIAN_FRONTEND=noninteractive suppresses ALL debconf dialogs (tzdata,
   # keyboard-configuration, console-setup, ...), not just tzdata.
   "DEBIAN_FRONTEND=noninteractive apt-get update",
-  "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl git openssh-client build-essential pkg-config ripgrep unzip jq sqlite3 httpie pipx python3 python3-pip python3-venv dotnet-sdk-8.0 podman buildah",
+  "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl git openssh-client build-essential pkg-config ripgrep unzip jq sqlite3 httpie pipx python3 python3-pip python3-venv tzdata libgssapi-krb5-2 libicu72 libssl3 zlib1g podman podman-docker buildah",
 
   # Belt and suspenders: pin the timezone files explicitly and re-apply tzdata
   # config non-interactively (correct even if tzdata was already installed in
   # the base image before the preseed ran)
   "ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime && printf 'Europe/Berlin\\n' > /etc/timezone && dpkg-reconfigure -f noninteractive tzdata",
+
+  # Microsoft's Debian feed publishes .NET 8 for x64 only. The official
+  # installer auto-detects x64/Arm64 so the SmolVM stays host-portable.
+  "curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && bash /tmp/dotnet-install.sh --channel 8.0 --install-dir /usr/share/dotnet --no-path && ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet && rm -f /tmp/dotnet-install.sh",
 
   # --- Git: the virtiofs-mounted /workspace/myrepo carries HOST UIDs, which
   # differ from the guest's root — git >= 2.35.2 then refuses to operate
@@ -108,7 +116,7 @@ init = [
   # options. (This was the "runroot must be set" bug.)
   "mkdir -p /storage/containers && printf '[storage]\\ndriver = \"overlay\"\\ngraphroot = \"/storage/containers/storage\"\\nrunroot = \"/run/containers/storage\"\\n' > /etc/containers/storage.conf",
 
-  # Node 22 from NodeSource (Ubuntu's own nodejs is too old for Codex CLI);
+  # Node 22 from NodeSource (Debian's own nodejs is too old for Codex CLI);
   # the setup script runs apt itself, so the env var must be exported into it
   "curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/node-setup.sh && DEBIAN_FRONTEND=noninteractive bash /tmp/node-setup.sh && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nodejs",
 
@@ -177,8 +185,9 @@ init = [
   "python3 -m pip install --break-system-packages playwright==1.63.0",
   "python3 -m playwright install chromium",
 
-  # Smoke test: pull and run a tiny container to prove nested Podman works.
-  "podman run --rm docker.io/library/alpine echo nested-podman-ok",
+  # Smoke test: pull and run a tiny container through podman-docker's Docker
+  # command to prove both nested Podman and Docker CLI compatibility work.
+  "docker run --rm docker.io/library/alpine echo nested-podman-via-docker-ok",
 
   # Derived machines mount persistent state over /root/.codex. Preserve the
   # prepared defaults elsewhere in the artifact so start-login/start-codex

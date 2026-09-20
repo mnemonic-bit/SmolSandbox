@@ -1,9 +1,10 @@
 # Codex in a SmolVM sandbox
 
 This repository builds a reusable, all-batteries-included `.smolmachine` for
-Codex and creates persistent VMs from it. The prepared Ubuntu 24.04 environment
-contains Node.js 22, Python, .NET 8, Git, common diagnostics, Podman/Buildah,
-Playwright/Chromium, Codex, selected Codex skills, and codebase-memory-mcp.
+Codex and creates persistent VMs from it. The prepared Debian 12 slim environment
+contains Node.js 22, Python, .NET 8, Git, common diagnostics, Podman/Buildah
+with a Docker-compatible command, Playwright/Chromium, Codex, selected Codex
+skills, and codebase-memory-mcp.
 
 The workflow deliberately uses `smolvm machine create --from`, not
 `smolvm pack run`. SmolVM extracts an artifact's base layers once and shares
