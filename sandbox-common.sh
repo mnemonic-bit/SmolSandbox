@@ -207,6 +207,35 @@ sandbox_ensure_base() {
   fi
 }
 
+sandbox_remove_builder_machines() {
+  local index builder state builder_base artifact failed=0
+  for ((index = 0; index < ${#SANDBOX_ALL_NAMES[@]}; index++)); do
+    builder="${SANDBOX_ALL_NAMES[$index]}"
+    state="${SANDBOX_ALL_STATES[$index]}"
+    if [ "$builder" = "$BUILDER_MACHINE" ]; then
+      artifact="$ARTIFACT_FILE"
+    elif [[ "$builder" =~ ^codex-builder-([0-9a-f]{12})$ ]]; then
+      builder_base="${BASH_REMATCH[1]}"
+      artifact="$ARTIFACTS_DIR/codex-devtools-$builder_base.smolmachine"
+    else
+      continue
+    fi
+    # The artifact is the durable cache. Only remove builders backed by one
+    # in this repository, and never interfere with an active build.
+    [ -s "$artifact" ] || continue
+    if [ "$state" = "running" ] || [ "$state" = "Running" ]; then
+      echo "WARNING: leaving active builder machine $builder in place." >&2
+      continue
+    fi
+    echo "Removing temporary builder machine $builder..."
+    smolvm machine stop --name "$builder" >/dev/null 2>&1 || true
+    if ! smolvm machine delete --name "$builder" --force; then
+      failed=1
+    fi
+  done
+  return "$failed"
+}
+
 sandbox_create_login_machine() {
   if sandbox_inventory_has_name "$LOGIN_MACHINE"; then
     return 0
@@ -382,6 +411,9 @@ sandbox_reconcile_attempt() {
         return 1
       }
     fi
+    if ! sandbox_remove_builder_machines; then
+      echo "WARNING: one or more temporary builder machines could not be removed." >&2
+    fi
     sandbox_repair_caches || {
       sandbox_discard_inventory
       return 1
@@ -446,6 +478,9 @@ sandbox_reconcile_attempt() {
       return 1
     }
     RECONCILED_MACHINE="$DESIRED_CODEX_MACHINE"
+  fi
+  if ! sandbox_remove_builder_machines; then
+    echo "WARNING: one or more temporary builder machines could not be removed." >&2
   fi
   sandbox_repair_caches || {
     sandbox_discard_inventory

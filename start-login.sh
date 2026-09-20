@@ -23,4 +23,4 @@ trap stop_login_machine EXIT INT TERM
 
 smolvm machine start --name "$LOGIN_MACHINE"
 smolvm machine exec -it --name "$LOGIN_MACHINE" -- sh -lc \
-  'if [ -d /opt/codex-home ]; then cp -a -n /opt/codex-home/. /root/.codex/; fi; exec codex login --device-auth'
+  'if [ -d /opt/codex-home ]; then cp -r --update=none /opt/codex-home/. /root/.codex/; fi; exec codex login --device-auth'

@@ -151,7 +151,9 @@ strict legacy name are eligible for removal.
 - `.smolvm/base-id`: compatibility cache of the derived base generation.
 - `.smolvm/machine-revision`: compatibility cache of the runtime-policy revision.
 - `.smolvm/codex-home`: shared login, configuration, skills, and sessions.
-- `codex-builder-<base-id>`: stopped builder retained for inexpensive repacks.
+- `codex-builder-<base-id>`: temporary build VM, deleted after the reusable
+  artifact has been created (stopped builders backed by this repo's cached
+  artifacts are cleaned on the next start).
 - `codex-login-<base-id>-r<revision>`: login-only VM.
 - `codex-workspace-<base-id>-r<revision>-<workspace-id>`: one persistent VM
   per workspace. Bump `SANDBOX_MACHINE_REVISION` in `sandbox-common.sh` when

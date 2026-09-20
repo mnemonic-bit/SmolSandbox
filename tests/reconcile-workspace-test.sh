@@ -100,11 +100,20 @@ done
 prepare_case build-base
 rm -f -- "$CASE_ROOT/artifacts/codex-devtools-$BASE_ID.smolmachine"
 INVENTORY='[]'
-SMOLVM_TEST_ALLOW_CREATE=1 run_start > "$CASE_ROOT/output" 2>&1
+SMOLVM_TEST_ALLOW_CREATE=1 SMOLVM_TEST_ALLOW_CLEANUP=1 run_start > "$CASE_ROOT/output" 2>&1
 test -s "$CASE_ROOT/artifacts/codex-devtools-$BASE_ID.smolmachine"
 grep -Fq "machine create --name codex-builder-$BASE_ID" "$CASE_ROOT/smolvm.log"
 grep -Fq "pack create --from-vm codex-builder-$BASE_ID" "$CASE_ROOT/smolvm.log"
+grep -Fqx "machine delete --name codex-builder-$BASE_ID --force" "$CASE_ROOT/smolvm.log"
 grep -Fq "machine create --name $DESIRED" "$CASE_ROOT/smolvm.log"
+
+prepare_case clean-existing-builder
+OLD_BASE_ID=111111111111
+printf 'old artifact\n' > "$CASE_ROOT/artifacts/codex-devtools-$OLD_BASE_ID.smolmachine"
+INVENTORY="[{\"name\":\"$DESIRED\",\"state\":\"stopped\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"1\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}},{\"name\":\"codex-builder-$BASE_ID\",\"state\":\"stopped\",\"labels\":{}},{\"name\":\"codex-builder-$OLD_BASE_ID\",\"state\":\"stopped\",\"labels\":{}}]"
+SMOLVM_TEST_ALLOW_CLEANUP=1 run_start > "$CASE_ROOT/output" 2>&1
+grep -Fqx "machine delete --name codex-builder-$BASE_ID --force" "$CASE_ROOT/smolvm.log"
+grep -Fqx "machine delete --name codex-builder-$OLD_BASE_ID --force" "$CASE_ROOT/smolvm.log"
 
 prepare_case replace
 STALE="codex-workspace-111111111111-r1-$WORKSPACE_ID"

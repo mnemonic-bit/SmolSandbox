@@ -20,6 +20,7 @@ OUTPUT="$(
   SMOLVM_TEST_LOG="$TEST_ROOT/smolvm.log" \
   SMOLVM_TEST_VERSION="$SMOLVM_TEST_VERSION" \
   SMOLVM_TEST_INVENTORY='[{"name":"test-machine","state":"stopped","labels":{}}]' \
+  SMOLVM_TEST_SEED_FAIL=1 \
   STATE_ROOT="$TEST_ROOT/state" \
   ARTIFACTS_DIR="$TEST_ROOT/artifacts" \
   BASE_SMOLFILE="$REPO_ROOT/devtools-base.smolfile" \
@@ -34,6 +35,30 @@ if [ "$STATUS" -ne 0 ]; then
   exit 1
 fi
 
+: > "$TEST_ROOT/smolvm.log"
+for invocation in first second; do
+  OUTPUT="$(
+    PATH="$TEST_ROOT/bin:$PATH" \
+    SMOLVM_TEST_LOG="$TEST_ROOT/smolvm.log" \
+    SMOLVM_TEST_VERSION="$SMOLVM_TEST_VERSION" \
+    SMOLVM_TEST_INVENTORY='[{"name":"test-machine","state":"stopped","labels":{}}]' \
+    STATE_ROOT="$TEST_ROOT/state" \
+    ARTIFACTS_DIR="$TEST_ROOT/artifacts" \
+    BASE_SMOLFILE="$REPO_ROOT/devtools-base.smolfile" \
+    CODEX_MACHINE="test-machine" \
+      "$REPO_ROOT/start-codex.sh" "$TEST_ROOT/workspace" -- --help 2>&1
+  )"
+  if [[ "$OUTPUT" == *"Operation not permitted"* ]]; then
+    printf 'FAIL: %s repeated start emitted a copy permission error\n%s\n' "$invocation" "$OUTPUT" >&2
+    exit 1
+  fi
+done
+
+if [ "$(grep -Fc 'cp -r --update=none /opt/codex-home/. /root/.codex/' "$TEST_ROOT/smolvm.log")" -ne 2 ]; then
+  echo 'FAIL: repeated starts did not use the non-archival no-clobber seed copy' >&2
+  exit 1
+fi
+
 if ! grep -Fq 'machine exec --name test-machine -it -- codex --help' "$TEST_ROOT/smolvm.log"; then
   printf 'FAIL: launcher never invoked Codex\n%s\n' "$OUTPUT" >&2
   exit 1
@@ -44,4 +69,4 @@ if ! grep -Fq 'machine stop --name test-machine' "$TEST_ROOT/smolvm.log"; then
   exit 1
 fi
 
-echo 'PASS: a Codex-home seed failure does not prevent Codex from starting'
+echo 'PASS: Codex-home seeding tolerates failures and repeated starts avoid permission errors'

@@ -25,6 +25,8 @@ config = tomllib.loads(match.group(1).replace(r"\n", "\n"))
 
 assert config["model"] == "gpt-5.6-sol"
 assert config["model_reasoning_effort"] == "high"
+assert config["model_context_window"] == 1_000_000
+assert config["model_auto_compact_token_limit"] == 900_000
 assert config["tui"]["status_line"] == [
     "model-with-reasoning",
     "current-dir",

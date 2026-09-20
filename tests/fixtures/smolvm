@@ -31,8 +31,15 @@ case "$*" in
     exit 0
     ;;
   *"/opt/codex-home"*)
-    echo "cp: warning: simulated seed failure" >&2
-    exit 1
+    if [ "${SMOLVM_TEST_SEED_FAIL:-}" = 1 ]; then
+      echo "cp: warning: simulated seed failure" >&2
+      exit 1
+    fi
+    if [[ "$*" == *"cp -a"* ]]; then
+      echo "cp: preserving permissions: Operation not permitted" >&2
+      exit 1
+    fi
+    exit 0
     ;;
   *" -- codex --help")
     exit 0

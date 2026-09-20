@@ -32,7 +32,7 @@ trap stop_codex_machine EXIT INT TERM
 smolvm machine start --name "$CODEX_MACHINE"
 
 if ! smolvm machine exec --name "$CODEX_MACHINE" -- sh -lc \
-  'if [ -d /opt/codex-home ]; then cp -a --update=none /opt/codex-home/. /root/.codex/; fi'
+  'if [ -d /opt/codex-home ]; then cp -r --update=none /opt/codex-home/. /root/.codex/; fi'
 then
   echo "WARNING: could not seed the persistent Codex home; continuing with its existing contents." >&2
 fi
