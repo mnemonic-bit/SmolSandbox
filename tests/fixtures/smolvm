@@ -9,9 +9,25 @@ case "$*" in
     exit 0
     ;;
   "machine ls --json")
-    if [ "${SMOLVM_TEST_INVENTORY_FAIL:-}" = 1 ]; then
+    inventory_call=1
+    if [ -n "${SMOLVM_TEST_INVENTORY_SEQUENCE_FILE:-}" ]; then
+      inventory_count_file="${SMOLVM_TEST_INVENTORY_COUNT_FILE:-$SMOLVM_TEST_INVENTORY_SEQUENCE_FILE.count}"
+      if [ -s "$inventory_count_file" ]; then
+        inventory_call=$(( $(sed -n '1p' "$inventory_count_file") + 1 ))
+      fi
+      printf '%s\n' "$inventory_call" > "$inventory_count_file"
+    fi
+    if [ "${SMOLVM_TEST_INVENTORY_FAIL:-}" = 1 ] || \
+       [ "${SMOLVM_TEST_INVENTORY_FAIL_AT:-}" = "$inventory_call" ]; then
       echo 'simulated inventory failure' >&2
       exit 70
+    elif [ -n "${SMOLVM_TEST_INVENTORY_SEQUENCE_FILE:-}" ]; then
+      response="$(sed -n "${inventory_call}p" "$SMOLVM_TEST_INVENTORY_SEQUENCE_FILE")"
+      if [ -z "$response" ]; then
+        echo "missing simulated inventory response $inventory_call" >&2
+        exit 70
+      fi
+      printf '%s\n' "$response"
     elif [ -n "${SMOLVM_TEST_INVENTORY_FILE:-}" ]; then
       cat "$SMOLVM_TEST_INVENTORY_FILE"
     elif [ -n "${SMOLVM_TEST_INVENTORY:-}" ]; then
@@ -45,6 +61,28 @@ case "$*" in
     exit 0
     ;;
 esac
+
+if [ "${1:-}" = machine ] && [ "${2:-}" = create ] && \
+   [ "${SMOLVM_TEST_CREATE_FAIL:-}" = 1 ]; then
+  echo 'simulated machine create failure' >&2
+  exit 71
+fi
+
+if [ "${1:-}" = machine ] && [ "${2:-}" = stop ] && \
+   { [ "${SMOLVM_TEST_STOP_FAIL:-}" = 1 ] || \
+     { [ -n "${SMOLVM_TEST_STOP_FAIL_NAME:-}" ] && [[ "$*" == *"--name $SMOLVM_TEST_STOP_FAIL_NAME"* ]]; }; }
+then
+  echo 'simulated machine stop failure' >&2
+  exit 72
+fi
+
+if [ "${1:-}" = machine ] && [ "${2:-}" = delete ] && \
+   { [ "${SMOLVM_TEST_DELETE_FAIL:-}" = 1 ] || \
+     { [ -n "${SMOLVM_TEST_DELETE_FAIL_NAME:-}" ] && [[ "$*" == *"--name $SMOLVM_TEST_DELETE_FAIL_NAME"* ]]; }; }
+then
+  echo 'simulated machine delete failure' >&2
+  exit 73
+fi
 
 if [ "${1:-}" = machine ] && [ "${2:-}" = create ] && \
    [ "${SMOLVM_TEST_ALLOW_CREATE:-}" = 1 ]; then
@@ -155,6 +193,10 @@ fi
 
 if [ "${1:-}" = pack ] && [ "${2:-}" = create ] && \
    [ "${SMOLVM_TEST_ALLOW_CREATE:-}" = 1 ]; then
+  if [ "${SMOLVM_TEST_PACK_FAIL:-}" = 1 ]; then
+    echo 'simulated pack failure' >&2
+    exit 74
+  fi
   output=""
   while [ "$#" -gt 0 ]; do
     if [ "$1" = -o ]; then

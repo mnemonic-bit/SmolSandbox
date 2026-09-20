@@ -212,13 +212,17 @@ Provide a repair entry point with these behaviors:
 2. Obtain and validate the complete SmolVM inventory.
 3. Display every stale machine selected for removal.
 4. Refuse to remove a running stale machine.
-5. Stop and delete the selected stale machines.
-6. Ensure the desired base and desired workspace machine exist.
-7. Repair the compatibility cache files.
+5. Ensure the desired base and desired workspace machine exist.
+6. Verify the desired machine from a fresh inventory.
+7. Stop and delete the selected stale machines.
+8. Repair the compatibility cache files.
 
-`--force` permits the repair operation to stop a running stale machine before
-deleting it. It does not broaden workspace matching and must not affect an
-unrelated machine.
+Feature 0002 defines the readiness gate and failure semantics for this
+create-before-delete ordering.
+
+`--force` permits the repair operation to stop a running stale machine during
+post-verification cleanup before deleting it. It does not broaden workspace
+matching and must not affect an unrelated machine.
 
 The repair command shall require positive managed-label ownership or strict
 legacy-name matching before deleting a machine. Ambiguous or contradictory

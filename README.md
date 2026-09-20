@@ -136,15 +136,25 @@ Replace stopped stale machines explicitly with:
 ./repair-sandbox.sh --replace-stale /path/to/project
 ```
 
-The repair command refuses to remove a running stale machine. After inspecting
-the report, `--force` permits that machine to be stopped before replacement:
+Replacement is a create-before-delete handoff. The repair command prepares the
+current base, creates the desired workspace machine when needed, and verifies
+that machine from a fresh inventory before it stops or deletes any stale
+machine. If preparation or verification fails, stale machines and compatibility
+caches are left unchanged; a newly registered desired machine is preserved for
+inspection.
+
+The repair command refuses to replace a running stale machine without explicit
+authorization. After inspecting the report, `--force` permits that machine to
+be stopped during cleanup, after the desired machine has passed verification:
 
 ```bash
 ./repair-sandbox.sh --replace-stale --force /path/to/project
 ```
 
 Only machines positively associated with the workspace by managed labels or a
-strict legacy name are eligible for removal.
+strict legacy name are eligible for removal. If cleanup fails, the verified
+desired machine and every unprocessed stale machine remain available, and the
+compatibility caches are not rewritten.
 
 ## Cache and state layout
 

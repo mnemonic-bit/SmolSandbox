@@ -350,8 +350,47 @@ sandbox_release_lock() {
   fi
 }
 
+sandbox_verify_replacement_readiness() {
+  if [ ! -s "$ARTIFACT_FILE" ]; then
+    echo "ERROR: desired base artifact is missing or empty; stale workspace machines were left unchanged." >&2
+    return 1
+  fi
+
+  local override_flag=() verification name state
+  if [ -n "$CODEX_MACHINE_OVERRIDE" ]; then
+    override_flag=(--override)
+  fi
+  if ! verification="$(python3 "$SANDBOX_ROOT/sandbox-inventory.py" verify-readiness \
+    "$SANDBOX_INVENTORY_FILE" "$BASE_ID" "$MACHINE_REVISION" \
+    "$WORKSPACE_SHA256" "$WORKSPACE_ID" "$DESIRED_CODEX_MACHINE" \
+    "${override_flag[@]}" 2>&1)"
+  then
+    echo "ERROR: desired workspace machine did not pass replacement readiness: $verification" >&2
+    echo "Stale workspace machines were left unchanged." >&2
+    sandbox_report_repair_commands
+    return 1
+  fi
+
+  IFS=$'\x1f' read -r name state <<< "$verification"
+  RECONCILED_MACHINE="$name"
+  echo "Verified desired workspace machine $name ($state)."
+}
+
+sandbox_report_create_failure() {
+  echo "ERROR: could not create desired workspace machine $DESIRED_CODEX_MACHINE." >&2
+  sandbox_discard_inventory
+  if sandbox_read_inventory; then
+    if [ -n "$SANDBOX_DESIRED_FOUND" ]; then
+      echo "The desired machine appears in the refreshed inventory and was preserved for inspection." >&2
+    fi
+    sandbox_discard_inventory
+  fi
+  echo "Stale workspace machines were left unchanged." >&2
+}
+
 sandbox_reconcile_attempt() {
-  local mode="$1" force="$2" index state
+  local mode="$1" force="$2" index state refreshed_index found
+  local -a replacement_names=() replacement_states=()
   sandbox_read_inventory || return 1
 
   if [ "$mode" = "check" ]; then
@@ -436,7 +475,7 @@ sandbox_reconcile_attempt() {
     for ((index = 0; index < ${#SANDBOX_STALE_NAMES[@]}; index++)); do
       echo "  ${SANDBOX_STALE_NAMES[$index]} (${SANDBOX_STALE_STATES[$index]}, ${SANDBOX_STALE_SOURCES[$index]})"
       state="${SANDBOX_STALE_STATES[$index]}"
-      if { [ "$state" = "running" ] || [ "$state" = "Running" ]; } && [ "$force" != "force" ]; then
+      if [ "${state,,}" = "running" ] && [ "$force" != "force" ]; then
         echo "ERROR: stale machine ${SANDBOX_STALE_NAMES[$index]} is running; rerun with --force to stop it." >&2
         sandbox_discard_inventory
         return 1
@@ -444,23 +483,11 @@ sandbox_reconcile_attempt() {
     done
   fi
 
-  for ((index = 0; index < ${#SANDBOX_STALE_NAMES[@]}; index++)); do
-    state="${SANDBOX_STALE_STATES[$index]}"
-    if [ "$state" = "running" ] || [ "$state" = "Running" ]; then
-      smolvm machine stop --name "${SANDBOX_STALE_NAMES[$index]}" || {
-        sandbox_discard_inventory
-        return 1
-      }
-    else
-      smolvm machine stop --name "${SANDBOX_STALE_NAMES[$index]}" >/dev/null 2>&1 || true
-    fi
-    smolvm machine delete --name "${SANDBOX_STALE_NAMES[$index]}" --force || {
-      sandbox_discard_inventory
-      return 1
-    }
-  done
+  replacement_names=("${SANDBOX_STALE_NAMES[@]}")
 
   sandbox_ensure_base || {
+    echo "ERROR: could not prepare desired base generation $BASE_ID." >&2
+    echo "Stale workspace machines were left unchanged." >&2
     sandbox_discard_inventory
     return 1
   }
@@ -474,11 +501,76 @@ sandbox_reconcile_attempt() {
     RECONCILED_MACHINE="$SANDBOX_DESIRED_FOUND"
   else
     sandbox_create_workspace_machine || {
-      sandbox_discard_inventory
+      sandbox_report_create_failure
       return 1
     }
     RECONCILED_MACHINE="$DESIRED_CODEX_MACHINE"
   fi
+
+  # The readiness decision must use an inventory obtained after preparation,
+  # even when the desired machine already existed before replacement began.
+  sandbox_discard_inventory
+  if ! sandbox_read_inventory; then
+    echo "Stale workspace machines were left unchanged." >&2
+    return 1
+  fi
+  if [ "${#SANDBOX_AMBIGUOUS_NAMES[@]}" -gt 0 ]; then
+    echo "ERROR: refusing cleanup because refreshed workspace ownership is ambiguous." >&2
+    sandbox_report_candidates
+    echo "Stale workspace machines were left unchanged." >&2
+    sandbox_discard_inventory
+    return 1
+  fi
+  if ! sandbox_verify_replacement_readiness; then
+    sandbox_discard_inventory
+    return 1
+  fi
+
+  # Cleanup is limited to the stale machines selected during preflight. Each
+  # one must still be positively classified for this workspace in the fresh
+  # inventory, and its refreshed state controls whether --force is required.
+  for ((index = 0; index < ${#replacement_names[@]}; index++)); do
+    found=0
+    for ((refreshed_index = 0; refreshed_index < ${#SANDBOX_STALE_NAMES[@]}; refreshed_index++)); do
+      if [ "${replacement_names[$index]}" = "${SANDBOX_STALE_NAMES[$refreshed_index]}" ]; then
+        replacement_states[$index]="${SANDBOX_STALE_STATES[$refreshed_index]}"
+        found=1
+        break
+      fi
+    done
+    if [ "$found" -ne 1 ]; then
+      echo "ERROR: stale workspace machine ${replacement_names[$index]} is no longer eligible for cleanup." >&2
+      echo "Stale workspace machines were left unchanged." >&2
+      sandbox_discard_inventory
+      return 1
+    fi
+    state="${replacement_states[$index]}"
+    if [ "${state,,}" = "running" ] && [ "$force" != "force" ]; then
+      echo "ERROR: stale machine ${replacement_names[$index]} is now running; rerun with --force to stop it." >&2
+      echo "Stale workspace machines were left unchanged." >&2
+      sandbox_discard_inventory
+      return 1
+    fi
+  done
+
+  for ((index = 0; index < ${#replacement_names[@]}; index++)); do
+    state="${replacement_states[$index]}"
+    if [ "${state,,}" = "running" ]; then
+      if ! smolvm machine stop --name "${replacement_names[$index]}"; then
+        echo "ERROR: could not stop stale workspace machine ${replacement_names[$index]}." >&2
+        echo "The desired workspace machine remains available; compatibility caches were not changed." >&2
+        sandbox_discard_inventory
+        return 1
+      fi
+    fi
+    if ! smolvm machine delete --name "${replacement_names[$index]}" --force; then
+      echo "ERROR: could not delete stale workspace machine ${replacement_names[$index]}." >&2
+      echo "The desired workspace machine remains available; compatibility caches were not changed." >&2
+      sandbox_discard_inventory
+      return 1
+    fi
+  done
+
   if ! sandbox_remove_builder_machines; then
     echo "WARNING: one or more temporary builder machines could not be removed." >&2
   fi

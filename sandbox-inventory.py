@@ -161,6 +161,40 @@ def classify(args: argparse.Namespace, inventory: list[dict[str, object]]) -> No
             emit("unrelated", name, state, "", "", "legacy-name", "no", "")
 
 
+def verify_readiness(args: argparse.Namespace, inventory: list[dict[str, object]]) -> None:
+    matches = [machine for machine in inventory if machine["name"] == args.desired_name]
+    if not matches:
+        fail("the desired machine is missing from the refreshed inventory")
+    if len(matches) != 1:
+        fail("multiple machines match the desired identity")
+
+    machine = matches[0]
+    labels = machine["labels"]
+    assert isinstance(labels, dict)
+    any_managed = any(key in labels for key in MANAGED_KEYS)
+    if any_managed:
+        expected = {
+            MANAGED_KEYS[0]: "workspace",
+            MANAGED_KEYS[1]: args.base_id,
+            MANAGED_KEYS[2]: args.revision,
+            MANAGED_KEYS[3]: args.workspace_hash,
+        }
+        if any(labels.get(key) != value for key, value in expected.items()):
+            fail("the desired machine has incomplete or contradictory managed labels")
+    elif not args.override:
+        legacy_pattern = re.compile(
+            rf"^codex-workspace-{re.escape(args.base_id)}-"
+            rf"r{re.escape(args.revision)}-{re.escape(args.workspace_id)}$"
+        )
+        if not legacy_pattern.fullmatch(args.desired_name):
+            fail("the unlabelled desired machine is not an allowed legacy machine")
+
+    state = str(machine["state"])
+    if state.casefold() not in {"created", "stopped", "running"}:
+        fail(f"the desired machine state is {state!r}")
+    emit(machine["name"], state)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -177,13 +211,24 @@ def main() -> int:
     classify_parser.add_argument("desired_name")
     classify_parser.add_argument("--override", action="store_true")
 
+    readiness_parser = subparsers.add_parser("verify-readiness")
+    readiness_parser.add_argument("inventory", type=Path)
+    readiness_parser.add_argument("base_id")
+    readiness_parser.add_argument("revision")
+    readiness_parser.add_argument("workspace_hash")
+    readiness_parser.add_argument("workspace_id")
+    readiness_parser.add_argument("desired_name")
+    readiness_parser.add_argument("--override", action="store_true")
+
     args = parser.parse_args()
     try:
         inventory = load_inventory(args.inventory)
         if args.command == "normalize":
             normalize(inventory)
-        else:
+        elif args.command == "classify":
             classify(args, inventory)
+        else:
+            verify_readiness(args, inventory)
     except ValueError as error:
         print(error, file=sys.stderr)
         return 1
