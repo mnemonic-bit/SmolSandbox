@@ -43,6 +43,8 @@ allow_hosts = [
   "auth.docker.io",                # Docker Hub auth
   "production.cloudflare.docker.com", # Docker Hub layer CDN
   "production.cloudfront.docker.com", # Docker Hub layer CDN (alternate)
+  "ghcr.io",                       # GitHub Container Registry API + auth
+  "pkg-containers.githubusercontent.com", # GitHub Container Registry layers
   "mcr.microsoft.com",             # Microsoft artifacts (SQL Server container, etc.)
   "dot.net",                       # .NET install script (provisioning)
   "aka.ms",                        # .NET SDK release resolution (provisioning)
@@ -60,7 +62,6 @@ allow_hosts = [
   "deb.debian.org",                # Debian apt + security updates (provisioning)
   "deb.nodesource.com",            # Node 22 (provisioning)
   # "playwright.azureedge.net",    # legacy Playwright CDN, older versions
-  # "ghcr.io",                     # add if you pull/push GitHub Container Registry
   # "quay.io",                     # add if you pull from Quay
 ]
 

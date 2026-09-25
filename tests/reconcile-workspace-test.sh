@@ -6,6 +6,7 @@ TEST_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TEST_ROOT"' EXIT
 
 SMOLVM_TEST_VERSION='smolvm test 1.0.0'
+MACHINE_REVISION=2
 BASE_ID="$({ printf '%s\n' "$SMOLVM_TEST_VERSION"; cat "$REPO_ROOT/devtools-base.smolfile"; } | sha256sum | awk '{print substr($1, 1, 12)}')"
 
 prepare_case() {
@@ -15,7 +16,7 @@ prepare_case() {
   chmod +x "$CASE_ROOT/bin/smolvm"
   WORKSPACE_HASH="$(printf '%s' "$CASE_ROOT/workspace" | sha256sum | awk '{print $1}')"
   WORKSPACE_ID="$(printf '%s' "$WORKSPACE_HASH" | cut -c1-12)"
-  DESIRED="codex-workspace-$BASE_ID-r1-$WORKSPACE_ID"
+  DESIRED="codex-workspace-$BASE_ID-r$MACHINE_REVISION-$WORKSPACE_ID"
   printf 'artifact\n' > "$CASE_ROOT/artifacts/codex-devtools-$BASE_ID.smolmachine"
 }
 
@@ -78,10 +79,10 @@ assert_no_stale_cleanup() {
 }
 
 prepare_case recover
-INVENTORY="[{\"name\":\"$DESIRED\",\"state\":\"stopped\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"1\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}}]"
+INVENTORY="[{\"name\":\"$DESIRED\",\"state\":\"stopped\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"$MACHINE_REVISION\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}}]"
 run_start > "$CASE_ROOT/output" 2>&1
 test "$(cat "$CASE_ROOT/state/base-id")" = "$BASE_ID"
-test "$(cat "$CASE_ROOT/state/machine-revision")" = 1
+test "$(cat "$CASE_ROOT/state/machine-revision")" = "$MACHINE_REVISION"
 if grep -Fq 'machine create' "$CASE_ROOT/smolvm.log"; then
   echo 'FAIL: cache recovery created a machine' >&2
   exit 1
@@ -137,10 +138,20 @@ fi
 for label in \
   'codex-sandbox.kind=workspace' \
   "codex-sandbox.base-id=$BASE_ID" \
-  'codex-sandbox.revision=1' \
+  "codex-sandbox.revision=$MACHINE_REVISION" \
   "codex-sandbox.workspace-sha256=$WORKSPACE_HASH"
 do
   grep -Fq -- "--label $label" "$CASE_ROOT/smolvm.log"
+done
+for registry_host in \
+  registry-1.docker.io \
+  auth.docker.io \
+  production.cloudflare.docker.com \
+  production.cloudfront.docker.com \
+  ghcr.io \
+  pkg-containers.githubusercontent.com
+do
+  grep -Fq -- "--allow-host $registry_host" "$CASE_ROOT/smolvm.log"
 done
 
 prepare_case build-base
@@ -156,7 +167,7 @@ grep -Fq "machine create --name $DESIRED" "$CASE_ROOT/smolvm.log"
 prepare_case clean-existing-builder
 OLD_BASE_ID=111111111111
 printf 'old artifact\n' > "$CASE_ROOT/artifacts/codex-devtools-$OLD_BASE_ID.smolmachine"
-INVENTORY="[{\"name\":\"$DESIRED\",\"state\":\"stopped\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"1\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}},{\"name\":\"codex-builder-$BASE_ID\",\"state\":\"stopped\",\"labels\":{}},{\"name\":\"codex-builder-$OLD_BASE_ID\",\"state\":\"stopped\",\"labels\":{}}]"
+INVENTORY="[{\"name\":\"$DESIRED\",\"state\":\"stopped\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"$MACHINE_REVISION\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}},{\"name\":\"codex-builder-$BASE_ID\",\"state\":\"stopped\",\"labels\":{}},{\"name\":\"codex-builder-$OLD_BASE_ID\",\"state\":\"stopped\",\"labels\":{}}]"
 SMOLVM_TEST_ALLOW_CLEANUP=1 run_start > "$CASE_ROOT/output" 2>&1
 grep -Fqx "machine delete --name codex-builder-$BASE_ID --force" "$CASE_ROOT/smolvm.log"
 grep -Fqx "machine delete --name codex-builder-$OLD_BASE_ID --force" "$CASE_ROOT/smolvm.log"
@@ -253,7 +264,7 @@ STALE="codex-workspace-111111111111-r1-$WORKSPACE_ID"
 INVENTORY="[{\"name\":\"$STALE\",\"state\":\"stopped\",\"labels\":{}}]"
 printf '%s\n' \
   "$INVENTORY" \
-  "[{\"name\":\"$STALE\",\"state\":\"stopped\",\"labels\":{}},{\"name\":\"$DESIRED\",\"state\":\"created\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"1\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}}]" \
+  "[{\"name\":\"$STALE\",\"state\":\"stopped\",\"labels\":{}},{\"name\":\"$DESIRED\",\"state\":\"created\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"$MACHINE_REVISION\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}}]" \
   > "$CASE_ROOT/inventory-sequence"
 set_preserved_caches
 if SMOLVM_TEST_CREATE_FAIL=1 \
@@ -319,7 +330,7 @@ assert_preserved_caches
 prepare_case replace-duplicate-desired
 STALE="codex-workspace-111111111111-r1-$WORKSPACE_ID"
 INVENTORY="[{\"name\":\"$STALE\",\"state\":\"stopped\",\"labels\":{}}]"
-DESIRED_JSON="{\"name\":\"$DESIRED\",\"state\":\"created\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"1\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}}"
+DESIRED_JSON="{\"name\":\"$DESIRED\",\"state\":\"created\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"$MACHINE_REVISION\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}}"
 printf '%s\n%s\n' "$INVENTORY" "[$DESIRED_JSON,$DESIRED_JSON,{\"name\":\"$STALE\",\"state\":\"stopped\",\"labels\":{}}]" > "$CASE_ROOT/inventory-sequence"
 set_preserved_caches
 if SMOLVM_TEST_INVENTORY_SEQUENCE_FILE="$CASE_ROOT/inventory-sequence" \
@@ -336,7 +347,7 @@ assert_preserved_caches
 prepare_case replace-contradictory-desired
 STALE="codex-workspace-111111111111-r1-$WORKSPACE_ID"
 INVENTORY="[{\"name\":\"$STALE\",\"state\":\"stopped\",\"labels\":{}}]"
-CONTRADICTORY_DESIRED="{\"name\":\"$DESIRED\",\"state\":\"created\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"1\",\"codex-sandbox.workspace-sha256\":\"another-workspace\"}}"
+CONTRADICTORY_DESIRED="{\"name\":\"$DESIRED\",\"state\":\"created\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"$MACHINE_REVISION\",\"codex-sandbox.workspace-sha256\":\"another-workspace\"}}"
 printf '%s\n%s\n' "$INVENTORY" "[$CONTRADICTORY_DESIRED,{\"name\":\"$STALE\",\"state\":\"stopped\",\"labels\":{}}]" > "$CASE_ROOT/inventory-sequence"
 set_preserved_caches
 if SMOLVM_TEST_INVENTORY_SEQUENCE_FILE="$CASE_ROOT/inventory-sequence" \
@@ -352,7 +363,7 @@ assert_preserved_caches
 
 prepare_case replace-failed-desired
 STALE="codex-workspace-111111111111-r1-$WORKSPACE_ID"
-DESIRED_JSON="{\"name\":\"$DESIRED\",\"state\":\"failed\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"1\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}}"
+DESIRED_JSON="{\"name\":\"$DESIRED\",\"state\":\"failed\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"$MACHINE_REVISION\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}}"
 INVENTORY="[$DESIRED_JSON,{\"name\":\"$STALE\",\"state\":\"stopped\",\"labels\":{}}]"
 set_preserved_caches
 if run_replace > "$CASE_ROOT/output" 2>&1; then
@@ -369,7 +380,7 @@ assert_preserved_caches
 
 prepare_case replace-existing-desired
 STALE="codex-workspace-111111111111-r1-$WORKSPACE_ID"
-DESIRED_JSON="{\"name\":\"$DESIRED\",\"state\":\"Stopped\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"1\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}}"
+DESIRED_JSON="{\"name\":\"$DESIRED\",\"state\":\"Stopped\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"$MACHINE_REVISION\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}}"
 INVENTORY="[$DESIRED_JSON,{\"name\":\"$STALE\",\"state\":\"stopped\",\"labels\":{}}]"
 run_replace > "$CASE_ROOT/output" 2>&1
 if grep -Fq "machine create --name $DESIRED" "$CASE_ROOT/smolvm.log"; then
@@ -378,12 +389,12 @@ if grep -Fq "machine create --name $DESIRED" "$CASE_ROOT/smolvm.log"; then
 fi
 grep -Fqx "machine delete --name $STALE --force" "$CASE_ROOT/smolvm.log"
 test "$(cat "$CASE_ROOT/state/base-id")" = "$BASE_ID"
-test "$(cat "$CASE_ROOT/state/machine-revision")" = 1
+test "$(cat "$CASE_ROOT/state/machine-revision")" = "$MACHINE_REVISION"
 
 prepare_case replace-cleanup-failure
 STALE="codex-workspace-111111111111-r1-$WORKSPACE_ID"
 SECOND_STALE="codex-workspace-222222222222-r2-$WORKSPACE_ID"
-DESIRED_JSON="{\"name\":\"$DESIRED\",\"state\":\"created\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"1\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}}"
+DESIRED_JSON="{\"name\":\"$DESIRED\",\"state\":\"created\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"$MACHINE_REVISION\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}}"
 INVENTORY="[$DESIRED_JSON,{\"name\":\"$STALE\",\"state\":\"stopped\",\"labels\":{}},{\"name\":\"$SECOND_STALE\",\"state\":\"stopped\",\"labels\":{}}]"
 set_preserved_caches
 if SMOLVM_TEST_DELETE_FAIL_NAME="$STALE" run_replace > "$CASE_ROOT/output" 2>&1; then
@@ -403,7 +414,7 @@ assert_preserved_caches
 
 prepare_case replace-stop-failure
 STALE="codex-workspace-111111111111-r1-$WORKSPACE_ID"
-DESIRED_JSON="{\"name\":\"$DESIRED\",\"state\":\"created\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"1\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}}"
+DESIRED_JSON="{\"name\":\"$DESIRED\",\"state\":\"created\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"$MACHINE_REVISION\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}}"
 INVENTORY="[$DESIRED_JSON,{\"name\":\"$STALE\",\"state\":\"running\",\"labels\":{}}]"
 set_preserved_caches
 if SMOLVM_TEST_STOP_FAIL_NAME="$STALE" run_replace force > "$CASE_ROOT/output" 2>&1; then
@@ -428,7 +439,7 @@ grep -Fqx "machine delete --name $STALE --force" "$CASE_ROOT/smolvm.log"
 prepare_case replace-override-contradictory
 STALE="codex-workspace-111111111111-r1-$WORKSPACE_ID"
 OVERRIDE_MACHINE='my-explicit-codex-machine'
-INVENTORY="[{\"name\":\"$OVERRIDE_MACHINE\",\"state\":\"created\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"1\",\"codex-sandbox.workspace-sha256\":\"not-this-workspace\"}},{\"name\":\"$STALE\",\"state\":\"stopped\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"111111111111\",\"codex-sandbox.revision\":\"1\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}}]"
+INVENTORY="[{\"name\":\"$OVERRIDE_MACHINE\",\"state\":\"created\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"$MACHINE_REVISION\",\"codex-sandbox.workspace-sha256\":\"not-this-workspace\"}},{\"name\":\"$STALE\",\"state\":\"stopped\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"111111111111\",\"codex-sandbox.revision\":\"1\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}}]"
 set_preserved_caches
 if CODEX_MACHINE="$OVERRIDE_MACHINE" run_replace > "$CASE_ROOT/output" 2>&1; then
   echo 'FAIL: contradictory override labels passed replacement readiness' >&2
@@ -441,7 +452,7 @@ assert_preserved_caches
 prepare_case replace-unrelated
 STALE="codex-workspace-111111111111-r1-$WORKSPACE_ID"
 UNRELATED='another-workspace-machine'
-DESIRED_JSON="{\"name\":\"$DESIRED\",\"state\":\"created\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"1\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}}"
+DESIRED_JSON="{\"name\":\"$DESIRED\",\"state\":\"created\",\"labels\":{\"codex-sandbox.kind\":\"workspace\",\"codex-sandbox.base-id\":\"$BASE_ID\",\"codex-sandbox.revision\":\"$MACHINE_REVISION\",\"codex-sandbox.workspace-sha256\":\"$WORKSPACE_HASH\"}}"
 INVENTORY="[$DESIRED_JSON,{\"name\":\"$STALE\",\"state\":\"stopped\",\"labels\":{}},{\"name\":\"$UNRELATED\",\"state\":\"running\",\"labels\":{}}]"
 run_replace > "$CASE_ROOT/output" 2>&1
 if grep -Eq "machine (stop|delete) --name $UNRELATED( |$)" "$CASE_ROOT/smolvm.log"; then

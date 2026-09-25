@@ -93,9 +93,10 @@ writable overlay. The launcher stops the VM when Codex exits while preserving
 the machine's disk state.
 
 The workspace VM has allowlisted access to OpenAI, GitHub, npm, NuGet, PyPI,
-Docker Hub, and Microsoft Container Registry. Add more `--allow-host` entries
-in `sandbox-common.sh` when a project needs another service; changing an
-existing machine's policy requires recreating or updating that stopped VM.
+Docker Hub, GitHub Container Registry (GHCR), and Microsoft Container Registry.
+Add more `--allow-host` entries in `sandbox-common.sh` when a project needs
+another service; changing an existing machine's policy requires recreating or
+updating that stopped VM.
 
 ## Clean and rebuild the current generation
 

@@ -15,6 +15,15 @@ with open(smolfile_path, "rb") as smolfile:
 assert definition["image"] == "debian:bookworm-slim"
 
 init_commands = definition["dev"]["init"]
+allow_hosts = set(definition["network"]["allow_hosts"])
+assert {
+    "registry-1.docker.io",
+    "auth.docker.io",
+    "production.cloudflare.docker.com",
+    "production.cloudfront.docker.com",
+    "ghcr.io",
+    "pkg-containers.githubusercontent.com",
+} <= allow_hosts
 assert not any(
     "codebase-memory-mcp/main/scripts/setup.sh" in command
     for command in init_commands

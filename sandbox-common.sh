@@ -2,7 +2,7 @@
 # Shared authoritative identity, inventory, creation, and reconciliation logic.
 
 SANDBOX_ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-SANDBOX_MACHINE_REVISION=1
+SANDBOX_MACHINE_REVISION=2
 
 sandbox_hash_stream() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -285,6 +285,9 @@ sandbox_create_workspace_machine() {
     --allow-host registry-1.docker.io \
     --allow-host auth.docker.io \
     --allow-host production.cloudflare.docker.com \
+    --allow-host production.cloudfront.docker.com \
+    --allow-host ghcr.io \
+    --allow-host pkg-containers.githubusercontent.com \
     --allow-host mcr.microsoft.com
 }
 
