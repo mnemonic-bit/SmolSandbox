@@ -48,6 +48,20 @@ package_command = next(
 )
 installed_packages = package_command.split()
 assert "podman-docker" in installed_packages
+assert "podman-compose" in installed_packages
+assert "touch /etc/containers/nodocker" in init_commands
+docker_compat_command = next(
+    command
+    for command in init_commands
+    if "> /usr/local/bin/docker" in command
+)
+assert 'if [ "$1" = compose ]' in docker_compat_command
+assert 'exec /usr/bin/podman-compose "$@"' in docker_compat_command
+assert 'exec /usr/bin/docker "$@"' in docker_compat_command
+assert (
+    "ln -sf /usr/bin/podman-compose /usr/local/bin/docker-compose"
+    in docker_compat_command
+)
 for installer_dependency in (
     "bash",
     "ca-certificates",
@@ -63,6 +77,7 @@ assert any(
     command.startswith("docker run --rm ")
     for command in init_commands
 )
+assert "docker compose version" in init_commands
 
 config_command = next(
     command

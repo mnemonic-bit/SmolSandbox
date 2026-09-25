@@ -83,7 +83,16 @@ init = [
   # DEBIAN_FRONTEND=noninteractive suppresses ALL debconf dialogs (tzdata,
   # keyboard-configuration, console-setup, ...), not just tzdata.
   "DEBIAN_FRONTEND=noninteractive apt-get update",
-  "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bash ca-certificates coreutils curl git grep gzip mawk tar openssh-client build-essential pkg-config ripgrep unzip jq sqlite3 httpie pipx python3 python3-pip python3-venv tzdata libgssapi-krb5-2 libicu72 libssl3 zlib1g podman podman-docker buildah",
+  "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bash ca-certificates coreutils curl git grep gzip mawk tar openssh-client build-essential pkg-config ripgrep unzip jq sqlite3 httpie pipx python3 python3-pip python3-venv tzdata libgssapi-krb5-2 libicu72 libssl3 zlib1g podman podman-docker podman-compose buildah",
+
+  # Keep podman-docker's compatibility command indistinguishable from Docker
+  # for tools that parse its output; this suppresses Podman's emulation banner.
+  "touch /etc/containers/nodocker",
+
+  # Debian 12 ships Podman 4.3, which predates `podman compose`. Dispatch the
+  # Docker Compose spellings to podman-compose while preserving podman-docker
+  # for every other Docker CLI command.
+  "printf '#!/bin/sh\\nif [ \"$1\" = compose ]; then\\n  shift\\n  exec /usr/bin/podman-compose \"$@\"\\nfi\\nexec /usr/bin/docker \"$@\"\\n' > /usr/local/bin/docker && chmod 0755 /usr/local/bin/docker && ln -sf /usr/bin/podman-compose /usr/local/bin/docker-compose",
 
   # Belt and suspenders: pin the timezone files explicitly and re-apply tzdata
   # config non-interactively (correct even if tzdata was already installed in
@@ -188,6 +197,7 @@ init = [
 
   # Smoke test: pull and run a tiny container through podman-docker's Docker
   # command to prove both nested Podman and Docker CLI compatibility work.
+  "docker compose version",
   "docker run --rm docker.io/library/alpine echo nested-podman-via-docker-ok",
 
   # Derived machines mount persistent state over /root/.codex. Preserve the
