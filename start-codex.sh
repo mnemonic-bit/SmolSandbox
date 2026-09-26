@@ -111,7 +111,7 @@ CODEX_EXEC=(smolvm machine exec --name "$CODEX_MACHINE" -it)
 if [ -n "${OPENAI_API_KEY:-}" ]; then
   CODEX_EXEC+=(--secret-env OPENAI_API_KEY=OPENAI_API_KEY)
 fi
-CODEX_EXEC+=(-- codex "${CODEX_ARGUMENTS[@]}")
+CODEX_EXEC+=(-- codex --no-daemon "${CODEX_ARGUMENTS[@]}")
 
 echo "Starting Codex in $WORKSPACE_DIR (machine: $CODEX_MACHINE)..."
 "${CODEX_EXEC[@]}"
