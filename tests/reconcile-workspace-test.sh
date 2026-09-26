@@ -6,7 +6,7 @@ TEST_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TEST_ROOT"' EXIT
 
 SMOLVM_TEST_VERSION='smolvm test 1.0.0'
-MACHINE_REVISION=2
+MACHINE_REVISION=3
 BASE_ID="$({ printf '%s\n' "$SMOLVM_TEST_VERSION"; cat "$REPO_ROOT/devtools-base.smolfile"; } | sha256sum | awk '{print substr($1, 1, 12)}')"
 
 prepare_case() {
@@ -144,6 +144,7 @@ do
   grep -Fq -- "--label $label" "$CASE_ROOT/smolvm.log"
 done
 for registry_host in \
+  deb.debian.org \
   registry-1.docker.io \
   auth.docker.io \
   production.cloudflare.docker.com \

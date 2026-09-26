@@ -17,6 +17,7 @@ assert definition["image"] == "debian:bookworm-slim"
 init_commands = definition["dev"]["init"]
 allow_hosts = set(definition["network"]["allow_hosts"])
 assert {
+    "deb.debian.org",
     "registry-1.docker.io",
     "auth.docker.io",
     "production.cloudflare.docker.com",

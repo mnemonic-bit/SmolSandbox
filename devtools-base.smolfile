@@ -132,7 +132,7 @@ init = [
 
   # OpenAI Codex CLI (installed BEFORE codebase-memory-mcp so its `install`
   # subcommand can detect the Codex CLI and register itself with it)
-  "npm install -g @openai/codex@0.155.1",
+  "npm install -g @openai/codex@0.157.1",
 
   # Sol with high reasoning is the machine default; the footer exposes token,
   # context, and rate-limit headroom. Full permissions are appropriate inside
