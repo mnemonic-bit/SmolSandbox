@@ -67,6 +67,73 @@ test -e "$CASE_ROOT/artifacts/codex-devtools-$OLD_BASE.tmp"
 test -e "$CASE_ROOT/artifacts/codex-devtools-fedcba987654.smolmachine/subdirectory/file"
 grep -Fq 'Removed 1 machine(s), 1 generation(s), and 2 artifact file(s).' "$CASE_ROOT/output"
 
+prepare_case aborted-base-init
+rm "$CASE_ROOT/artifacts/codex-devtools-$BASE_ID.smolmachine"
+INCOMPLETE_BASE_NAME="codex-builder-$BASE_ID"
+printf '[{"name":"%s","state":"stopped","labels":{}},{"name":"%s","state":"stopped","labels":{}}]\n' \
+  "$INCOMPLETE_BASE_NAME" "$OLD_NAME" > "$CASE_ROOT/inventory.json"
+INVENTORY_FILE="$CASE_ROOT/inventory.json"
+printf 'old\n' > "$CASE_ROOT/artifacts/codex-devtools-$OLD_BASE.smolmachine"
+if ! run_purge > "$CASE_ROOT/output" 2>&1; then
+  cat "$CASE_ROOT/output" >&2
+  echo 'FAIL: purge rejected a stopped base machine left by an aborted init' >&2
+  exit 1
+fi
+grep -Fqx "machine delete --name $INCOMPLETE_BASE_NAME --force" "$CASE_ROOT/smolvm.log"
+if grep -Fq "machine delete --name $OLD_NAME" "$CASE_ROOT/smolvm.log"; then
+  echo 'FAIL: aborted-init recovery deleted a superseded machine' >&2
+  exit 1
+fi
+test -e "$CASE_ROOT/artifacts/codex-devtools-$OLD_BASE.smolmachine"
+grep -Fq 'Recovery is limited to the stopped current-generation builder' "$CASE_ROOT/output"
+grep -Fq 'Removed 1 machine(s), 0 generation(s), and 0 artifact file(s).' "$CASE_ROOT/output"
+
+prepare_case missing-artifact-without-builder
+rm "$CASE_ROOT/artifacts/codex-devtools-$BASE_ID.smolmachine"
+printf '[{"name":"%s","state":"stopped","labels":{}}]\n' \
+  "$OLD_NAME" > "$CASE_ROOT/inventory.json"
+INVENTORY_FILE="$CASE_ROOT/inventory.json"
+printf 'old\n' > "$CASE_ROOT/artifacts/codex-devtools-$OLD_BASE.smolmachine"
+if run_purge > "$CASE_ROOT/output" 2>&1; then
+  echo 'FAIL: purge accepted a missing current artifact without a recoverable builder' >&2
+  exit 1
+fi
+test -e "$CASE_ROOT/artifacts/codex-devtools-$OLD_BASE.smolmachine"
+if grep -Fq 'machine delete' "$CASE_ROOT/smolvm.log"; then
+  echo 'FAIL: missing-artifact validation deleted a machine' >&2
+  exit 1
+fi
+grep -Fq 'current artifact is missing, empty, or not a regular file' "$CASE_ROOT/output"
+
+prepare_case missing-artifact-running-builder
+rm "$CASE_ROOT/artifacts/codex-devtools-$BASE_ID.smolmachine"
+printf '[{"name":"%s","state":"running","labels":{}}]\n' \
+  "$INCOMPLETE_BASE_NAME" > "$CASE_ROOT/inventory.json"
+INVENTORY_FILE="$CASE_ROOT/inventory.json"
+if run_purge > "$CASE_ROOT/output" 2>&1; then
+  echo 'FAIL: purge accepted a missing artifact with a running builder' >&2
+  exit 1
+fi
+if grep -Fq 'machine delete' "$CASE_ROOT/smolvm.log"; then
+  echo 'FAIL: missing-artifact validation deleted a running builder' >&2
+  exit 1
+fi
+
+prepare_case empty-current-artifact
+: > "$CASE_ROOT/artifacts/codex-devtools-$BASE_ID.smolmachine"
+printf '[{"name":"%s","state":"stopped","labels":{}}]\n' \
+  "$INCOMPLETE_BASE_NAME" > "$CASE_ROOT/inventory.json"
+INVENTORY_FILE="$CASE_ROOT/inventory.json"
+if run_purge > "$CASE_ROOT/output" 2>&1; then
+  echo 'FAIL: purge treated an empty current artifact as an aborted init' >&2
+  exit 1
+fi
+if grep -Fq 'machine delete' "$CASE_ROOT/smolvm.log"; then
+  echo 'FAIL: empty-artifact validation deleted a builder' >&2
+  exit 1
+fi
+grep -Fq 'current artifact is empty or not a regular file' "$CASE_ROOT/output"
+
 prepare_case conservative-refusal
 DEFAULT_JSON="$(workspace_json "$DEFAULT_NAME" stopped "$BASE_ID" "$REVISION" "$DEFAULT_HASH" default)"
 CUSTOM_JSON="$(workspace_json "$CUSTOM_NAME" stopped "$BASE_ID" "$REVISION" "$CUSTOM_HASH" custom)"

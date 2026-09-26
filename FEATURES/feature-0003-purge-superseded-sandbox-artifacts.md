@@ -216,7 +216,7 @@ Before any purge mode mutates state, it shall:
 2. Recalculate the base ID from the current authoritative inputs.
 3. Confirm that the recalculated ID equals the ID used to construct the plan.
 4. Confirm that the exact current `.smolmachine` path is a non-empty regular
-   file.
+   file, except for the narrow aborted-init recovery described below.
 5. Read and strictly validate `smolvm machine ls --json`.
 6. Enumerate and strictly classify direct managed artifact children.
 7. Classify every potentially managed machine as supported, legacy,
@@ -259,7 +259,11 @@ generations are retained and reported.
 The conservative policy always preserves current-base default workspace
 machines, the current login machine, and the current artifact. Temporary
 stopped builder cleanup may continue under its existing positive-artifact
-gate.
+gate. If the current artifact is absent and the exact current-generation
+builder is stopped or created, purge enters aborted-init recovery: it selects
+only that builder and preserves every other machine and artifact. A running
+builder, an empty or non-regular current artifact, or a missing artifact
+without a recoverable builder still blocks the operation.
 
 ## `--force` policy: preserve default configurations
 
@@ -350,8 +354,9 @@ An empty selected set is a successful no-op.
   purge.
 - Failure to read or parse the complete machine inventory shall prevent all
   purge deletions.
-- A missing, empty, non-regular, or mismatched current artifact shall prevent
-  all purge deletions.
+- An empty, non-regular, or mismatched current artifact shall prevent all purge
+  deletions. A missing current artifact permits only the stopped-builder
+  aborted-init recovery described above.
 - Ambiguous managed ownership or configuration metadata shall prevent all
   purge deletions in every mode.
 - A conservative current-base variant warning shall prevent all deletion.
@@ -385,7 +390,8 @@ lock acquisition failure causes no mutation.
 - No mutation occurs after a conservative alternate-configuration warning.
 - No running machine is stopped or deleted in any mode.
 - Every running managed machine protects its artifact generation.
-- The current artifact generation is never deleted.
+- The current artifact generation is never deleted; if it is absent, recovery
+  deletes only the stopped current-generation builder.
 - `--force` never deletes a current-base default-configuration workspace
   machine.
 - A current-base machine with ambiguous configuration metadata is never
@@ -483,6 +489,9 @@ Removing all other stopped managed machines.
     lock order and cannot publish, create, or delete from a stale purge plan.
 20. Existing reconciliation, replacement, startup, allow-host, and cleanup
     tests continue to pass.
+21. Given a missing current artifact and an exact stopped current-generation
+    builder, purge removes only that builder and preserves superseded state;
+    without such a builder, or while it is running, purge removes nothing.
 
 ## Implementation outline
 

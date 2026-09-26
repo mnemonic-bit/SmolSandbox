@@ -327,16 +327,6 @@ def classify_purge_inventory(
     return sorted(managed, key=lambda item: item["name"])
 
 
-def regular_file_size(path: Path) -> int | None:
-    try:
-        metadata = path.lstat()
-    except OSError:
-        return None
-    if not stat.S_ISREG(metadata.st_mode):
-        return None
-    return metadata.st_size
-
-
 def artifact_inventory(artifacts_dir: Path) -> list[dict[str, str]]:
     result: list[dict[str, str]] = []
     try:
@@ -359,11 +349,30 @@ def artifact_inventory(artifacts_dir: Path) -> list[dict[str, str]]:
 def build_purge_plan(args: argparse.Namespace, inventory: list[dict[str, object]]) -> dict[str, object]:
     artifacts_dir = args.artifacts_dir.resolve()
     current_artifact = artifacts_dir / f"codex-devtools-{args.current_base}.smolmachine"
-    size = regular_file_size(current_artifact)
-    if size is None or size == 0:
-        fail(f"current artifact is missing, empty, or not a regular file: {current_artifact}")
+    try:
+        current_metadata = current_artifact.lstat()
+    except FileNotFoundError:
+        current_artifact_available = False
+    except OSError as error:
+        fail(f"could not inspect current artifact {current_artifact}: {error}")
+    else:
+        if not stat.S_ISREG(current_metadata.st_mode) or current_metadata.st_size == 0:
+            fail(f"current artifact is empty or not a regular file: {current_artifact}")
+        current_artifact_available = True
 
     machines = classify_purge_inventory(inventory, args.current_base)
+    current_builders = [
+        machine
+        for machine in machines
+        if machine["kind"] == "builder" and machine["base_id"] == args.current_base
+    ]
+    recovery_builders = [
+        machine for machine in current_builders if machine["state"] != "running"
+    ]
+    recovery_only = not current_artifact_available
+    if recovery_only and not recovery_builders:
+        fail(f"current artifact is missing, empty, or not a regular file: {current_artifact}")
+
     artifacts = artifact_inventory(artifacts_dir)
     running = [machine for machine in machines if machine["state"] == "running"]
     protected = sorted({args.current_base, *(machine["base_id"] for machine in running)})
@@ -376,24 +385,27 @@ def build_purge_plan(args: argparse.Namespace, inventory: list[dict[str, object]
         machine["configuration"] == "custom" for machine in current_workspaces
     )
 
-    selected_machines: list[dict[str, str]] = []
-    for machine in machines:
-        if machine["state"] == "running":
-            continue
-        if args.policy == "conservative":
-            selected = machine["base_id"] != args.current_base
-        elif args.policy == "force":
-            selected = machine["base_id"] != args.current_base or (
-                machine["kind"] == "workspace"
-                and machine["base_id"] == args.current_base
-                and machine["configuration"] == "custom"
-            )
-        else:
-            selected = True
-        if selected:
-            selected_machines.append(machine)
+    if recovery_only:
+        selected_machines = recovery_builders
+    else:
+        selected_machines: list[dict[str, str]] = []
+        for machine in machines:
+            if machine["state"] == "running":
+                continue
+            if args.policy == "conservative":
+                selected = machine["base_id"] != args.current_base
+            elif args.policy == "force":
+                selected = machine["base_id"] != args.current_base or (
+                    machine["kind"] == "workspace"
+                    and machine["base_id"] == args.current_base
+                    and machine["configuration"] == "custom"
+                )
+            else:
+                selected = True
+            if selected:
+                selected_machines.append(machine)
 
-    selected_artifacts = [
+    selected_artifacts = [] if recovery_only else [
         artifact
         for artifact in artifacts
         if artifact["base_id"] != args.current_base
@@ -414,6 +426,8 @@ def build_purge_plan(args: argparse.Namespace, inventory: list[dict[str, object]
         retained_machines.append(retained)
     plan: dict[str, object] = {
         "current_base": args.current_base,
+        "current_artifact_available": current_artifact_available,
+        "recovery_only": recovery_only,
         "policy": args.policy,
         "has_alternate": has_alternate,
         "managed_machines": machines,
@@ -444,6 +458,12 @@ def load_plan(path: Path) -> dict[str, object]:
 def render_plan(args: argparse.Namespace) -> None:
     plan = load_plan(args.plan)
     rows = plan.get(args.section.replace("-", "_"), [])
+    if args.section == "status":
+        emit(
+            "yes" if plan.get("recovery_only") is True else "no",
+            "yes" if plan.get("current_artifact_available") is True else "no",
+        )
+        return
     if args.section == "summary":
         emit(
             len(plan.get("selected_machines", [])),
@@ -577,6 +597,7 @@ def main() -> int:
             "current-workspaces",
             "running-machines",
             "retained-machines",
+            "status",
             "summary",
         ),
     )

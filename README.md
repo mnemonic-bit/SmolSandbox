@@ -167,8 +167,12 @@ machine in scope:
 All policies preserve running machines, any artifact generation needed by a
 running machine, and both forms of the current artifact. Purge validates the
 complete machine inventory and exact managed artifact names before deletion;
-ambiguous metadata, an inventory change, or a missing current artifact stops
-the operation. Unrelated machines and files are never selected.
+ambiguous metadata or an inventory change stops the operation. If base
+initialization was aborted before the current artifact was published, purge
+may remove the exact stopped `codex-builder-<base-id>` machine so the next
+build can start cleanly; that recovery run preserves every other machine and
+artifact. A missing artifact without that stopped builder still stops the
+operation. Unrelated machines and files are never selected.
 
 ## Inspect and repair workspace machines
 

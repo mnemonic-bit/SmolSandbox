@@ -99,6 +99,10 @@ then
   exit 3
 fi
 
+IFS=$'\x1f' read -r RECOVERY_ONLY CURRENT_ARTIFACT_AVAILABLE < <(
+  python3 "$SANDBOX_ROOT/sandbox-inventory.py" render-plan "$PLAN_FILE" status
+)
+
 while IFS=$'\x1f' read -r name state kind generation configuration; do
   [ -n "$name" ] || continue
   echo "Preserving running machine and artifact generation $generation:"
@@ -115,7 +119,12 @@ done < <(
   python3 "$SANDBOX_ROOT/sandbox-inventory.py" render-plan \
     "$PLAN_FILE" retained-machines
 )
-echo "Preserving current artifact generation $BASE_ID."
+if [ "$RECOVERY_ONLY" = yes ]; then
+  echo "Current artifact $ARTIFACT_FILE is missing."
+  echo "Recovery is limited to the stopped current-generation builder; other machines and artifacts are preserved."
+else
+  echo "Preserving current artifact generation $BASE_ID."
+fi
 
 while IFS=$'\x1f' read -r name state kind generation configuration; do
   [ -n "$name" ] || continue
@@ -171,8 +180,13 @@ then
   exit 1
 fi
 RECALCULATED_BASE_ID="$(sandbox_current_base_id)"
-if [ "$RECALCULATED_BASE_ID" != "$PLANNED_BASE_ID" ] || \
-   [ ! -f "$ARTIFACT_FILE" ] || [ -L "$ARTIFACT_FILE" ] || [ ! -s "$ARTIFACT_FILE" ]
+if [ "$RECALCULATED_BASE_ID" != "$PLANNED_BASE_ID" ]
+then
+  echo "ERROR: current base identity changed; superseded artifacts were preserved." >&2
+  exit 1
+fi
+if [ "$CURRENT_ARTIFACT_AVAILABLE" = yes ] && \
+   { [ ! -f "$ARTIFACT_FILE" ] || [ -L "$ARTIFACT_FILE" ] || [ ! -s "$ARTIFACT_FILE" ]; }
 then
   echo "ERROR: current artifact identity changed; superseded artifacts were preserved." >&2
   exit 1
@@ -207,4 +221,8 @@ IFS=$'\x1f' read -r _planned_machines REMOVED_GENERATIONS _planned_artifacts RET
   python3 "$SANDBOX_ROOT/sandbox-inventory.py" render-plan "$PLAN_FILE" summary
 )
 echo "Removed $REMOVED_MACHINES machine(s), $REMOVED_GENERATIONS generation(s), and $REMOVED_ARTIFACTS artifact file(s)."
-echo "Retained $RETAINED_RUNNING running managed machine(s) and the current generation $BASE_ID."
+if [ "$RECOVERY_ONLY" = yes ]; then
+  echo "The current artifact remains absent; rebuild generation $BASE_ID before purging superseded state."
+else
+  echo "Retained $RETAINED_RUNNING running managed machine(s) and the current generation $BASE_ID."
+fi
