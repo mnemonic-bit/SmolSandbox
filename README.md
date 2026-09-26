@@ -23,6 +23,22 @@ smolvm --version
 
 On Linux, SmolVM also requires KVM access at `/dev/kvm`.
 
+## Command-line help
+
+Every supported shell entry point accepts `--help` and exits without performing
+lifecycle work. For example, inspect the sandbox launcher's options with:
+
+```bash
+./start-codex.sh --help
+```
+
+The `--` delimiter ends sandbox option parsing. To request help from the guest
+Codex command instead, pass `--help` after that delimiter:
+
+```bash
+./start-codex.sh -- --help
+```
+
 ## Build and create the machines
 
 From this repository, run:

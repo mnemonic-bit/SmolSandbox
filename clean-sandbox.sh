@@ -2,6 +2,28 @@
 # Delete VMs and artifacts belonging to the authoritative current generation.
 set -euo pipefail
 
+show_help() {
+  printf '%s\n' \
+    "Usage: ${0##*/} [--help]" \
+    "" \
+    "Description:" \
+    "  Remove machines and cached artifacts belonging to the authoritative current" \
+    "  generation while preserving shared Codex state." \
+    "" \
+    "Arguments:" \
+    "  None." \
+    "" \
+    "Options:" \
+    "  --help  Display this help and exit."
+}
+
+for argument in "$@"; do
+  if [ "$argument" = --help ]; then
+    show_help
+    exit 0
+  fi
+done
+
 if [ "$#" -ne 0 ]; then
   echo "Usage: $0" >&2
   exit 2

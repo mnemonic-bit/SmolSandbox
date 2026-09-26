@@ -2,6 +2,28 @@
 # Build the desired base and create/reuse the login and workspace machines.
 set -euo pipefail
 
+show_help() {
+  printf '%s\n' \
+    "Usage: ${0##*/} [--help] [WORKSPACE]" \
+    "" \
+    "Description:" \
+    "  Build or reuse the sandbox base, then prepare the login and workspace" \
+    "  machines." \
+    "" \
+    "Arguments:" \
+    "  WORKSPACE  Workspace whose machine is prepared (default: current directory)." \
+    "" \
+    "Options:" \
+    "  --help     Display this help and exit."
+}
+
+for argument in "$@"; do
+  if [ "$argument" = --help ]; then
+    show_help
+    exit 0
+  fi
+done
+
 if [ "$#" -gt 1 ]; then
   echo "Usage: $0 [workspace]" >&2
   exit 2

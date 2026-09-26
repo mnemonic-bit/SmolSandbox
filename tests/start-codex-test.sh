@@ -69,4 +69,20 @@ if ! grep -Fq 'machine stop --name test-machine' "$TEST_ROOT/smolvm.log"; then
   exit 1
 fi
 
-echo 'PASS: Codex-home seeding tolerates failures and repeated starts avoid permission errors'
+: > "$TEST_ROOT/smolvm.log"
+PATH="$TEST_ROOT/bin:$PATH" \
+SMOLVM_TEST_LOG="$TEST_ROOT/smolvm.log" \
+SMOLVM_TEST_VERSION="$SMOLVM_TEST_VERSION" \
+SMOLVM_TEST_INVENTORY='[{"name":"test-machine","state":"stopped","labels":{}}]' \
+STATE_ROOT="$TEST_ROOT/state" \
+ARTIFACTS_DIR="$TEST_ROOT/artifacts" \
+BASE_SMOLFILE="$REPO_ROOT/devtools-base.smolfile" \
+CODEX_MACHINE="test-machine" \
+  "$REPO_ROOT/codex-sandbox.sh" "$TEST_ROOT/workspace" -- --help >/dev/null
+
+if ! grep -Fq 'machine exec --name test-machine -it -- codex --help' "$TEST_ROOT/smolvm.log"; then
+  echo 'FAIL: compatibility launcher consumed Codex help after the delimiter' >&2
+  exit 1
+fi
+
+echo 'PASS: Codex-home seeding, repeated starts, and compatibility forwarding work'

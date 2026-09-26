@@ -2,6 +2,27 @@
 # Authenticate Codex in a tightly allowlisted, persistent login machine.
 set -euo pipefail
 
+show_help() {
+  printf '%s\n' \
+    "Usage: ${0##*/} [--help]" \
+    "" \
+    "Description:" \
+    "  Start the restricted login machine and run Codex device authentication." \
+    "" \
+    "Arguments:" \
+    "  None." \
+    "" \
+    "Options:" \
+    "  --help  Display this help and exit."
+}
+
+for argument in "$@"; do
+  if [ "$argument" = --help ]; then
+    show_help
+    exit 0
+  fi
+done
+
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=sandbox-common.sh
 source "$SCRIPT_DIR/sandbox-common.sh"

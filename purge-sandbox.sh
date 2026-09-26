@@ -2,6 +2,35 @@
 # Remove superseded managed machines and artifacts using a validated purge plan.
 set -euo pipefail
 
+show_help() {
+  printf '%s\n' \
+    "Usage: ${0##*/} [--help] [--force | --force-all]" \
+    "" \
+    "Description:" \
+    "  Remove eligible stopped managed machines and unprotected artifacts. Running" \
+    "  machines and protected artifacts are preserved under every policy." \
+    "" \
+    "Arguments:" \
+    "  None." \
+    "" \
+    "Options:" \
+    "  --force      Remove eligible stopped custom and legacy machines while" \
+    "               preserving the current base's stopped default configurations." \
+    "  --force-all  Remove every eligible stopped managed machine, including stopped" \
+    "               default configurations." \
+    "  --help       Display this help and exit." \
+    "" \
+    "  With no force option, the conservative purge policy is used. --force and" \
+    "  --force-all are mutually exclusive."
+}
+
+for argument in "$@"; do
+  if [ "$argument" = --help ]; then
+    show_help
+    exit 0
+  fi
+done
+
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=sandbox-common.sh
 source "$SCRIPT_DIR/sandbox-common.sh"
