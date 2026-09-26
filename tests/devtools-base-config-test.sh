@@ -17,13 +17,21 @@ assert definition["image"] == "debian:bookworm-slim"
 init_commands = definition["dev"]["init"]
 allow_hosts = set(definition["network"]["allow_hosts"])
 assert {
+    "aka.ms",
+    "builds.dotnet.microsoft.com",
+    "cdn.playwright.dev",
+    "ci.dot.net",
     "deb.debian.org",
+    "deb.nodesource.com",
+    "dot.net",
+    "playwright.download.prss.microsoft.com",
     "registry-1.docker.io",
     "auth.docker.io",
     "production.cloudflare.docker.com",
     "production.cloudfront.docker.com",
     "ghcr.io",
     "pkg-containers.githubusercontent.com",
+    "storage.googleapis.com",
 } <= allow_hosts
 assert not any(
     "codebase-memory-mcp/main/scripts/setup.sh" in command
@@ -106,5 +114,22 @@ assert config["tui"]["status_line"] == [
 assert config["tui"]["status_line_use_colors"] is True
 assert config["projects"]["/workspace/myrepo"]["trust_level"] == "trusted"
 PY
+
+# shellcheck source=../sandbox-common.sh
+source "$REPO_ROOT/sandbox-common.sh"
+if ! diff -u \
+  <(python3 - "$REPO_ROOT/devtools-base.smolfile" <<'PY'
+import sys
+import tomllib
+
+with open(sys.argv[1], "rb") as smolfile:
+    print("\n".join(sorted(set(tomllib.load(smolfile)["network"]["allow_hosts"]))))
+PY
+  ) \
+  <(printf '%s\n' "${SANDBOX_DEFAULT_ALLOW_HOSTS[@]}" | LC_ALL=C sort -u)
+then
+  echo 'FAIL: Smolfile and workspace-machine default allowlists differ' >&2
+  exit 1
+fi
 
 echo 'PASS: base image and Codex seed configuration match the requested defaults'

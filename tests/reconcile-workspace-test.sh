@@ -2,6 +2,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+# shellcheck source=../sandbox-common.sh
+source "$REPO_ROOT/sandbox-common.sh"
 TEST_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TEST_ROOT"' EXIT
 
@@ -14,7 +16,13 @@ prepare_case() {
   mkdir -p "$CASE_ROOT/bin" "$CASE_ROOT/state" "$CASE_ROOT/artifacts" "$CASE_ROOT/workspace"
   cp "$REPO_ROOT/tests/fixtures/smolvm" "$CASE_ROOT/bin/smolvm"
   chmod +x "$CASE_ROOT/bin/smolvm"
-  WORKSPACE_HASH="$(printf '%s' "$CASE_ROOT/workspace" | sha256sum | awk '{print $1}')"
+  WORKSPACE_HASH="$(sandbox_hash_set \
+    "--from=$CASE_ROOT/artifacts/codex-devtools-$BASE_ID.smolmachine" \
+    "--mem=$SANDBOX_WORKSPACE_MEMORY" \
+    "--cpus=$SANDBOX_WORKSPACE_CPUS" \
+    "--volume=$CASE_ROOT/state/codex-home:/root/.codex" \
+    "--volume=$CASE_ROOT/workspace:/workspace/myrepo" \
+    "${SANDBOX_DEFAULT_ALLOW_HOSTS[@]/#/--allow-host=}")"
   WORKSPACE_ID="$(printf '%s' "$WORKSPACE_HASH" | cut -c1-12)"
   DESIRED="codex-workspace-$BASE_ID-r$MACHINE_REVISION-$WORKSPACE_ID"
   printf 'artifact\n' > "$CASE_ROOT/artifacts/codex-devtools-$BASE_ID.smolmachine"
@@ -144,13 +152,21 @@ do
   grep -Fq -- "--label $label" "$CASE_ROOT/smolvm.log"
 done
 for registry_host in \
+  aka.ms \
+  builds.dotnet.microsoft.com \
+  cdn.playwright.dev \
+  ci.dot.net \
   deb.debian.org \
+  deb.nodesource.com \
+  dot.net \
+  playwright.download.prss.microsoft.com \
   registry-1.docker.io \
   auth.docker.io \
   production.cloudflare.docker.com \
   production.cloudfront.docker.com \
   ghcr.io \
-  pkg-containers.githubusercontent.com
+  pkg-containers.githubusercontent.com \
+  storage.googleapis.com
 do
   grep -Fq -- "--allow-host $registry_host" "$CASE_ROOT/smolvm.log"
 done

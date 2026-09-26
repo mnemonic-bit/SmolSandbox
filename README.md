@@ -87,16 +87,32 @@ Or specify a workspace and optional Codex arguments:
 /path/to/this/repo/start-codex.sh /path/to/project -- --help
 ```
 
-Each absolute workspace path gets a deterministic named machine created from
-the same cached artifact. Reopening that workspace reuses its machine and
-writable overlay. The launcher stops the VM when Codex exits while preserving
-the machine's disk state.
+Add hosts required by a project with repeatable `--allow-host` options. They
+may appear before or after the workspace (but before the `--` that starts Codex
+arguments):
+
+```bash
+/path/to/this/repo/start-codex.sh \
+  --allow-host packages.example.com \
+  /path/to/project \
+  --allow-host downloads.example.com
+```
+
+These hosts extend, rather than replace, the default allowlist. The effective
+host set is sorted and deduplicated, so option order and repeated hosts do not
+change the selected machine or add duplicate `--allow-host` arguments.
+
+Each effective workspace configuration gets a deterministic named machine
+created from the same cached artifact. Its workspace hash covers the canonical
+set of immutable `smolvm machine create` options: the base artifact, CPU and
+memory allocation, host-to-guest mounts (including the canonical workspace
+path), and the complete default-plus-user allowlist. Changing any of those
+baked options selects a different machine; reopening the same configuration
+reuses its machine and writable overlay. The launcher stops the VM when Codex
+exits while preserving the machine's disk state.
 
 The workspace VM has allowlisted access to OpenAI, GitHub, npm, NuGet, PyPI,
 Docker Hub, GitHub Container Registry (GHCR), and Microsoft Container Registry.
-Add more `--allow-host` entries in `sandbox-common.sh` when a project needs
-another service; changing an existing machine's policy requires recreating or
-updating that stopped VM.
 
 ## Clean and rebuild the current generation
 
@@ -119,9 +135,10 @@ generation with:
 ## Inspect and repair workspace machines
 
 The launcher reconstructs the desired base, revision, and workspace identity
-from the current Smolfile, SmolVM version, and canonical workspace path. The
-files under `.smolvm/` are compatibility caches; deleting or corrupting them
-does not prevent an existing matching workspace machine from being recovered.
+from the current Smolfile, SmolVM version, and canonical machine-creation
+options. The files under `.smolvm/` are compatibility caches; deleting or
+corrupting them does not prevent an existing matching workspace machine from
+being recovered.
 
 If an older machine exists for a workspace but no machine matches the current
 sandbox definition, normal startup stops without creating or deleting
@@ -130,6 +147,9 @@ anything. Inspect the candidates with:
 ```bash
 ./repair-sandbox.sh --check /path/to/project
 ```
+
+For a configuration with additional hosts, repeat the same `--allow-host`
+options on inspection or replacement commands.
 
 Replace stopped stale machines explicitly with:
 

@@ -3,6 +3,41 @@
 
 SANDBOX_ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 SANDBOX_MACHINE_REVISION=3
+SANDBOX_WORKSPACE_MEMORY=12288
+SANDBOX_WORKSPACE_CPUS=4
+SANDBOX_REQUESTED_ALLOW_HOSTS=()
+SANDBOX_DEFAULT_ALLOW_HOSTS=(
+  api.openai.com
+  auth.openai.com
+  chatgpt.com
+  github.com
+  api.github.com
+  raw.githubusercontent.com
+  codeload.github.com
+  objects.githubusercontent.com
+  release-assets.githubusercontent.com
+  registry.npmjs.org
+  api.nuget.org
+  globalcdn.nuget.org
+  pypi.org
+  files.pythonhosted.org
+  deb.debian.org
+  dot.net
+  aka.ms
+  builds.dotnet.microsoft.com
+  ci.dot.net
+  cdn.playwright.dev
+  storage.googleapis.com
+  playwright.download.prss.microsoft.com
+  deb.nodesource.com
+  registry-1.docker.io
+  auth.docker.io
+  production.cloudflare.docker.com
+  production.cloudfront.docker.com
+  ghcr.io
+  pkg-containers.githubusercontent.com
+  mcr.microsoft.com
+)
 
 sandbox_hash_stream() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -24,8 +59,62 @@ sandbox_require_tools() {
   fi
 }
 
+sandbox_hash_set() {
+  python3 - "$@" <<'PY'
+import hashlib
+import json
+import sys
+
+values = sorted(set(sys.argv[1:]))
+payload = json.dumps(values, ensure_ascii=False, separators=(",", ":")).encode()
+print(hashlib.sha256(payload).hexdigest())
+PY
+}
+
+sandbox_prepare_workspace_options() {
+  local host
+  local -a requested_hosts=("$@") machine_options=()
+
+  for host in "${requested_hosts[@]}"; do
+    if [ -z "$host" ] || [[ "$host" == -* ]] || \
+       [[ "$host" == *$'\n'* ]] || [[ "$host" == *$'\r'* ]]; then
+      echo "ERROR: --allow-host requires a non-empty host without line breaks or a leading dash." >&2
+      return 2
+    fi
+  done
+
+  SANDBOX_ADDITIONAL_ALLOW_HOSTS=()
+  while IFS= read -r host; do
+    [ -n "$host" ] || continue
+    SANDBOX_ADDITIONAL_ALLOW_HOSTS+=("$host")
+  done < <(printf '%s\n' "${requested_hosts[@]}" | LC_ALL=C sort -u)
+
+  SANDBOX_ALLOW_HOSTS=()
+  while IFS= read -r host; do
+    [ -n "$host" ] || continue
+    SANDBOX_ALLOW_HOSTS+=("$host")
+  done < <(
+    printf '%s\n' "${SANDBOX_DEFAULT_ALLOW_HOSTS[@]}" \
+      "${SANDBOX_ADDITIONAL_ALLOW_HOSTS[@]}" | LC_ALL=C sort -u
+  )
+
+  machine_options=(
+    "--from=$ARTIFACT_FILE"
+    "--mem=$SANDBOX_WORKSPACE_MEMORY"
+    "--cpus=$SANDBOX_WORKSPACE_CPUS"
+    "--volume=$CODEX_HOME_DIR:/root/.codex"
+    "--volume=$WORKSPACE_DIR:/workspace/myrepo"
+  )
+  for host in "${SANDBOX_ALLOW_HOSTS[@]}"; do
+    machine_options+=("--allow-host=$host")
+  done
+  WORKSPACE_SHA256="$(sandbox_hash_set "${machine_options[@]}")" || return 1
+  WORKSPACE_ID="${WORKSPACE_SHA256:0:12}"
+}
+
 sandbox_prepare_identity() {
   local workspace_input="$1"
+  shift
 
   BASE_SMOLFILE="${BASE_SMOLFILE:-$SANDBOX_ROOT/devtools-base.smolfile}"
   ARTIFACTS_DIR="${ARTIFACTS_DIR:-$SANDBOX_ROOT/artifacts}"
@@ -46,15 +135,14 @@ sandbox_prepare_identity() {
   SMOLVM_VERSION="$(smolvm --version)" || return 1
   BASE_ID="$({ printf '%s\n' "$SMOLVM_VERSION"; command cat "$BASE_SMOLFILE"; } | sandbox_hash_stream | cut -c1-12)"
   MACHINE_REVISION="$SANDBOX_MACHINE_REVISION"
-  WORKSPACE_SHA256="$(printf '%s' "$WORKSPACE_DIR" | sandbox_hash_stream)"
-  WORKSPACE_ID="$(printf '%s' "$WORKSPACE_SHA256" | cut -c1-12)"
   BUILDER_MACHINE="${BUILDER_MACHINE:-codex-builder-$BASE_ID}"
   LOGIN_MACHINE="${LOGIN_MACHINE:-codex-login-$BASE_ID-r$MACHINE_REVISION}"
+  ARTIFACT_BASE="$ARTIFACTS_DIR/codex-devtools-$BASE_ID"
+  ARTIFACT_FILE="$ARTIFACT_BASE.smolmachine"
+  sandbox_prepare_workspace_options "$@" || return $?
   DEFAULT_CODEX_MACHINE="codex-workspace-$BASE_ID-r$MACHINE_REVISION-$WORKSPACE_ID"
   CODEX_MACHINE_OVERRIDE="${CODEX_MACHINE:-}"
   DESIRED_CODEX_MACHINE="${CODEX_MACHINE_OVERRIDE:-$DEFAULT_CODEX_MACHINE}"
-  ARTIFACT_BASE="$ARTIFACTS_DIR/codex-devtools-$BASE_ID"
-  ARTIFACT_FILE="$ARTIFACT_BASE.smolmachine"
 }
 
 sandbox_make_temp() {
@@ -174,8 +262,17 @@ sandbox_report_candidates() {
 }
 
 sandbox_report_repair_commands() {
-  printf 'Inspect with:\n  %q --check %q\n' "$SANDBOX_ROOT/repair-sandbox.sh" "$WORKSPACE_DIR" >&2
-  printf 'Replace with:\n  %q --replace-stale %q\n' "$SANDBOX_ROOT/repair-sandbox.sh" "$WORKSPACE_DIR" >&2
+  local host
+  printf 'Inspect with:\n  %q --check' "$SANDBOX_ROOT/repair-sandbox.sh" >&2
+  for host in "${SANDBOX_ADDITIONAL_ALLOW_HOSTS[@]}"; do
+    printf ' --allow-host %q' "$host" >&2
+  done
+  printf ' %q\n' "$WORKSPACE_DIR" >&2
+  printf 'Replace with:\n  %q --replace-stale' "$SANDBOX_ROOT/repair-sandbox.sh" >&2
+  for host in "${SANDBOX_ADDITIONAL_ALLOW_HOSTS[@]}"; do
+    printf ' --allow-host %q' "$host" >&2
+  done
+  printf ' %q\n' "$WORKSPACE_DIR" >&2
 }
 
 sandbox_ensure_base() {
@@ -256,6 +353,11 @@ sandbox_create_login_machine() {
 }
 
 sandbox_create_workspace_machine() {
+  local host
+  local -a allow_host_args=()
+  for host in "${SANDBOX_ALLOW_HOSTS[@]}"; do
+    allow_host_args+=(--allow-host "$host")
+  done
   echo "Creating workspace machine $DESIRED_CODEX_MACHINE..."
   smolvm machine create \
     --name "$DESIRED_CODEX_MACHINE" \
@@ -264,32 +366,11 @@ sandbox_create_workspace_machine() {
     --label "codex-sandbox.revision=$MACHINE_REVISION" \
     --label "codex-sandbox.workspace-sha256=$WORKSPACE_SHA256" \
     --from "$ARTIFACT_FILE" \
-    --mem 12288 \
-    --cpus 4 \
+    --mem "$SANDBOX_WORKSPACE_MEMORY" \
+    --cpus "$SANDBOX_WORKSPACE_CPUS" \
     --volume "$CODEX_HOME_DIR:/root/.codex" \
     --volume "$WORKSPACE_DIR:/workspace/myrepo" \
-    --allow-host api.openai.com \
-    --allow-host auth.openai.com \
-    --allow-host chatgpt.com \
-    --allow-host github.com \
-    --allow-host api.github.com \
-    --allow-host raw.githubusercontent.com \
-    --allow-host codeload.github.com \
-    --allow-host objects.githubusercontent.com \
-    --allow-host release-assets.githubusercontent.com \
-    --allow-host registry.npmjs.org \
-    --allow-host api.nuget.org \
-    --allow-host globalcdn.nuget.org \
-    --allow-host pypi.org \
-    --allow-host files.pythonhosted.org \
-    --allow-host deb.debian.org \
-    --allow-host registry-1.docker.io \
-    --allow-host auth.docker.io \
-    --allow-host production.cloudflare.docker.com \
-    --allow-host production.cloudfront.docker.com \
-    --allow-host ghcr.io \
-    --allow-host pkg-containers.githubusercontent.com \
-    --allow-host mcr.microsoft.com
+    "${allow_host_args[@]}"
 }
 
 sandbox_cache_value() {
@@ -596,7 +677,7 @@ reconcile_workspace() {
       return 2
       ;;
   esac
-  sandbox_prepare_identity "$workspace" || return 1
+  sandbox_prepare_identity "$workspace" "${SANDBOX_REQUESTED_ALLOW_HOSTS[@]}" || return 1
   if [ "$mode" = "check" ]; then
     sandbox_reconcile_attempt "$mode" "$force"
     return

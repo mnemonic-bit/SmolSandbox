@@ -9,25 +9,47 @@ source "$SCRIPT_DIR/sandbox-common.sh"
 MODE=""
 FORCE=""
 WORKSPACE_INPUT=""
+usage() {
+  echo "Usage: $0 (--check | --replace-stale [--force]) [--allow-host HOST]... [workspace]" >&2
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --check)
-      [ -z "$MODE" ] || { echo "Usage: $0 (--check | --replace-stale [--force]) [workspace]" >&2; exit 2; }
+      [ -z "$MODE" ] || { usage; exit 2; }
       MODE=check
       ;;
     --replace-stale)
-      [ -z "$MODE" ] || { echo "Usage: $0 (--check | --replace-stale [--force]) [workspace]" >&2; exit 2; }
+      [ -z "$MODE" ] || { usage; exit 2; }
       MODE=replace-stale
       ;;
     --force)
       FORCE=force
+      ;;
+    --allow-host)
+      if [ "$#" -lt 2 ] || [ -z "$2" ] || [[ "$2" == -* ]]; then
+        echo "ERROR: --allow-host requires a host." >&2
+        usage
+        exit 2
+      fi
+      SANDBOX_REQUESTED_ALLOW_HOSTS+=("$2")
+      shift
+      ;;
+    --allow-host=*)
+      host="${1#--allow-host=}"
+      if [ -z "$host" ] || [[ "$host" == -* ]]; then
+        echo "ERROR: --allow-host requires a host." >&2
+        usage
+        exit 2
+      fi
+      SANDBOX_REQUESTED_ALLOW_HOSTS+=("$host")
       ;;
     -*)
       echo "ERROR: unknown option: $1" >&2
       exit 2
       ;;
     *)
-      [ -z "$WORKSPACE_INPUT" ] || { echo "Usage: $0 (--check | --replace-stale [--force]) [workspace]" >&2; exit 2; }
+      [ -z "$WORKSPACE_INPUT" ] || { usage; exit 2; }
       WORKSPACE_INPUT="$1"
       ;;
   esac
@@ -35,7 +57,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ -z "$MODE" ] || { [ "$MODE" = check ] && [ -n "$FORCE" ]; }; then
-  echo "Usage: $0 (--check | --replace-stale [--force]) [workspace]" >&2
+  usage
   exit 2
 fi
 
