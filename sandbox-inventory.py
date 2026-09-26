@@ -76,7 +76,15 @@ def load_inventory(path: Path) -> list[dict[str, object]]:
         for key, label_value in labels.items():
             normalized_key = clean(key, "label key")
             normalized_labels[normalized_key] = clean(label_value, "label value")
-        result.append({"name": name, "state": state, "labels": normalized_labels})
+        result.append(
+            {
+                "name": name,
+                "state": state,
+                "labels": normalized_labels,
+                "ports": item.get("ports"),
+                "created_at": item.get("created_at"),
+            }
+        )
     return result
 
 
@@ -97,6 +105,27 @@ def normalize(inventory: list[dict[str, object]]) -> None:
             labels.get(MANAGED_KEYS[3], ""),
             "yes" if any(key in labels for key in MANAGED_KEYS) else "no",
         )
+
+
+def port_info(args: argparse.Namespace, inventory: list[dict[str, object]]) -> None:
+    matches = [machine for machine in inventory if machine["name"] == args.machine]
+    if len(matches) != 1:
+        fail(f"expected exactly one inventory entry for machine {args.machine!r}")
+    machine = matches[0]
+    state = normalized_state(str(machine["state"]))
+    if state is None:
+        fail(f"machine {args.machine!r} has an unsupported lifecycle state")
+    ports = machine["ports"]
+    if isinstance(ports, bool) or not isinstance(ports, int) or not 0 <= ports <= 64:
+        fail(f"machine {args.machine!r} has an invalid ports count")
+    created_at = machine["created_at"]
+    if (
+        isinstance(created_at, bool)
+        or not isinstance(created_at, int)
+        or created_at < 0
+    ):
+        fail(f"machine {args.machine!r} has an invalid creation timestamp")
+    emit(state, ports, created_at)
 
 
 def classify(args: argparse.Namespace, inventory: list[dict[str, object]]) -> None:
@@ -561,6 +590,10 @@ def main() -> int:
     normalize_parser = subparsers.add_parser("normalize")
     normalize_parser.add_argument("inventory", type=Path)
 
+    port_info_parser = subparsers.add_parser("port-info")
+    port_info_parser.add_argument("inventory", type=Path)
+    port_info_parser.add_argument("machine")
+
     classify_parser = subparsers.add_parser("classify")
     classify_parser.add_argument("inventory", type=Path)
     classify_parser.add_argument("base_id")
@@ -615,6 +648,8 @@ def main() -> int:
         inventory = load_inventory(args.inventory)
         if args.command == "normalize":
             normalize(inventory)
+        elif args.command == "port-info":
+            port_info(args, inventory)
         elif args.command == "classify":
             classify(args, inventory)
         elif args.command == "verify-readiness":

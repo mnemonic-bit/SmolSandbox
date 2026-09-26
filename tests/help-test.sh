@@ -66,8 +66,8 @@ run_help() {
 declare -A EXPECTED_USAGE_SUFFIX=(
   [build-sandbox.sh]=' [--help] [WORKSPACE]'
   [build-login.sh]=' [--help] [WORKSPACE]'
-  [start-codex.sh]=' [--help] [--allow-host HOST]... [WORKSPACE] [-- CODEX_ARG...]'
-  [codex-sandbox.sh]=' [--help] [--allow-host HOST]... [WORKSPACE] [-- CODEX_ARG...]'
+  [start-codex.sh]=' [--help] [--allow-host HOST]... [--port PORT]... [WORKSPACE] [-- CODEX_ARG...]'
+  [codex-sandbox.sh]=' [--help] [--allow-host HOST]... [--port PORT]... [WORKSPACE] [-- CODEX_ARG...]'
   [start-login.sh]=' [--help]'
   [repair-sandbox.sh]=' [--help] (--check | --replace-stale [--force]) [--allow-host HOST]... [WORKSPACE]'
   [clean-sandbox.sh]=' [--help]'
@@ -97,6 +97,10 @@ for script in start-codex.sh codex-sandbox.sh; do
   grep -Fq 'Repeatable' "$output"
   grep -Fq 'before or after WORKSPACE' "$output"
   grep -Fq 'must be non-empty' "$output"
+  grep -Fq -- '--port=PORT' "$output"
+  grep -Fq 'same guest and host port' "$output"
+  grep -Fq 'host loopback by default' "$output"
+  grep -Fq 'omitting --port clears every earlier mapping' "$output"
   grep -Fq 'forwarded to Codex without interpretation' "$output"
   grep -Fq -- '-- --help requests Codex help' "$output"
 done

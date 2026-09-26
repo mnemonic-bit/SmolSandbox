@@ -88,6 +88,7 @@ for machine in "${SELECTED_MACHINES[@]}"; do
   echo "  deleting VM: $machine"
   smolvm machine stop --name "$machine" >/dev/null 2>&1 || true
   smolvm machine delete --name "$machine" --force
+  sandbox_remove_port_state "$machine"
   DELETED_MACHINES=$((DELETED_MACHINES + 1))
 done
 

@@ -4,7 +4,7 @@ set -euo pipefail
 
 show_help() {
   printf '%s\n' \
-    "Usage: ${0##*/} [--help] [--allow-host HOST]... [WORKSPACE] [-- CODEX_ARG...]" \
+    "Usage: ${0##*/} [--help] [--allow-host HOST]... [--port PORT]... [WORKSPACE] [-- CODEX_ARG...]" \
     "" \
     "Description:" \
     "  Compatibility entry point for start-codex.sh. It starts Codex in the" \
@@ -19,6 +19,12 @@ show_help() {
     "  --allow-host=HOST  Add HOST to the default network allowlist. Repeatable; may" \
     "                     appear before or after WORKSPACE, but not after --. HOST" \
     "                     must be non-empty, contain no line breaks, and not start with -." \
+    "  --port PORT" \
+    "  --port=PORT        Publish repeatable TCP PORT on the same guest and host port." \
+    "                     Ports are 1-65535, bind to host loopback by default, and may" \
+    "                     appear before or after WORKSPACE. The exact set remains on the" \
+    "                     selected machine until a later launch reconciles another set;" \
+    "                     omitting --port clears every earlier mapping on this launch." \
     "  --help             Display launcher help and exit." \
     "  --                 End sandbox option parsing. All remaining options belong" \
     "                     to Codex; for example, -- --help requests Codex help."

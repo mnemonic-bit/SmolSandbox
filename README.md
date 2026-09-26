@@ -124,6 +124,36 @@ These hosts extend, rather than replace, the default allowlist. The effective
 host set is sorted and deduplicated, so option order and repeated hosts do not
 change the selected machine or add duplicate `--allow-host` arguments.
 
+Publish a guest TCP service on the same numbered host port with `--port`:
+
+```bash
+/path/to/this/repo/start-codex.sh --port 3000 /path/to/project
+```
+
+Repeat the option to publish multiple ports:
+
+```bash
+/path/to/this/repo/start-codex.sh \
+  --port 3000 \
+  /path/to/project \
+  --port 5173 \
+  --port 9229
+```
+
+Ports must be decimal integers from 1 through 65535. Duplicates are removed,
+values are sorted numerically, and at most 64 distinct mappings may be
+requested. Each invocation requests an exact set: changing the options replaces
+the earlier mappings, while omitting every `--port` removes earlier mappings
+before the next start. Port changes reuse the same persistent workspace machine
+and writable overlay; they do not alter workspace identity.
+
+Published ports are TCP listeners on host loopback by default, so a service on
+port 3000 is reached from the host at a URL such as
+`http://127.0.0.1:3000`. Publishing does not start the guest application or
+change its bind address—the application must listen on the requested guest
+port. Stop an active Codex session before launching the same workspace with a
+different port set.
+
 Each effective workspace configuration gets a deterministic named machine
 created from the same cached artifact. Its workspace hash covers the canonical
 set of immutable `smolvm machine create` options: the base artifact, CPU and
@@ -241,6 +271,8 @@ compatibility caches are not rewritten.
 - `.smolvm/base-id`: compatibility cache of the derived base generation.
 - `.smolvm/machine-revision`: compatibility cache of the runtime-policy revision.
 - `.smolvm/codex-home`: shared login, configuration, skills, and sessions.
+- `.smolvm/ports/<machine>.json`: last successfully applied published-port set;
+  a sibling `.pending.json` journal supports interrupted-update recovery.
 - `codex-builder-<base-id>`: temporary build VM, deleted after the reusable
   artifact has been created (stopped builders backed by this repo's cached
   artifacts are cleaned on the next start).

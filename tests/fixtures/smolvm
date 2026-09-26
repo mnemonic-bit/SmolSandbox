@@ -3,9 +3,44 @@ set -euo pipefail
 
 printf '%s\n' "$*" >> "$SMOLVM_TEST_LOG"
 
+emit_public_inventory() {
+  python3 -c '
+import json
+import sys
+
+inventory = json.load(sys.stdin)
+for machine in inventory:
+    concrete = machine.pop("_test_ports", None)
+    if concrete is not None:
+        machine["ports"] = len(concrete)
+    else:
+        machine.setdefault("ports", 0)
+    machine.setdefault("created_at", 1)
+json.dump(inventory, sys.stdout, separators=(",", ":"))
+sys.stdout.write("\n")
+'
+}
+
+if [ "${1:-}" = machine ] && [ "${2:-}" = start ] && \
+   [ "${SMOLVM_TEST_START_FAIL:-}" = 1 ]; then
+  echo 'simulated machine start failure' >&2
+  exit 75
+fi
+
 case "$*" in
   "--version")
     printf '%s\n' "${SMOLVM_TEST_VERSION:-smolvm test 1.0.0}"
+    exit 0
+    ;;
+  "machine update --help")
+    if [ "${SMOLVM_TEST_INCOMPATIBLE_UPDATE:-}" = 1 ]; then
+      printf '%s\n' 'Usage: smolvm machine update --name NAME'
+    else
+      printf '%s\n' \
+        'Usage: smolvm machine update --name NAME' \
+        '  --port PORT' \
+        '  --remove-port PORT'
+    fi
     exit 0
     ;;
   "machine ls --json")
@@ -27,17 +62,17 @@ case "$*" in
         echo "missing simulated inventory response $inventory_call" >&2
         exit 70
       fi
-      printf '%s\n' "$response"
+      printf '%s\n' "$response" | emit_public_inventory
     elif [ -n "${SMOLVM_TEST_INVENTORY_FILE:-}" ]; then
-      cat "$SMOLVM_TEST_INVENTORY_FILE"
+      emit_public_inventory < "$SMOLVM_TEST_INVENTORY_FILE"
     elif [ -n "${SMOLVM_TEST_INVENTORY:-}" ]; then
-      printf '%s\n' "$SMOLVM_TEST_INVENTORY"
+      printf '%s\n' "$SMOLVM_TEST_INVENTORY" | emit_public_inventory
     else
       printf '%s\n' "${SMOLVM_TEST_MACHINES:-}" | awk '
         BEGIN { printf "["; separator = "" }
         NF { printf "%s{\"name\":\"%s\",\"state\":\"stopped\",\"labels\":{}}", separator, $0; separator = "," }
         END { print "]" }
-      '
+      ' | emit_public_inventory
     fi
     exit 0
     ;;
@@ -57,7 +92,7 @@ case "$*" in
     fi
     exit 0
     ;;
-  *" -- codex --help")
+  *" -- codex --no-daemon --help")
     exit 0
     ;;
 esac
@@ -116,13 +151,100 @@ labels = dict(label.split("=", 1) for label in raw_labels)
 with open(path, encoding="utf-8") as inventory_file:
     inventory = json.load(inventory_file)
 if not any(machine["name"] == name for machine in inventory):
-    inventory.append({"name": name, "state": "created", "labels": labels})
+    inventory.append({
+        "name": name,
+        "state": "created",
+        "labels": labels,
+        "ports": 0,
+        "_test_ports": [],
+        "created_at": int(os.environ.get("SMOLVM_TEST_CREATED_AT", "1")),
+    })
 fd, temporary = tempfile.mkstemp(dir=os.path.dirname(path), prefix="inventory.")
 with os.fdopen(fd, "w", encoding="utf-8") as inventory_file:
     json.dump(inventory, inventory_file)
 os.replace(temporary, path)
 PY
   fi
+  exit 0
+fi
+
+if [ "${1:-}" = machine ] && [ "${2:-}" = update ] && \
+   [ "${SMOLVM_TEST_ALLOW_LIFECYCLE:-}" = 1 ]; then
+  if [ "${SMOLVM_TEST_UPDATE_FAIL:-}" = 1 ]; then
+    echo 'simulated machine update failure' >&2
+    exit 75
+  fi
+  name=""
+  additions=()
+  removals=()
+  shift 2
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --name)
+        name="$2"
+        shift 2
+        ;;
+      --port)
+        additions+=("$2")
+        shift 2
+        ;;
+      --remove-port)
+        removals+=("$2")
+        shift 2
+        ;;
+      *)
+        shift
+        ;;
+    esac
+  done
+  if [ -n "${SMOLVM_TEST_INVENTORY_FILE:-}" ]; then
+    python3 - "$SMOLVM_TEST_INVENTORY_FILE" "$name" \
+      "${#removals[@]}" "${removals[@]}" "${additions[@]}" <<'PY'
+import json
+import os
+import sys
+import tempfile
+
+path, name, raw_remove_count, *values = sys.argv[1:]
+remove_count = int(raw_remove_count)
+removals = values[:remove_count]
+additions = values[remove_count:]
+
+def host_port(spec: str) -> int:
+    return int(spec.split(":", 1)[0])
+
+with open(path, encoding="utf-8") as inventory_file:
+    inventory = json.load(inventory_file)
+matches = [machine for machine in inventory if machine.get("name") == name]
+if len(matches) != 1:
+    raise SystemExit("machine update target is missing")
+machine = matches[0]
+if str(machine.get("state", "")).casefold() not in {"created", "stopped"}:
+    raise SystemExit("machine update target is not stopped")
+ports = set(machine.get("_test_ports", []))
+for spec in removals:
+    ports.discard(host_port(spec))
+for spec in additions:
+    ports.add(host_port(spec))
+machine["_test_ports"] = sorted(ports)
+machine["ports"] = len(ports)
+if os.environ.get("SMOLVM_TEST_UPDATE_WRONG_COUNT") == "1":
+    machine["_test_ports"] = sorted({*ports, 65535})
+    machine["ports"] = len(machine["_test_ports"])
+fd, temporary = tempfile.mkstemp(dir=os.path.dirname(path), prefix="inventory.")
+with os.fdopen(fd, "w", encoding="utf-8") as inventory_file:
+    json.dump(inventory, inventory_file)
+os.replace(temporary, path)
+PY
+  fi
+  if [ "${SMOLVM_TEST_UPDATE_FAIL_AFTER:-}" = 1 ]; then
+    echo 'simulated interruption after machine update' >&2
+    exit 75
+  fi
+  exit 0
+fi
+
+if [ "${1:-}" = machine ] && [ "${2:-}" = exec ] && [[ "$*" == *" -- codex "* ]]; then
   exit 0
 fi
 

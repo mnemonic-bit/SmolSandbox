@@ -195,6 +195,7 @@ while IFS=$'\x1f' read -r name state kind generation configuration; do
     echo "ERROR: could not delete stopped managed machine $name; no artifacts were removed." >&2
     exit 1
   fi
+  sandbox_remove_port_state "$name"
   REMOVED_MACHINES=$((REMOVED_MACHINES + 1))
 done < <(
   python3 "$SANDBOX_ROOT/sandbox-inventory.py" render-plan \

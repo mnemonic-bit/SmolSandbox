@@ -6,6 +6,7 @@ SANDBOX_MACHINE_REVISION=4
 SANDBOX_WORKSPACE_MEMORY=12288
 SANDBOX_WORKSPACE_CPUS=4
 SANDBOX_REQUESTED_ALLOW_HOSTS=()
+SANDBOX_REQUESTED_PORTS=()
 SANDBOX_DEFAULT_ALLOW_HOSTS=(
   api.openai.com
   auth.openai.com
@@ -55,6 +56,20 @@ sandbox_require_tools() {
   fi
   if ! command -v python3 >/dev/null 2>&1; then
     echo "ERROR: python3 is required to validate the SmolVM JSON inventory." >&2
+    return 1
+  fi
+}
+
+sandbox_check_port_capability() {
+  local update_help
+  if ! update_help="$(smolvm machine update --help 2>&1)"; then
+    echo "ERROR: the installed SmolVM does not support inspecting machine update capabilities." >&2
+    return 1
+  fi
+  if ! grep -Eq -- '(^|[[:space:]])--port([=[:space:]]|$)' <<< "$update_help" || \
+     ! grep -Eq -- '(^|[[:space:]])--remove-port([=[:space:]]|$)' <<< "$update_help"
+  then
+    echo "ERROR: the installed SmolVM is incompatible: machine update must support --port and --remove-port." >&2
     return 1
   fi
 }
@@ -182,6 +197,108 @@ sandbox_prepare_identity() {
 
 sandbox_make_temp() {
   mktemp "${TMPDIR:-/tmp}/codex-sandbox.XXXXXX"
+}
+
+sandbox_read_machine_port_info() {
+  local machine="$1" info
+  if ! sandbox_read_inventory; then
+    echo "ERROR: could not inspect ownership and port state for machine $machine." >&2
+    return 1
+  fi
+  if [ "$SANDBOX_DESIRED_FOUND" != "$machine" ]; then
+    echo "ERROR: machine $machine no longer matches the selected managed workspace identity." >&2
+    sandbox_discard_inventory
+    return 1
+  fi
+  if ! info="$(python3 "$SANDBOX_ROOT/sandbox-inventory.py" port-info \
+    "$SANDBOX_INVENTORY_FILE" "$machine" 2>&1)"
+  then
+    echo "ERROR: invalid SmolVM port inventory for machine $machine: $info" >&2
+    sandbox_discard_inventory
+    return 1
+  fi
+  sandbox_discard_inventory
+  IFS=$'\x1f' read -r SANDBOX_MACHINE_STATE SANDBOX_MACHINE_PORT_COUNT \
+    SANDBOX_MACHINE_CREATED_AT <<< "$info"
+}
+
+sandbox_reconcile_workspace_ports() {
+  local machine="$1" prepared action port initial_created_at
+  local -a result=() update_args=()
+
+  sandbox_read_machine_port_info "$machine" || return 1
+  initial_created_at="$SANDBOX_MACHINE_CREATED_AT"
+  if ! prepared="$(python3 "$SANDBOX_ROOT/sandbox-port-state.py" prepare \
+    --state "$SANDBOX_MACHINE_STATE" \
+    --count "$SANDBOX_MACHINE_PORT_COUNT" \
+    "$STATE_ROOT" "$machine" "$SANDBOX_MACHINE_CREATED_AT" \
+    "$WORKSPACE_SHA256" "${SANDBOX_REQUESTED_PORTS[@]}")"
+  then
+    return 1
+  fi
+  mapfile -t result <<< "$prepared"
+  action="${result[0]:-}"
+  case "$action" in
+    running)
+      SANDBOX_SELECTED_MACHINE_WAS_RUNNING=1
+      return 0
+      ;;
+    skip)
+      SANDBOX_SELECTED_MACHINE_WAS_RUNNING=0
+      return 0
+      ;;
+    update) ;;
+    *)
+      echo "ERROR: port-state preparation returned an invalid action." >&2
+      return 1
+      ;;
+  esac
+
+  for port in "${result[@]:1}"; do
+    [[ "$port" =~ ^[0-9]+$ ]] || {
+      echo "ERROR: port-state preparation returned an invalid removable port." >&2
+      return 1
+    }
+    update_args+=(--remove-port "$port:$port")
+  done
+  for port in "${SANDBOX_REQUESTED_PORTS[@]}"; do
+    update_args+=(--port "$port")
+  done
+
+  if ! smolvm machine update --name "$machine" "${update_args[@]}"; then
+    echo "ERROR: could not reconcile published ports for machine $machine; the recovery journal was retained." >&2
+    return 1
+  fi
+
+  sandbox_read_machine_port_info "$machine" || return 1
+  if [ "$SANDBOX_MACHINE_CREATED_AT" != "$initial_created_at" ]; then
+    echo "ERROR: machine $machine was replaced while its published ports were being reconciled." >&2
+    return 1
+  fi
+  if [ "$SANDBOX_MACHINE_STATE" != created ] && [ "$SANDBOX_MACHINE_STATE" != stopped ]; then
+    echo "ERROR: machine $machine changed lifecycle state during port reconciliation." >&2
+    return 1
+  fi
+  if [ "$SANDBOX_MACHINE_PORT_COUNT" -ne "${#SANDBOX_REQUESTED_PORTS[@]}" ]; then
+    echo "ERROR: machine $machine reports $SANDBOX_MACHINE_PORT_COUNT mapping(s) after port reconciliation; expected ${#SANDBOX_REQUESTED_PORTS[@]}." >&2
+    return 1
+  fi
+  if ! python3 "$SANDBOX_ROOT/sandbox-port-state.py" commit \
+    "$STATE_ROOT" "$machine" "$initial_created_at" \
+    "$WORKSPACE_SHA256" "${SANDBOX_REQUESTED_PORTS[@]}"
+  then
+    echo "ERROR: could not commit local published-port state for machine $machine." >&2
+    return 1
+  fi
+  SANDBOX_SELECTED_MACHINE_WAS_RUNNING=0
+}
+
+sandbox_remove_port_state() {
+  local machine="$1"
+  if ! python3 "$SANDBOX_ROOT/sandbox-port-state.py" remove "$STATE_ROOT" "$machine"; then
+    echo "WARNING: could not remove local port state for deleted machine $machine." >&2
+    return 1
+  fi
 }
 
 sandbox_read_inventory() {
@@ -367,6 +484,8 @@ sandbox_remove_builder_machines() {
     smolvm machine stop --name "$builder" >/dev/null 2>&1 || true
     if ! smolvm machine delete --name "$builder" --force; then
       failed=1
+    else
+      sandbox_remove_port_state "$builder" || failed=1
     fi
   done
   return "$failed"
@@ -575,6 +694,28 @@ sandbox_reconcile_attempt() {
       return 1
     fi
 
+    if [ -n "$SANDBOX_DESIRED_FOUND" ] && \
+       [ "${SANDBOX_REQUIRE_PORT_CAPABILITY:-0}" = "1" ]; then
+      local selected_port_info selected_state selected_count selected_created_at
+      if ! selected_port_info="$(python3 "$SANDBOX_ROOT/sandbox-inventory.py" port-info \
+        "$SANDBOX_INVENTORY_FILE" "$SANDBOX_DESIRED_FOUND" 2>&1)"
+      then
+        echo "ERROR: invalid SmolVM port inventory for machine $SANDBOX_DESIRED_FOUND: $selected_port_info" >&2
+        sandbox_discard_inventory
+        return 1
+      fi
+      IFS=$'\x1f' read -r selected_state selected_count selected_created_at \
+        <<< "$selected_port_info"
+      if ! python3 "$SANDBOX_ROOT/sandbox-port-state.py" prepare --dry-run \
+        --state "$selected_state" --count "$selected_count" \
+        "$STATE_ROOT" "$SANDBOX_DESIRED_FOUND" "$selected_created_at" \
+        "$WORKSPACE_SHA256" "${SANDBOX_REQUESTED_PORTS[@]}" >/dev/null
+      then
+        sandbox_discard_inventory
+        return 1
+      fi
+    fi
+
     if [ -n "$SANDBOX_DESIRED_FOUND" ]; then
       if [ "${#SANDBOX_STALE_NAMES[@]}" -gt 0 ] || [ "${#SANDBOX_AMBIGUOUS_NAMES[@]}" -gt 0 ]; then
         echo "WARNING: selected the desired machine, but other workspace candidates remain." >&2
@@ -727,6 +868,11 @@ sandbox_reconcile_attempt() {
       sandbox_discard_inventory
       return 1
     fi
+    if ! sandbox_remove_port_state "${replacement_names[$index]}"; then
+      echo "ERROR: stale machine ${replacement_names[$index]} was deleted, but its local port state could not be removed." >&2
+      sandbox_discard_inventory
+      return 1
+    fi
   done
 
   if ! sandbox_remove_builder_machines; then
@@ -751,6 +897,9 @@ reconcile_workspace() {
       ;;
   esac
   sandbox_prepare_identity "$workspace" "${SANDBOX_REQUESTED_ALLOW_HOSTS[@]}" || return 1
+  if [ "${SANDBOX_REQUIRE_PORT_CAPABILITY:-0}" = "1" ]; then
+    sandbox_check_port_capability || return 1
+  fi
   if [ "$mode" = "check" ]; then
     sandbox_reconcile_attempt "$mode" "$force"
     return
@@ -771,7 +920,9 @@ reconcile_workspace() {
     return 1
   fi
   sandbox_reconcile_attempt "$mode" "$force" || result=$?
-  sandbox_release_lock
+  if [ "${SANDBOX_KEEP_WORKSPACE_LOCK:-0}" != "1" ] || [ "$result" -ne 0 ]; then
+    sandbox_release_lock
+  fi
   if [ "${SANDBOX_KEEP_PURGE_LOCK:-0}" != "1" ] || [ "$result" -ne 0 ]; then
     sandbox_release_purge_lock
   fi

@@ -59,7 +59,7 @@ if [ "$(grep -Fc 'cp -r --update=none /opt/codex-home/. /root/.codex/' "$TEST_RO
   exit 1
 fi
 
-if ! grep -Fq 'machine exec --name test-machine -it -- codex --help' "$TEST_ROOT/smolvm.log"; then
+if ! grep -Fq 'machine exec --name test-machine -it -- codex --no-daemon --help' "$TEST_ROOT/smolvm.log"; then
   printf 'FAIL: launcher never invoked Codex\n%s\n' "$OUTPUT" >&2
   exit 1
 fi
@@ -80,7 +80,7 @@ BASE_SMOLFILE="$REPO_ROOT/devtools-base.smolfile" \
 CODEX_MACHINE="test-machine" \
   "$REPO_ROOT/codex-sandbox.sh" "$TEST_ROOT/workspace" -- --help >/dev/null
 
-if ! grep -Fq 'machine exec --name test-machine -it -- codex --help' "$TEST_ROOT/smolvm.log"; then
+if ! grep -Fq 'machine exec --name test-machine -it -- codex --no-daemon --help' "$TEST_ROOT/smolvm.log"; then
   echo 'FAIL: compatibility launcher consumed Codex help after the delimiter' >&2
   exit 1
 fi

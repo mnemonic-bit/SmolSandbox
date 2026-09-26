@@ -17,10 +17,11 @@ run_start() {
   local log_name="$1" codex_home="$2"
   shift 2
   : > "$TEST_ROOT/$log_name.log"
+  printf '[]\n' > "$TEST_ROOT/$log_name.inventory.json"
   PATH="$TEST_ROOT/bin:$PATH" \
   SMOLVM_TEST_LOG="$TEST_ROOT/$log_name.log" \
   SMOLVM_TEST_VERSION="$SMOLVM_TEST_VERSION" \
-  SMOLVM_TEST_INVENTORY='[]' \
+  SMOLVM_TEST_INVENTORY_FILE="$TEST_ROOT/$log_name.inventory.json" \
   SMOLVM_TEST_ALLOW_CREATE=1 \
   SMOLVM_TEST_ALLOW_LIFECYCLE=1 \
   STATE_ROOT="$TEST_ROOT/state" \

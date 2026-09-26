@@ -29,10 +29,11 @@ prepare_case() {
 }
 
 run_start() {
+  printf '%s\n' "$INVENTORY" > "$CASE_ROOT/start-inventory.json"
   PATH="$CASE_ROOT/bin:$PATH" \
   SMOLVM_TEST_LOG="$CASE_ROOT/smolvm.log" \
   SMOLVM_TEST_VERSION="$SMOLVM_TEST_VERSION" \
-  SMOLVM_TEST_INVENTORY="$INVENTORY" \
+  SMOLVM_TEST_INVENTORY_FILE="$CASE_ROOT/start-inventory.json" \
   SMOLVM_TEST_ALLOW_LIFECYCLE=1 \
   STATE_ROOT="$CASE_ROOT/state" \
   ARTIFACTS_DIR="$CASE_ROOT/artifacts" \
