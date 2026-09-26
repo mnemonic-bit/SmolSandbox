@@ -8,7 +8,7 @@ TEST_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TEST_ROOT"' EXIT
 
 SMOLVM_TEST_VERSION='smolvm test 1.0.0'
-MACHINE_REVISION=3
+MACHINE_REVISION="$SANDBOX_MACHINE_REVISION"
 BASE_ID="$({ printf '%s\n' "$SMOLVM_TEST_VERSION"; cat "$REPO_ROOT/devtools-base.smolfile"; } | sha256sum | awk '{print substr($1, 1, 12)}')"
 
 prepare_case() {
@@ -147,7 +147,9 @@ for label in \
   'codex-sandbox.kind=workspace' \
   "codex-sandbox.base-id=$BASE_ID" \
   "codex-sandbox.revision=$MACHINE_REVISION" \
-  "codex-sandbox.workspace-sha256=$WORKSPACE_HASH"
+  "codex-sandbox.workspace-sha256=$WORKSPACE_HASH" \
+  'codex-sandbox.workspace-path-sha256=' \
+  'codex-sandbox.configuration=default'
 do
   grep -Fq -- "--label $label" "$CASE_ROOT/smolvm.log"
 done

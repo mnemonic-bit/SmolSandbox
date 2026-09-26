@@ -45,12 +45,21 @@ SECOND_NAME="$(run_start second "$TEST_ROOT/state/codex-home" \
 
 test -n "$FIRST_NAME"
 test "$FIRST_NAME" = "$SECOND_NAME"
+grep -Fq -- '--label codex-sandbox.configuration=custom' "$TEST_ROOT/second.log"
+grep -Eq -- '--label codex-sandbox.workspace-path-sha256=[0-9a-f]{64}' "$TEST_ROOT/second.log"
 for host in a.example z.example api.openai.com; do
   if [ "$(grep -o -- "--allow-host $host" "$TEST_ROOT/second.log" | wc -l)" -ne 1 ]; then
     echo "FAIL: effective allowlist did not contain exactly one $host entry" >&2
     exit 1
   fi
 done
+
+DEFAULT_DUPLICATE_NAME="$(run_start default-duplicate "$TEST_ROOT/state/codex-home" \
+  --allow-host api.openai.com \
+  "$TEST_ROOT/workspace" \
+  --allow-host api.openai.com)"
+test -n "$DEFAULT_DUPLICATE_NAME"
+grep -Fq -- '--label codex-sandbox.configuration=default' "$TEST_ROOT/default-duplicate.log"
 
 DIFFERENT_HOST_NAME="$(run_start different-host "$TEST_ROOT/state/codex-home" \
   "$TEST_ROOT/workspace" \

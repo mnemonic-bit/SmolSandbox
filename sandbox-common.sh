@@ -2,7 +2,7 @@
 # Shared authoritative identity, inventory, creation, and reconciliation logic.
 
 SANDBOX_ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-SANDBOX_MACHINE_REVISION=3
+SANDBOX_MACHINE_REVISION=4
 SANDBOX_WORKSPACE_MEMORY=12288
 SANDBOX_WORKSPACE_CPUS=4
 SANDBOX_REQUESTED_ALLOW_HOSTS=()
@@ -72,7 +72,7 @@ PY
 }
 
 sandbox_prepare_workspace_options() {
-  local host
+  local host default_host is_default
   local -a requested_hosts=("$@") machine_options=()
 
   for host in "${requested_hosts[@]}"; do
@@ -83,20 +83,35 @@ sandbox_prepare_workspace_options() {
     fi
   done
 
-  SANDBOX_ADDITIONAL_ALLOW_HOSTS=()
-  while IFS= read -r host; do
-    [ -n "$host" ] || continue
-    SANDBOX_ADDITIONAL_ALLOW_HOSTS+=("$host")
-  done < <(printf '%s\n' "${requested_hosts[@]}" | LC_ALL=C sort -u)
-
   SANDBOX_ALLOW_HOSTS=()
   while IFS= read -r host; do
     [ -n "$host" ] || continue
     SANDBOX_ALLOW_HOSTS+=("$host")
   done < <(
     printf '%s\n' "${SANDBOX_DEFAULT_ALLOW_HOSTS[@]}" \
-      "${SANDBOX_ADDITIONAL_ALLOW_HOSTS[@]}" | LC_ALL=C sort -u
+      "${requested_hosts[@]}" | LC_ALL=C sort -u
   )
+
+  # Only effective additions count as a custom configuration. Repeating a
+  # default host must not change either the identity or its classification.
+  SANDBOX_ADDITIONAL_ALLOW_HOSTS=()
+  for host in "${SANDBOX_ALLOW_HOSTS[@]}"; do
+    is_default=""
+    for default_host in "${SANDBOX_DEFAULT_ALLOW_HOSTS[@]}"; do
+      if [ "$host" = "$default_host" ]; then
+        is_default=yes
+        break
+      fi
+    done
+    if [ -z "$is_default" ]; then
+      SANDBOX_ADDITIONAL_ALLOW_HOSTS+=("$host")
+    fi
+  done
+  if [ "${#SANDBOX_ADDITIONAL_ALLOW_HOSTS[@]}" -eq 0 ]; then
+    WORKSPACE_CONFIGURATION=default
+  else
+    WORKSPACE_CONFIGURATION=custom
+  fi
 
   machine_options=(
     "--from=$ARTIFACT_FILE"
@@ -112,10 +127,7 @@ sandbox_prepare_workspace_options() {
   WORKSPACE_ID="${WORKSPACE_SHA256:0:12}"
 }
 
-sandbox_prepare_identity() {
-  local workspace_input="$1"
-  shift
-
+sandbox_prepare_environment() {
   BASE_SMOLFILE="${BASE_SMOLFILE:-$SANDBOX_ROOT/devtools-base.smolfile}"
   ARTIFACTS_DIR="${ARTIFACTS_DIR:-$SANDBOX_ROOT/artifacts}"
   STATE_ROOT="${STATE_ROOT:-$SANDBOX_ROOT/.smolvm}"
@@ -126,12 +138,9 @@ sandbox_prepare_identity() {
     echo "ERROR: base Smolfile not found: $BASE_SMOLFILE" >&2
     return 1
   fi
-  if [ ! -d "$workspace_input" ]; then
-    echo "ERROR: workspace is not a directory: $workspace_input" >&2
-    return 1
-  fi
+}
 
-  WORKSPACE_DIR="$(CDPATH= cd -- "$workspace_input" && pwd -P)"
+sandbox_calculate_base_identity() {
   SMOLVM_VERSION="$(smolvm --version)" || return 1
   BASE_ID="$({ printf '%s\n' "$SMOLVM_VERSION"; command cat "$BASE_SMOLFILE"; } | sandbox_hash_stream | cut -c1-12)"
   MACHINE_REVISION="$SANDBOX_MACHINE_REVISION"
@@ -139,6 +148,32 @@ sandbox_prepare_identity() {
   LOGIN_MACHINE="${LOGIN_MACHINE:-codex-login-$BASE_ID-r$MACHINE_REVISION}"
   ARTIFACT_BASE="$ARTIFACTS_DIR/codex-devtools-$BASE_ID"
   ARTIFACT_FILE="$ARTIFACT_BASE.smolmachine"
+}
+
+sandbox_prepare_base_identity() {
+  sandbox_prepare_environment || return 1
+  sandbox_calculate_base_identity
+}
+
+sandbox_current_base_id() {
+  local version
+  version="$(smolvm --version)" || return 1
+  { printf '%s\n' "$version"; command cat "$BASE_SMOLFILE"; } |
+    sandbox_hash_stream | cut -c1-12
+}
+
+sandbox_prepare_identity() {
+  local workspace_input="$1"
+  shift
+
+  sandbox_prepare_base_identity || return 1
+  if [ ! -d "$workspace_input" ]; then
+    echo "ERROR: workspace is not a directory: $workspace_input" >&2
+    return 1
+  fi
+
+  WORKSPACE_DIR="$(CDPATH= cd -- "$workspace_input" && pwd -P)"
+  WORKSPACE_PATH_SHA256="$(printf '%s' "$WORKSPACE_DIR" | sandbox_hash_stream)" || return 1
   sandbox_prepare_workspace_options "$@" || return $?
   DEFAULT_CODEX_MACHINE="codex-workspace-$BASE_ID-r$MACHINE_REVISION-$WORKSPACE_ID"
   CODEX_MACHINE_OVERRIDE="${CODEX_MACHINE:-}"
@@ -284,7 +319,11 @@ sandbox_ensure_base() {
 
   echo "Building Codex base generation $BASE_ID ($SMOLVM_VERSION)..."
   if ! sandbox_inventory_has_name "$BUILDER_MACHINE"; then
-    smolvm machine create --name "$BUILDER_MACHINE" --smolfile "$BASE_SMOLFILE" || return 1
+    smolvm machine create \
+      --name "$BUILDER_MACHINE" \
+      --label "codex-sandbox.kind=builder" \
+      --label "codex-sandbox.base-id=$BASE_ID" \
+      --smolfile "$BASE_SMOLFILE" || return 1
     SANDBOX_ALL_NAMES[${#SANDBOX_ALL_NAMES[@]}]="$BUILDER_MACHINE"
     SANDBOX_ALL_STATES[${#SANDBOX_ALL_STATES[@]}]="created"
   fi
@@ -340,6 +379,9 @@ sandbox_create_login_machine() {
   echo "Creating login-only machine $LOGIN_MACHINE..."
   if ! smolvm machine create \
     --name "$LOGIN_MACHINE" \
+    --label "codex-sandbox.kind=login" \
+    --label "codex-sandbox.base-id=$BASE_ID" \
+    --label "codex-sandbox.revision=$MACHINE_REVISION" \
     --from "$ARTIFACT_FILE" \
     --volume "$CODEX_HOME_DIR:/root/.codex" \
     --allow-host auth.openai.com \
@@ -365,6 +407,8 @@ sandbox_create_workspace_machine() {
     --label "codex-sandbox.base-id=$BASE_ID" \
     --label "codex-sandbox.revision=$MACHINE_REVISION" \
     --label "codex-sandbox.workspace-sha256=$WORKSPACE_SHA256" \
+    --label "codex-sandbox.workspace-path-sha256=$WORKSPACE_PATH_SHA256" \
+    --label "codex-sandbox.configuration=$WORKSPACE_CONFIGURATION" \
     --from "$ARTIFACT_FILE" \
     --mem "$SANDBOX_WORKSPACE_MEMORY" \
     --cpus "$SANDBOX_WORKSPACE_CPUS" \
@@ -425,6 +469,35 @@ sandbox_acquire_lock() {
     sleep 0.1
   done
   printf '%s\n' "$$" > "$SANDBOX_LOCK_DIR/pid"
+}
+
+sandbox_acquire_purge_lock() {
+  local lock_parent="$STATE_ROOT/locks" attempts=0 owner
+  mkdir -p "$lock_parent"
+  SANDBOX_PURGE_LOCK_DIR="$lock_parent/purge.lock"
+  while ! mkdir "$SANDBOX_PURGE_LOCK_DIR" 2>/dev/null; do
+    owner="$(sed -n '1p' "$SANDBOX_PURGE_LOCK_DIR/pid" 2>/dev/null || true)"
+    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+      rm -f -- "$SANDBOX_PURGE_LOCK_DIR/pid"
+      rmdir "$SANDBOX_PURGE_LOCK_DIR" 2>/dev/null || true
+      continue
+    fi
+    attempts=$((attempts + 1))
+    if [ "$attempts" -ge 600 ]; then
+      echo "ERROR: timed out waiting for repository purge lock." >&2
+      return 1
+    fi
+    sleep 0.1
+  done
+  printf '%s\n' "$$" > "$SANDBOX_PURGE_LOCK_DIR/pid"
+}
+
+sandbox_release_purge_lock() {
+  if [ -n "${SANDBOX_PURGE_LOCK_DIR:-}" ]; then
+    rm -f -- "$SANDBOX_PURGE_LOCK_DIR/pid"
+    rmdir "$SANDBOX_PURGE_LOCK_DIR" 2>/dev/null || true
+    SANDBOX_PURGE_LOCK_DIR=""
+  fi
 }
 
 sandbox_release_lock() {
@@ -682,8 +755,25 @@ reconcile_workspace() {
     sandbox_reconcile_attempt "$mode" "$force"
     return
   fi
-  sandbox_acquire_lock || return 1
+  sandbox_acquire_purge_lock || return 1
+  local locked_base_id
+  locked_base_id="$(sandbox_current_base_id)" || {
+    sandbox_release_purge_lock
+    return 1
+  }
+  if [ "$locked_base_id" != "$BASE_ID" ]; then
+    echo "ERROR: the sandbox base changed while waiting for the repository purge lock; retry the command." >&2
+    sandbox_release_purge_lock
+    return 1
+  fi
+  if ! sandbox_acquire_lock; then
+    sandbox_release_purge_lock
+    return 1
+  fi
   sandbox_reconcile_attempt "$mode" "$force" || result=$?
   sandbox_release_lock
+  if [ "${SANDBOX_KEEP_PURGE_LOCK:-0}" != "1" ] || [ "$result" -ne 0 ]; then
+    sandbox_release_purge_lock
+  fi
   return "$result"
 }

@@ -16,6 +16,9 @@ SANDBOX_ENSURE_LOGIN=1
 reconcile_workspace "$WORKSPACE_INPUT" start
 
 echo
+SANDBOX_PURGE_AFTER_BUILD=1 "$SCRIPT_DIR/purge-sandbox.sh"
+
+echo
 echo "Ready:"
 echo "  artifact:  $ARTIFACT_FILE"
 echo "  login VM:  $LOGIN_MACHINE"

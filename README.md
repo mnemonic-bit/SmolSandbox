@@ -53,6 +53,12 @@ Changing the base definition or SmolVM version creates a new generation and
 leaves the old one intact. Major application-level tools are version-pinned in
 the Smolfile; changing a pin naturally produces a new generation.
 
+After a successful build, the script runs the conservative purge policy. It
+removes unprotected legacy generations, but refuses that cleanup when a
+current-generation custom workspace configuration exists. That refusal does
+not turn an otherwise successful build into a failure; the output shows the
+standalone force commands instead.
+
 ## Authenticate
 
 For ChatGPT subscription authentication, run once:
@@ -132,6 +138,38 @@ generation with:
 ./build-sandbox.sh [workspace]
 ```
 
+## Purge superseded generations and configurations
+
+Remove stopped machines from superseded generations and their unprotected
+artifact files with:
+
+```bash
+./purge-sandbox.sh
+```
+
+The conservative command is an all-or-nothing operation. If it finds a
+current-generation workspace created with additional `--allow-host` values,
+it prints every current workspace configuration and removes nothing. Use
+`--force` to remove stopped custom configurations and legacy machines while
+preserving stopped default configurations:
+
+```bash
+./purge-sandbox.sh --force
+```
+
+Use `--force-all` to remove every stopped managed builder, login, and workspace
+machine in scope:
+
+```bash
+./purge-sandbox.sh --force-all
+```
+
+All policies preserve running machines, any artifact generation needed by a
+running machine, and both forms of the current artifact. Purge validates the
+complete machine inventory and exact managed artifact names before deletion;
+ambiguous metadata, an inventory change, or a missing current artifact stops
+the operation. Unrelated machines and files are never selected.
+
 ## Inspect and repair workspace machines
 
 The launcher reconstructs the desired base, revision, and workspace identity
@@ -188,7 +226,10 @@ compatibility caches are not rewritten.
   artifacts are cleaned on the next start).
 - `codex-login-<base-id>-r<revision>`: login-only VM.
 - `codex-workspace-<base-id>-r<revision>-<workspace-id>`: one persistent VM
-  per workspace. Bump `SANDBOX_MACHINE_REVISION` in `sandbox-common.sh` when
+  per immutable workspace configuration. New workspace machines carry both a
+  path-only workspace digest and a `default` or `custom` configuration label,
+  while the workspace ID continues to cover the complete immutable creation
+  specification. Bump `SANDBOX_MACHINE_REVISION` in `sandbox-common.sh` when
   changing its runtime policy.
 
 Both `artifacts/` and `.smolvm/` are excluded from Git.

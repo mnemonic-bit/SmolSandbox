@@ -11,13 +11,20 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=sandbox-common.sh
 source "$SCRIPT_DIR/sandbox-common.sh"
 
-sandbox_prepare_identity "$PWD"
+INVENTORY_FILE=""
+NORMALIZED_FILE=""
+cleanup_inventory_files() {
+  if [ -n "$INVENTORY_FILE" ] || [ -n "$NORMALIZED_FILE" ]; then
+    rm -f -- "$INVENTORY_FILE" "$NORMALIZED_FILE"
+  fi
+  sandbox_release_purge_lock
+}
+sandbox_prepare_environment
+sandbox_acquire_purge_lock
+trap cleanup_inventory_files EXIT
+sandbox_calculate_base_identity
 INVENTORY_FILE="$(sandbox_make_temp)"
 NORMALIZED_FILE="$(sandbox_make_temp)"
-cleanup_inventory_files() {
-  rm -f -- "$INVENTORY_FILE" "$NORMALIZED_FILE"
-}
-trap cleanup_inventory_files EXIT
 
 if ! smolvm machine ls --json > "$INVENTORY_FILE"; then
   echo "ERROR: could not read the SmolVM machine inventory; refusing to clean." >&2

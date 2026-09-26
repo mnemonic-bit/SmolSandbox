@@ -57,15 +57,18 @@ done
 WORKSPACE_INPUT="${WORKSPACE_INPUT:-$PWD}"
 
 SANDBOX_ENSURE_LOGIN=0
+SANDBOX_KEEP_PURGE_LOCK=1
 reconcile_workspace "$WORKSPACE_INPUT" start
 CODEX_MACHINE="$RECONCILED_MACHINE"
 
 stop_codex_machine() {
   smolvm machine stop --name "$CODEX_MACHINE" >/dev/null 2>&1 || true
+  sandbox_release_purge_lock
 }
 trap stop_codex_machine EXIT INT TERM
 
 smolvm machine start --name "$CODEX_MACHINE"
+sandbox_release_purge_lock
 
 if ! smolvm machine exec --name "$CODEX_MACHINE" -- sh -lc \
   'if [ -d /opt/codex-home ]; then cp -r --update=none /opt/codex-home/. /root/.codex/; fi'
