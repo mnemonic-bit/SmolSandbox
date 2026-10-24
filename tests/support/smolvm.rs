@@ -60,6 +60,22 @@ fn save(value: &Value) {
         temporary.persist(path).unwrap();
     }
 }
+fn gate(stage: &str) {
+    let Some(ready) = env::var_os(format!("SMOLVM_TEST_{stage}_GATE_READY")) else {
+        return;
+    };
+    let release = env::var_os(format!("SMOLVM_TEST_{stage}_GATE_RELEASE"))
+        .map(PathBuf::from)
+        .expect("a gate requires a release path");
+    fs::write(ready, "ready").unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    while !release.exists() {
+        if std::time::Instant::now() >= deadline {
+            fail(76, "test coordination gate timed out");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     if let Some(log) = env::var_os("SMOLVM_TEST_LOG") {
@@ -68,7 +84,19 @@ fn main() {
             .append(true)
             .open(log)
             .unwrap();
-        writeln!(file, "{}", args.join(" ")).unwrap();
+        file.write_all(format!("{}\n", args.join(" ")).as_bytes())
+            .unwrap();
+    }
+    if let Some(log) = env::var_os("SMOLVM_TEST_CALLER_LOG") {
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log)
+            .unwrap();
+        let mut record =
+            serde_json::to_vec(&json!({"caller":var("SMOLVM_TEST_CALLER"),"args":args})).unwrap();
+        record.push(b'\n');
+        file.write_all(&record).unwrap();
     }
     if let Some(log) = env::var_os("SMOLVM_TEST_ARGV_LOG") {
         let mut file = fs::OpenOptions::new()
@@ -76,10 +104,12 @@ fn main() {
             .append(true)
             .open(log)
             .unwrap();
-        serde_json::to_writer(&mut file, &args).unwrap();
-        writeln!(file).unwrap();
+        let mut record = serde_json::to_vec(&args).unwrap();
+        record.push(b'\n');
+        file.write_all(&record).unwrap();
     }
     if args == ["--version"] {
+        gate("VERSION");
         println!(
             "{}",
             env::var("SMOLVM_TEST_VERSION").unwrap_or("smolvm test 1.19.2".into())
@@ -172,6 +202,10 @@ fn main() {
     }
     let operation = args.get(1).map(String::as_str).unwrap_or("");
     let name = option(&args, "--name").unwrap_or_default();
+    if operation == "update" {
+        gate("UPDATE");
+    }
+
     for (op, flag, code) in [
         ("create", "CREATE", 71),
         ("start", "START", 75),

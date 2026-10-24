@@ -30,9 +30,13 @@ jobs:
           targets: ${{ matrix.target }}
           components: rustfmt, clippy
       - run: cargo fmt --all -- --check
+      - run: cargo clippy --locked --all-targets --target ${{ matrix.target }} -- -D warnings
       - run: cargo clippy --locked --features test-adapter --all-targets --target ${{ matrix.target }} -- -D warnings
+      - run: cargo test --locked --all-targets --target ${{ matrix.target }}
       - run: cargo test --locked --features test-adapter --all-targets --target ${{ matrix.target }}
       - run: cargo build --locked --release --bin codex-sandbox --target ${{ matrix.target }}
+      - name: Validate without retained baseline or host script tools
+        run: cargo run --locked --example check_baseline_independence --target ${{ matrix.target }}
       - uses: actions/upload-artifact@v4
         with:
           name: codex-sandbox-${{ matrix.target }}

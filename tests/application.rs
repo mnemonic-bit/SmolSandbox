@@ -388,6 +388,128 @@ mod lifecycle {
             .unwrap()
     }
 
+    fn calls(f: &Fixture) -> Vec<Vec<String>> {
+        fs::read_to_string(f.root.path().join("argv.jsonl"))
+            .unwrap_or_default()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect()
+    }
+    fn reset_calls(f: &Fixture) {
+        f.clear_log();
+        fs::write(f.root.path().join("argv.jsonl"), "").unwrap();
+    }
+    fn assert_no_mutations(f: &Fixture) {
+        assert!(
+            !calls(f)
+                .iter()
+                .any(|a| a.first().is_some_and(|s| s == "machine")
+                    && !a.iter().any(|s| s == "--help")
+                    && matches!(
+                        a.get(1).map(String::as_str),
+                        Some("create" | "update" | "start" | "stop" | "delete" | "exec")
+                    )),
+            "{}",
+            f.log()
+        );
+    }
+    fn stale_machine(machine: &Value, revision: &str) -> Value {
+        let mut stale = machine.clone();
+        let base = stale["labels"]["codex-sandbox.base-id"].as_str().unwrap();
+        let hash = stale["labels"]["codex-sandbox.workspace-sha256"]
+            .as_str()
+            .unwrap();
+        stale["name"] = json!(format!(
+            "codex-workspace-{base}-r{revision}-{}",
+            &hash[..12]
+        ));
+        stale["labels"]["codex-sandbox.revision"] = json!(revision);
+        stale
+    }
+    fn cache_files(f: &Fixture) -> Vec<(PathBuf, Vec<u8>)> {
+        ["base-id", "machine-revision", "generation.json"]
+            .into_iter()
+            .map(|name| {
+                let path = f.home.join(".smolsandbox/state").join(name);
+                let bytes = fs::read(&path).unwrap();
+                (path, bytes)
+            })
+            .collect()
+    }
+    fn assert_caches_unchanged(files: &[(PathBuf, Vec<u8>)]) {
+        for (path, bytes) in files {
+            assert_eq!(&fs::read(path).unwrap(), bytes, "{}", path.display());
+        }
+    }
+    fn sequence(f: &Fixture, responses: &[String]) -> PathBuf {
+        let path = f.root.path().join("sequence.jsonl");
+        fs::write(
+            &path,
+            std::iter::once(responses[0].clone())
+                .chain(responses.iter().cloned())
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+        .unwrap();
+        path
+    }
+    struct ChildGuard {
+        child: Option<std::process::Child>,
+        release: Option<PathBuf>,
+    }
+    impl ChildGuard {
+        fn spawn(command: &mut Command, release: Option<PathBuf>) -> Self {
+            Self {
+                child: Some(
+                    command
+                        .stdout(std::process::Stdio::piped())
+                        .stderr(std::process::Stdio::piped())
+                        .spawn()
+                        .unwrap(),
+                ),
+                release,
+            }
+        }
+        fn wait_for(&mut self, ready: &Path) {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            while !ready.exists() {
+                assert!(
+                    self.child.as_mut().unwrap().try_wait().unwrap().is_none(),
+                    "child exited before readiness"
+                );
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "readiness timed out: {}",
+                    ready.display()
+                );
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+        }
+        fn release(&self) {
+            if let Some(path) = &self.release {
+                fs::write(path, "release").unwrap();
+            }
+        }
+        fn finish(mut self) -> Output {
+            self.release();
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+            while self.child.as_mut().unwrap().try_wait().unwrap().is_none() {
+                assert!(std::time::Instant::now() < deadline, "child did not finish");
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            self.child.take().unwrap().wait_with_output().unwrap()
+        }
+    }
+    impl Drop for ChildGuard {
+        fn drop(&mut self) {
+            self.release();
+            if let Some(child) = &mut self.child {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
+
     #[test]
     fn start_recovers_machine_and_reconciles_exact_ports_without_changing_identity() {
         let f = Fixture::new();
@@ -441,6 +563,46 @@ mod lifecycle {
         assert_eq!(
             workspace_machine(&f)["labels"]["codex-sandbox.configuration"],
             "custom"
+        );
+
+        let latest_name = || {
+            calls(&f)
+                .into_iter()
+                .rfind(|args| {
+                    args.get(1).is_some_and(|arg| arg == "create")
+                        && args.iter().any(|arg| arg == "codex-sandbox.kind=workspace")
+                })
+                .unwrap()[3]
+                .clone()
+        };
+        assert_ok(&f.run(&["start", "--allow-host", "different.example"]));
+        assert_ne!(latest_name(), first["name"].as_str().unwrap());
+        let output = f
+            .command()
+            .env("CODEX_HOME_DIR", f.home.join("other-codex-home"))
+            .args([
+                "start",
+                "--allow-host",
+                "a.example",
+                "--allow-host",
+                "z.example",
+            ])
+            .output()
+            .unwrap();
+        assert_ok(&output);
+        assert_ne!(latest_name(), first["name"].as_str().unwrap());
+        let defaults = Fixture::new();
+        defaults.configure("codex");
+        assert_ok(&defaults.run(&["start"]));
+        let before = workspace_machine(&defaults);
+        let document: toml::Value =
+            toml::from_str(&fs::read_to_string(defaults.definition()).unwrap()).unwrap();
+        let host = document["network"]["allow_hosts"][0].as_str().unwrap();
+        assert_ok(&defaults.run(&["start", "--allow-host", host, "--allow-host", host]));
+        assert_eq!(workspace_machine(&defaults)["name"], before["name"]);
+        assert_eq!(
+            workspace_machine(&defaults)["labels"]["codex-sandbox.configuration"],
+            "default"
         );
     }
 
@@ -794,83 +956,1246 @@ mod lifecycle {
         }
     }
 
-    #[cfg(target_os = "linux")]
     #[test]
-    fn differential_start_matches_shell_creation_labels_order_and_guest_status() {
-        use codex_sandbox::domain::hash_bytes;
+    fn startup_has_independent_names_labels_order_arguments_and_exit_status() {
+        use sha2::{Digest, Sha256};
+        let digest = |bytes: &[u8]| format!("{:x}", Sha256::digest(bytes));
         let f = Fixture::new();
         f.configure("codex");
+        let workspace = f
+            .workspace
+            .canonicalize()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned();
+        #[cfg(windows)]
+        let workspace = if let Some(unc) = workspace.strip_prefix(r"\\?\UNC\") {
+            format!(r"\\{unc}")
+        } else {
+            workspace
+                .strip_prefix(r"\\?\")
+                .unwrap_or(&workspace)
+                .to_owned()
+        };
+        let definition = fs::read(f.definition()).unwrap();
+        let mut input = b"smolvm test 1.19.2\n".to_vec();
+        input.extend_from_slice(&definition);
+        let base = digest(&input)[..12].to_owned();
         let artifact_dir = f.home.join(".smolsandbox/artifacts");
         fs::create_dir_all(&artifact_dir).unwrap();
-        let mut bytes = b"smolvm test 1.19.2\n".to_vec();
-        bytes.extend_from_slice(&fs::read(f.definition()).unwrap());
-        let base = hash_bytes(&bytes)[..12].to_owned();
-        fs::write(
-            artifact_dir.join(format!("codex-devtools-{base}.smolmachine")),
-            "prepared artifact",
-        )
-        .unwrap();
-        let bin = f.root.path().join("bin");
-        fs::create_dir(&bin).unwrap();
-        std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_smolvm-test-double"), bin.join("smolvm"))
-            .unwrap();
-        let path = std::env::join_paths(
-            std::iter::once(bin).chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
-        )
-        .unwrap();
-        let base_command = f.command();
-        let mut old = Command::new("bash");
-        for (key, value) in base_command.get_envs() {
-            match value {
-                Some(value) => {
-                    old.env(key, value);
-                }
-                None => {
-                    old.env_remove(key);
-                }
-            }
-        }
-        old.current_dir(&f.workspace)
-            .env("PATH", path)
-            .env("ARTIFACTS_DIR", &artifact_dir)
-            .env("STATE_ROOT", f.home.join(".smolsandbox/state"))
-            .env("CODEX_HOME_DIR", f.home.join(".smolsandbox/codex-home"))
-            .env("BASE_SMOLFILE", f.definition())
-            .env("SMOLVM_TEST_EXEC_STATUS", "17");
-        let output = old
-            .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("start-codex.sh"))
-            .args(["--port", "3000", "--", "--help"])
-            .output()
-            .unwrap();
-        assert_eq!(
-            output.status.code(),
-            Some(17),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
+        let artifact = artifact_dir.join(format!("codex-devtools-{base}.smolmachine"));
+        fs::write(&artifact, "prepared artifact").unwrap();
+        let text: toml::Value = toml::from_str(std::str::from_utf8(&definition).unwrap()).unwrap();
+        let mut immutable = vec![
+            format!("--from={}", artifact.display()),
+            "--mem=12288".into(),
+            "--cpus=4".into(),
+            format!(
+                "--volume={}:/root/.codex",
+                f.home.join(".smolsandbox/codex-home").display()
+            ),
+            format!("--volume={}:/workspace/myrepo", workspace),
+        ];
+        immutable.extend(
+            text["network"]["allow_hosts"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|host| format!("--allow-host={}", host.as_str().unwrap())),
         );
-        let mutating = |log: &str| -> Vec<Vec<String>> {
-            log.lines()
-                .map(|line| serde_json::from_str::<Vec<String>>(line).unwrap())
-                .filter(|argv| {
-                    argv.first().is_some_and(|s| s == "machine")
-                        && !matches!(argv.get(1).map(String::as_str), Some("ls"))
-                        && !argv.iter().any(|s| s == "--help")
-                        || argv.iter().any(|s| s == "--no-daemon")
-                })
-                .collect()
-        };
-        let old_calls = mutating(&fs::read_to_string(f.root.path().join("argv.jsonl")).unwrap());
-        f.set_inventory(&[]);
-        fs::remove_dir_all(f.home.join(".smolsandbox/state")).unwrap();
-        fs::write(f.root.path().join("argv.jsonl"), "").unwrap();
+        immutable.sort();
+        immutable.dedup();
+        let hash = digest(&serde_json::to_vec(&immutable).unwrap());
+        let name = format!("codex-workspace-{base}-r5-{}", &hash[..12]);
         let output = f
             .command()
             .env("SMOLVM_TEST_EXEC_STATUS", "17")
-            .args(["start", "--port", "3000", "--", "--help"])
+            .args([
+                "start", "--port", "3000", "--", "--help", "a b", "", "--port", "9000",
+            ])
             .output()
             .unwrap();
         assert_eq!(output.status.code(), Some(17));
-        let new_calls = mutating(&fs::read_to_string(f.root.path().join("argv.jsonl")).unwrap());
-        assert_eq!(new_calls, old_calls);
+        let machine = workspace_machine(&f);
+        assert_eq!(machine["name"], name);
+        assert_eq!(
+            machine["labels"],
+            json!({
+                "codex-sandbox.kind":"workspace", "codex-sandbox.base-id":base,
+                "codex-sandbox.revision":"5", "codex-sandbox.workspace-sha256":hash,
+                "codex-sandbox.workspace-path-sha256":digest(workspace.as_bytes()),
+                "codex-sandbox.configuration":"default"
+            })
+        );
+        let calls = calls(&f);
+        let mutations: Vec<_> = calls
+            .iter()
+            .filter(|args| {
+                args.first().is_some_and(|a| a == "machine")
+                    && !matches!(args.get(1).map(String::as_str), Some("ls"))
+                    && !args.iter().any(|a| a == "--help")
+                    || args.iter().any(|a| a == "--no-daemon")
+            })
+            .collect();
+        assert_eq!(
+            mutations.iter().map(|a| a[1].as_str()).collect::<Vec<_>>(),
+            ["create", "update", "start", "exec", "exec", "stop"]
+        );
+        for args in &mutations {
+            assert_eq!(&args[..4], ["machine", args[1].as_str(), "--name", &name]);
+        }
+        let hosts: Vec<_> = mutations[0]
+            .windows(2)
+            .filter(|pair| pair[0] == "--allow-host")
+            .map(|pair| pair[1].clone())
+            .collect();
+        let mut expected_hosts: Vec<_> = text["network"]["allow_hosts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|host| host.as_str().unwrap().to_owned())
+            .collect();
+        expected_hosts.sort();
+        expected_hosts.dedup();
+        assert_eq!(hosts, expected_hosts);
+        for value in &immutable {
+            let (flag, value) = value.split_once('=').unwrap();
+            assert!(
+                mutations[0].windows(2).any(|pair| pair == [flag, value]),
+                "missing creation option {flag}={value}"
+            );
+        }
+        assert_eq!(
+            mutations[1].as_slice(),
+            [
+                "machine",
+                "update",
+                "--name",
+                &name,
+                "--remove-port",
+                "3000:3000",
+                "--port",
+                "3000"
+            ]
+        );
+        assert!(!mutations[0].iter().any(|a| a == "--port"));
+        assert_eq!(&mutations[1][mutations[1].len() - 2..], ["--port", "3000"]);
+        assert_eq!(
+            &mutations[4][4..],
+            [
+                "-it",
+                "--",
+                "codex",
+                "--no-daemon",
+                "--help",
+                "a b",
+                "",
+                "--port",
+                "9000"
+            ]
+        );
+        assert_eq!(machine["state"], "stopped");
+    }
+    #[test]
+    fn concurrent_starts_serialize_port_update_verification_and_start() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["start", "--port", "2000"]));
+        reset_calls(&f);
+        let trace = f.root.path().join("callers.jsonl");
+        let first_ready = f.root.path().join("update.ready");
+        let first_release = f.root.path().join("update.release");
+        let mut first = ChildGuard::spawn(
+            f.command()
+                .env("SMOLVM_TEST_CALLER", "first")
+                .env("SMOLVM_TEST_CALLER_LOG", &trace)
+                .env("SMOLVM_TEST_UPDATE_GATE_READY", &first_ready)
+                .env("SMOLVM_TEST_UPDATE_GATE_RELEASE", &first_release)
+                .args(["start", "--port", "3000"]),
+            Some(first_release),
+        );
+        first.wait_for(&first_ready);
+        let second_ready = f.root.path().join("version.ready");
+        let second_release = f.root.path().join("version.release");
+        let contended = f.root.path().join("lock.contended");
+        let mut second = ChildGuard::spawn(
+            f.command()
+                .env("SMOLVM_TEST_CALLER", "second")
+                .env("SMOLVM_TEST_LOCK_CONTENDED", &contended)
+                .env("SMOLVM_TEST_CALLER_LOG", &trace)
+                .env("SMOLVM_TEST_VERSION_GATE_READY", &second_ready)
+                .env("SMOLVM_TEST_VERSION_GATE_RELEASE", &second_release)
+                .args(["start", "--port", "4000"]),
+            Some(second_release),
+        );
+        second.wait_for(&second_ready);
+        second.release();
+        second.wait_for(&contended);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while fs::read_to_string(&contended).unwrap_or_default()
+            != f.home
+                .join(".smolsandbox/locks/artifacts.lock")
+                .to_string_lossy()
+        {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "second invocation did not contend for the lifecycle lock"
+            );
+            std::thread::yield_now();
+        }
+        let records: Vec<Value> = fs::read_to_string(&trace)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert!(!records.iter().any(|v| v["caller"] == "second"
+            && matches!(v["args"][1].as_str(), Some("update" | "start"))
+            && v["args"][2] == "--name"));
+        assert_eq!(
+            records
+                .iter()
+                .filter(|v| v["caller"] == "second"
+                    && v["args"][1] == "ls"
+                    && v["args"][2] == "--json")
+                .count(),
+            1
+        );
+        first.release();
+        assert_ok(&first.finish());
+        let output = second.finish();
+        assert!(matches!(output.status.code(), Some(0 | 1)));
+        let records: Vec<Value> = fs::read_to_string(trace)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        let first_update = records
+            .iter()
+            .position(|v| {
+                v["caller"] == "first" && v["args"][1] == "update" && v["args"][2] == "--name"
+            })
+            .unwrap();
+        let first_verify = records
+            .iter()
+            .enumerate()
+            .skip(first_update + 1)
+            .find(|(_, v)| v["caller"] == "first" && v["args"][1] == "ls")
+            .unwrap()
+            .0;
+        let first_start = records
+            .iter()
+            .position(|v| {
+                v["caller"] == "first" && v["args"][1] == "start" && v["args"][2] == "--name"
+            })
+            .unwrap();
+        let second_inventory = records
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| {
+                v["caller"] == "second" && v["args"][1] == "ls" && v["args"][2] == "--json"
+            })
+            .nth(1)
+            .unwrap()
+            .0;
+        assert!(
+            first_update < first_verify
+                && first_verify < first_start
+                && first_start < second_inventory
+        );
+        assert!(records
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| v["caller"] == "second"
+                && matches!(v["args"][1].as_str(), Some("update" | "start"))
+                && v["args"][2] == "--name")
+            .all(|(index, _)| index > first_start));
+    }
+
+    #[test]
+    fn port_update_and_verification_failures_preserve_recovery_and_never_start() {
+        for flag in [
+            "SMOLVM_TEST_UPDATE_FAIL",
+            "SMOLVM_TEST_UPDATE_WRONG_COUNT",
+            "SMOLVM_TEST_UPDATE_FAIL_AFTER",
+        ] {
+            let f = Fixture::new();
+            f.configure("codex");
+            assert_ok(&f.run(&["start", "--port", "3000"]));
+            let machine = workspace_machine(&f);
+            let (manifest, journal) = codex_sandbox::ports::paths(
+                &f.home.join(".smolsandbox/state"),
+                machine["name"].as_str().unwrap(),
+            );
+            let before = fs::read(&manifest).unwrap();
+            reset_calls(&f);
+            let output = f
+                .command()
+                .env(flag, "1")
+                .args(["start", "--port", "4000"])
+                .output()
+                .unwrap();
+            assert!(!output.status.success(), "{flag}");
+            assert!(
+                !calls(&f)
+                    .iter()
+                    .any(|a| a.get(1).is_some_and(|s| s == "start" || s == "exec")
+                        && !a.iter().any(|s| s == "--help")),
+                "{flag}: {}",
+                f.log()
+            );
+            assert_eq!(fs::read(&manifest).unwrap(), before);
+            assert!(journal.exists(), "{flag}");
+            assert_eq!(workspace_machine(&f)["state"], "stopped");
+            if flag == "SMOLVM_TEST_UPDATE_WRONG_COUNT" {
+                // Restore the public mapping count to the retained journal's known set.
+                let mut inv = f.inventory();
+                for m in &mut inv {
+                    if m["name"] == machine["name"] {
+                        m["_test_ports"] = json!([4000]);
+                        m["ports"] = json!(1);
+                    }
+                }
+                f.set_inventory(&inv);
+            }
+            assert_ok(&f.run(&["start", "--port", "5000"]));
+            assert_eq!(workspace_machine(&f)["_test_ports"], json!([5000]));
+            assert!(!journal.exists());
+        }
+    }
+
+    #[test]
+    fn start_failure_skips_seed_and_harness_and_attempts_owned_stop() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["start"]));
+        reset_calls(&f);
+        let output = f
+            .command()
+            .env("SMOLVM_TEST_START_FAIL", "1")
+            .arg("start")
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        let calls = calls(&f);
+        assert!(!calls
+            .iter()
+            .any(|a| a.get(1).is_some_and(|s| s == "exec") && !a.iter().any(|s| s == "--help")));
+        assert!(calls
+            .iter()
+            .any(|a| a.get(1).is_some_and(|s| s == "stop")
+                && a.get(2).is_some_and(|s| s == "--name")));
+        assert_eq!(workspace_machine(&f)["state"], "stopped");
+    }
+
+    #[test]
+    fn seed_commands_are_non_clobbering_and_failures_only_warn() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["start"]));
+        reset_calls(&f);
+        for fail in [false, true] {
+            let output = f
+                .command()
+                .env("SMOLVM_TEST_SEED_FAIL", if fail { "1" } else { "0" })
+                .env("SMOLVM_TEST_EXEC_STATUS", "19")
+                .args(["start", "--", "--help"])
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(19));
+            assert_eq!(
+                String::from_utf8_lossy(&output.stderr)
+                    .contains("could not seed persistent harness state; continuing"),
+                fail
+            );
+        }
+        let seeds: Vec<_> = calls(&f)
+            .into_iter()
+            .filter(|a| a.iter().any(|s| s == "sh"))
+            .collect();
+        assert_eq!(seeds.len(), 2);
+        for seed in seeds {
+            assert_eq!(&seed[4..],["--","sh","-lc","if [ -d /opt/codex-home ]; then cp -r --update=none /opt/codex-home/. /root/.codex/; fi"]);
+        }
+        assert_eq!(workspace_machine(&f)["state"], "stopped");
+    }
+
+    #[test]
+    fn creation_uses_selected_default_hosts_plus_normalized_additions_and_revision() {
+        let f = Fixture::new();
+        f.configure("codex");
+        fs::write(f.definition(),"# codex-sandbox-harness: codex\nimage='debian'\n[network]\nallow_hosts=['selected.example','duplicate.example','selected.example']\n").unwrap();
+        assert_ok(&f.run(&[
+            "start",
+            "--allow-host",
+            "z.example",
+            "--allow-host",
+            "duplicate.example",
+            "--allow-host",
+            "z.example",
+        ]));
+        let creation = calls(&f)
+            .into_iter()
+            .find(|a| {
+                a.get(1).is_some_and(|s| s == "create")
+                    && a.iter().any(|s| s == "codex-sandbox.kind=workspace")
+            })
+            .unwrap();
+        let hosts: Vec<_> = creation
+            .windows(2)
+            .filter(|a| a[0] == "--allow-host")
+            .map(|a| a[1].as_str())
+            .collect();
+        assert_eq!(
+            hosts,
+            ["duplicate.example", "selected.example", "z.example"]
+        );
+        assert!(creation.iter().any(|a| a == "codex-sandbox.revision=5"));
+        assert_eq!(
+            workspace_machine(&f)["labels"]["codex-sandbox.configuration"],
+            "custom"
+        );
+    }
+    #[test]
+    fn inventory_command_failure_preserves_machines_and_caches() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["start"]));
+        let before = f.inventory();
+        let caches = cache_files(&f);
+        reset_calls(&f);
+        let output = f
+            .command()
+            .env("SMOLVM_TEST_INVENTORY_FAIL", "1")
+            .arg("start")
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert_no_mutations(&f);
+        assert_eq!(f.inventory(), before);
+        assert_caches_unchanged(&caches);
+    }
+
+    #[test]
+    fn replacement_rejects_failed_creation_and_every_unready_refresh_without_cleanup() {
+        for case in [
+            "create",
+            "refresh-error",
+            "malformed",
+            "missing",
+            "duplicate",
+            "contradictory",
+            "failed",
+            "override-contradictory",
+        ] {
+            let f = Fixture::new();
+            f.configure("codex");
+            assert_ok(&f.run(&["start"]));
+            let desired = workspace_machine(&f);
+            let stale = stale_machine(&desired, "4");
+            let caches = cache_files(&f);
+            f.set_inventory(std::slice::from_ref(&stale));
+            reset_calls(&f);
+            let mut refreshed = desired.clone();
+            if case == "contradictory" || case == "override-contradictory" {
+                refreshed["labels"]["codex-sandbox.base-id"] = json!("111111111111");
+            }
+            if case == "failed" {
+                refreshed["state"] = json!("failed");
+            }
+            let fresh = match case {
+                "malformed" => "{}".to_owned(),
+                "missing" => json!([stale]).to_string(),
+                "duplicate" => json!([stale, desired, desired]).to_string(),
+                _ => json!([stale, refreshed]).to_string(),
+            };
+            let sequence = sequence(&f, &[json!([stale]).to_string(), fresh]);
+            let mut command = f.command();
+            command.env("SMOLVM_TEST_INVENTORY_SEQUENCE_FILE", &sequence);
+            if case == "create" {
+                command.env("SMOLVM_TEST_CREATE_FAIL", "1");
+            }
+            if case == "refresh-error" {
+                command.env("SMOLVM_TEST_INVENTORY_FAIL_AT", "3");
+            }
+            if case == "override-contradictory" {
+                command.env("CODEX_MACHINE", desired["name"].as_str().unwrap());
+            }
+            let output = command
+                .args(["repair", "--replace-stale"])
+                .output()
+                .unwrap();
+            assert!(!output.status.success(), "{case}");
+            assert!(
+                !f.log().contains("machine delete --name"),
+                "{case}: {}",
+                f.log()
+            );
+            assert!(
+                !f.log().contains("machine stop --name"),
+                "{case}: {}",
+                f.log()
+            );
+            assert!(
+                f.inventory().iter().any(|m| m["name"] == stale["name"]),
+                "{case}"
+            );
+            assert_caches_unchanged(&caches);
+        }
+    }
+
+    #[test]
+    fn existing_desired_replacement_is_not_recreated_and_preserves_unrelated_machines() {
+        for state in ["created", "stopped", "running", "failed"] {
+            let f = Fixture::new();
+            f.configure("codex");
+            assert_ok(&f.run(&["start"]));
+            let mut desired = workspace_machine(&f);
+            desired["state"] = json!(state);
+            let stale = stale_machine(&desired, "4");
+            let unrelated = json!({"name":"unrelated","state":"running","labels":{}});
+            f.set_inventory(&[desired.clone(), stale.clone(), unrelated.clone()]);
+            let state_root = f.home.join(".smolsandbox/state");
+            fs::write(state_root.join("base-id"), "stale-base\n").unwrap();
+            fs::write(state_root.join("machine-revision"), "99\n").unwrap();
+            let caches = cache_files(&f);
+            reset_calls(&f);
+            let output = f.run(&["repair", "--replace-stale", "--force"]);
+            assert_eq!(output.status.success(), state != "failed", "{state}");
+            assert!(!f.log().contains("machine create --name"), "{state}");
+            assert!(f.inventory().contains(&unrelated));
+            assert_eq!(
+                f.inventory().iter().any(|m| m["name"] == stale["name"]),
+                state == "failed"
+            );
+            assert!(f.inventory().iter().any(|m| m["name"] == desired["name"]));
+            if state == "failed" {
+                assert_caches_unchanged(&caches);
+            } else {
+                assert_eq!(
+                    fs::read_to_string(state_root.join("base-id")).unwrap(),
+                    format!(
+                        "{}\n",
+                        desired["labels"]["codex-sandbox.base-id"].as_str().unwrap()
+                    )
+                );
+                assert_eq!(
+                    fs::read_to_string(state_root.join("machine-revision")).unwrap(),
+                    "5\n"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn running_stale_replacement_requires_force_and_stops_before_deleting() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["start"]));
+        let desired = workspace_machine(&f);
+        let mut stale = stale_machine(&desired, "4");
+        stale["state"] = json!("running");
+        f.set_inventory(std::slice::from_ref(&stale));
+        let caches = cache_files(&f);
+        reset_calls(&f);
+        assert!(!f.run(&["repair", "--replace-stale"]).status.success());
+        assert_no_mutations(&f);
+        assert_caches_unchanged(&caches);
+        assert_ok(&f.run(&["repair", "--replace-stale", "--force"]));
+        let log = f.log();
+        let create = log.find("machine create --name").unwrap();
+        let stop = log
+            .find(&format!(
+                "machine stop --name {}",
+                stale["name"].as_str().unwrap()
+            ))
+            .unwrap();
+        let delete = log
+            .find(&format!(
+                "machine delete --name {}",
+                stale["name"].as_str().unwrap()
+            ))
+            .unwrap();
+        assert!(create < stop && stop < delete);
+    }
+
+    #[test]
+    fn replacement_partial_cleanup_failure_preserves_desired_later_machines_and_caches() {
+        for operation in ["DELETE", "STOP"] {
+            let f = Fixture::new();
+            f.configure("codex");
+            assert_ok(&f.run(&["start"]));
+            let desired = workspace_machine(&f);
+            let first = stale_machine(&desired, "3");
+            let mut second = stale_machine(&desired, "4");
+            if operation == "STOP" {
+                second["state"] = json!("running");
+            }
+            let later = stale_machine(&desired, "2");
+            f.set_inventory(&[first.clone(), second.clone(), later.clone()]);
+            let caches = cache_files(&f);
+            reset_calls(&f);
+            let output = f
+                .command()
+                .env(
+                    format!("SMOLVM_TEST_{operation}_FAIL_NAME"),
+                    second["name"].as_str().unwrap(),
+                )
+                .args(["repair", "--replace-stale", "--force"])
+                .output()
+                .unwrap();
+            assert!(!output.status.success());
+            let inventory = f.inventory();
+            assert!(!inventory.iter().any(|m| m["name"] == first["name"]));
+            for kept in [&desired, &second, &later] {
+                assert!(inventory.iter().any(|m| m["name"] == kept["name"]));
+            }
+            assert!(!f.log().contains(&format!(
+                "machine delete --name {}",
+                later["name"].as_str().unwrap()
+            )));
+            if operation == "STOP" {
+                assert!(!f.log().contains(&format!(
+                    "machine delete --name {}",
+                    second["name"].as_str().unwrap()
+                )));
+            }
+            assert_caches_unchanged(&caches);
+        }
+    }
+
+    #[test]
+    fn explicit_machine_override_accepts_legacy_ownership_and_rejects_contradictions() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["start"]));
+        let mut machine = workspace_machine(&f);
+        machine["name"] = json!("explicit-name");
+        machine["labels"] = json!({});
+        f.set_inventory(std::slice::from_ref(&machine));
+        reset_calls(&f);
+        assert_ok(
+            &f.command()
+                .env("CODEX_MACHINE", "explicit-name")
+                .arg("start")
+                .output()
+                .unwrap(),
+        );
+        assert!(!f.log().contains("machine create --name"));
+        machine["labels"] = json!({"codex-sandbox.kind":"login"});
+        f.set_inventory(&[machine]);
+        reset_calls(&f);
+        assert!(!f
+            .command()
+            .env("CODEX_MACHINE", "explicit-name")
+            .args(["repair", "--replace-stale"])
+            .output()
+            .unwrap()
+            .status
+            .success());
+        assert_no_mutations(&f);
+    }
+
+    #[test]
+    fn concurrent_creation_and_replacement_register_and_delete_each_machine_once() {
+        for replacement in [false, true] {
+            let f = Fixture::new();
+            f.configure("codex");
+            let mut stale = None;
+            if replacement {
+                assert_ok(&f.run(&["start"]));
+                let m = stale_machine(&workspace_machine(&f), "4");
+                stale = Some(m["name"].as_str().unwrap().to_owned());
+                f.set_inventory(&[m]);
+            }
+            reset_calls(&f);
+            let args = if replacement {
+                vec!["repair", "--replace-stale"]
+            } else {
+                vec!["start"]
+            };
+            let first = ChildGuard::spawn(f.command().args(&args), None);
+            let second = ChildGuard::spawn(f.command().args(&args), None);
+            assert_ok(&first.finish());
+            assert_ok(&second.finish());
+            let calls = calls(&f);
+            assert_eq!(
+                calls
+                    .iter()
+                    .filter(|a| a.get(1).is_some_and(|s| s == "create")
+                        && a.iter().any(|s| s == "codex-sandbox.kind=workspace"))
+                    .count(),
+                1
+            );
+            if let Some(stale) = stale {
+                assert_eq!(
+                    calls
+                        .iter()
+                        .filter(|a| a.get(1).is_some_and(|s| s == "delete")
+                            && a.iter().any(|s| s == &stale))
+                        .count(),
+                    1
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn generation_clean_removes_only_current_machines_artifacts_and_caches() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["build"]));
+        let workspace = workspace_machine(&f);
+        let base = workspace["labels"]["codex-sandbox.base-id"]
+            .as_str()
+            .unwrap();
+        let artifact_dir = f.home.join(".smolsandbox/artifacts");
+        fs::write(
+            artifact_dir.join(format!("codex-devtools-{base}")),
+            "legacy artifact",
+        )
+        .unwrap();
+        let other_artifact = artifact_dir.join("codex-devtools-fedcba987654.smolmachine");
+        fs::write(&other_artifact, "keep").unwrap();
+        let harness = f.home.join(".smolsandbox/codex-home/user-config");
+        fs::write(&harness, "keep").unwrap();
+        let mut inventory = f.inventory();
+        inventory.extend([
+            json!({"name":format!("codex-builder-{base}"),"state":"stopped","labels":{}}),
+            json!({"name":format!("codex-login-{base}-r4"),"state":"stopped","labels":{}}),
+            stale_machine(&workspace, "4"),
+        ]);
+        let other = json!({"name":"codex-builder-fedcba987654","state":"stopped","labels":{}});
+        let unrelated = json!({"name":"unrelated-machine","state":"running","labels":{}});
+        inventory.extend([other.clone(), unrelated.clone()]);
+        f.set_inventory(&inventory);
+        reset_calls(&f);
+        let output = f.run(&["clean"]);
+        assert_ok(&output);
+        assert_eq!(f.inventory(), vec![other, unrelated]);
+        assert!(String::from_utf8_lossy(&output.stdout)
+            .contains("Removed 5 VM(s) and the cached artifact."));
+        for suffix in ["", ".smolmachine"] {
+            assert!(!artifact_dir
+                .join(format!("codex-devtools-{base}{suffix}"))
+                .exists());
+        }
+        for cache in ["base-id", "machine-revision", "generation.json"] {
+            assert!(!f.home.join(".smolsandbox/state").join(cache).exists());
+        }
+        assert!(other_artifact.exists());
+        assert!(harness.exists());
+        assert!(f.definition().exists());
+    }
+
+    #[test]
+    fn workspace_clean_spans_generations_preserves_other_paths_and_rejects_contradictions() {
+        for contradictory in [false, true] {
+            let f = Fixture::new();
+            f.configure("codex");
+            assert_ok(&f.run(&["build"]));
+            let desired = workspace_machine(&f);
+            let mut old = stale_machine(&desired, "3");
+            old["labels"]["codex-sandbox.base-id"] = json!("fedcba987654");
+            old["labels"]["codex-sandbox.configuration"] = json!("custom");
+            old["name"] = json!(format!(
+                "codex-workspace-fedcba987654-r3-{}",
+                &old["labels"]["codex-sandbox.workspace-sha256"]
+                    .as_str()
+                    .unwrap()[..12]
+            ));
+            let mut other = stale_machine(&desired, "2");
+            other["labels"]["codex-sandbox.workspace-path-sha256"] = json!("f".repeat(64));
+            if contradictory {
+                old["labels"]["codex-sandbox.workspace-sha256"] = json!("a".repeat(64));
+            }
+            let login = f
+                .inventory()
+                .into_iter()
+                .find(|m| m["labels"]["codex-sandbox.kind"] == "login")
+                .unwrap();
+            f.set_inventory(&[desired.clone(), old.clone(), other.clone(), login.clone()]);
+            let caches = cache_files(&f);
+            let before = fs::read_dir(f.home.join(".smolsandbox/artifacts"))
+                .unwrap()
+                .count();
+            let (_, pending) = codex_sandbox::ports::paths(
+                &f.home.join(".smolsandbox/state"),
+                old["name"].as_str().unwrap(),
+            );
+            fs::create_dir_all(pending.parent().unwrap()).unwrap();
+            fs::write(&pending, "{}").unwrap();
+            let (manifest, _) = codex_sandbox::ports::paths(
+                &f.home.join(".smolsandbox/state"),
+                desired["name"].as_str().unwrap(),
+            );
+            fs::write(&manifest, "{}").unwrap();
+            let harness = f.home.join(".smolsandbox/codex-home/user-config");
+            fs::write(&harness, "keep").unwrap();
+            reset_calls(&f);
+            let output = f.run(&["clean", "--workspace"]);
+            if contradictory {
+                assert!(!output.status.success());
+                assert_no_mutations(&f);
+                assert!(pending.exists());
+                assert!(manifest.exists());
+                assert!(String::from_utf8_lossy(&output.stderr)
+                    .contains("managed labels are contradictory"));
+            } else {
+                assert_ok(&output);
+                assert_eq!(f.inventory(), vec![other, login]);
+                assert!(!pending.exists());
+                assert!(!manifest.exists());
+                let expected_workspace = f
+                    .workspace
+                    .canonicalize()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string();
+                #[cfg(windows)]
+                let expected_workspace = expected_workspace
+                    .strip_prefix(r"\\?\")
+                    .unwrap_or(&expected_workspace)
+                    .to_owned();
+                assert!(String::from_utf8_lossy(&output.stdout).contains(&expected_workspace));
+                assert!(
+                    String::from_utf8_lossy(&output.stdout).contains("Removed 2 workspace VM(s)")
+                );
+            }
+            assert_eq!(fs::read_to_string(&harness).unwrap(), "keep");
+            assert_caches_unchanged(&caches);
+            assert!(f.definition().exists());
+            assert_eq!(
+                fs::read_dir(f.home.join(".smolsandbox/artifacts"))
+                    .unwrap()
+                    .count(),
+                before
+            );
+        }
+    }
+
+    #[test]
+    fn generation_clean_partial_delete_failure_preserves_artifacts_caches_and_later_machines() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["build"]));
+        let workspace = workspace_machine(&f);
+        let caches = cache_files(&f);
+        let mut before = f.inventory();
+        for machine in &mut before {
+            machine["state"] = json!("stopped");
+        }
+        f.set_inventory(&before);
+        let output = f
+            .command()
+            .env(
+                "SMOLVM_TEST_DELETE_FAIL_NAME",
+                workspace["name"].as_str().unwrap(),
+            )
+            .arg("clean")
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert_eq!(f.inventory(), before);
+        assert_caches_unchanged(&caches);
+        assert!(fs::read_dir(f.home.join(".smolsandbox/artifacts"))
+            .unwrap()
+            .next()
+            .is_some());
+    }
+
+    #[test]
+    fn purge_missing_artifact_allows_only_stopped_builder_recovery() {
+        for case in [
+            "stopped-builder",
+            "missing-builder",
+            "running-builder",
+            "empty-artifact",
+        ] {
+            let f = Fixture::new();
+            f.configure("codex");
+            assert_ok(&f.run(&["start"]));
+            let workspace = workspace_machine(&f);
+            let base = workspace["labels"]["codex-sandbox.base-id"]
+                .as_str()
+                .unwrap();
+            let artifacts = f.home.join(".smolsandbox/artifacts");
+            let current = artifacts.join(format!("codex-devtools-{base}.smolmachine"));
+            fs::remove_file(&current).unwrap();
+            if case == "empty-artifact" {
+                fs::write(&current, "").unwrap();
+            }
+            let old = json!({"name":"codex-builder-111111111111","state":"stopped","labels":{}});
+            let mut inventory = vec![old.clone()];
+            if case != "missing-builder" {
+                inventory.push(json!({"name":format!("codex-builder-{base}"),"state":if case == "running-builder" {"running"} else {"stopped"},"labels":{}}));
+            }
+            f.set_inventory(&inventory);
+            let old_artifact = artifacts.join("codex-devtools-111111111111.smolmachine");
+            fs::write(&old_artifact, "old").unwrap();
+            reset_calls(&f);
+            let output = f.run(&["purge"]);
+            assert_eq!(
+                output.status.success(),
+                case == "stopped-builder",
+                "{case}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert!(f.inventory().iter().any(|m| m["name"] == old["name"]));
+            assert!(old_artifact.exists());
+            assert!(!f
+                .log()
+                .contains("machine delete --name codex-builder-111111111111"));
+            if case == "stopped-builder" {
+                assert!(String::from_utf8_lossy(&output.stdout)
+                    .contains("Removed 1 machine(s), 0 generation(s), and 0 artifact file(s)."));
+                assert!(!f
+                    .inventory()
+                    .iter()
+                    .any(|m| m["name"] == format!("codex-builder-{base}")));
+            } else {
+                assert_no_mutations(&f);
+            }
+        }
+    }
+
+    #[test]
+    fn purge_selects_exact_artifact_names_and_reports_removals() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["start"]));
+        let artifacts = f.home.join(".smolsandbox/artifacts");
+        for suffix in ["", ".smolmachine", ".backup", ".smolmachine.backup"] {
+            fs::write(
+                artifacts.join(format!("codex-devtools-111111111111{suffix}")),
+                "old",
+            )
+            .unwrap();
+        }
+        let unrelated = artifacts.join("unrelated");
+        fs::write(&unrelated, "keep").unwrap();
+        let directory = artifacts.join("codex-devtools-222222222222.smolmachine");
+        fs::create_dir(&directory).unwrap();
+        let mut inv = f.inventory();
+        inv.push(json!({"name":"codex-builder-111111111111","state":"stopped","labels":{}}));
+        f.set_inventory(&inv);
+        let output = f.run(&["purge"]);
+        assert_ok(&output);
+        assert!(String::from_utf8_lossy(&output.stdout)
+            .contains("Removed 1 machine(s), 1 generation(s), and 2 artifact file(s)."));
+        for suffix in ["", ".smolmachine"] {
+            assert!(!artifacts
+                .join(format!("codex-devtools-111111111111{suffix}"))
+                .exists());
+        }
+        for suffix in [".backup", ".smolmachine.backup"] {
+            assert!(artifacts
+                .join(format!("codex-devtools-111111111111{suffix}"))
+                .exists());
+        }
+        assert!(unrelated.exists());
+        assert!(directory.is_dir());
+    }
+
+    #[test]
+    fn purge_fresh_running_change_prevents_all_deletions() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["start"]));
+        let old = json!({"name":"codex-builder-111111111111","state":"stopped","labels":{}});
+        let mut running = old.clone();
+        running["state"] = json!("running");
+        let artifact = f
+            .home
+            .join(".smolsandbox/artifacts/codex-devtools-111111111111.smolmachine");
+        fs::write(&artifact, "old").unwrap();
+        let sequence = sequence(
+            &f,
+            &[json!([old]).to_string(), json!([running]).to_string()],
+        );
+        reset_calls(&f);
+        let output = f
+            .command()
+            .env("SMOLVM_TEST_INVENTORY_SEQUENCE_FILE", sequence)
+            .arg("purge")
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert_no_mutations(&f);
+        assert!(artifact.exists());
+    }
+
+    #[test]
+    fn purge_partial_machine_failure_preserves_all_artifacts_and_later_machines() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["start"]));
+        let mut inv = f.inventory();
+        for base in ["111111111111", "222222222222", "333333333333"] {
+            inv.push(json!({"name":format!("codex-builder-{base}"),"state":"stopped","labels":{}}));
+            fs::write(
+                f.home.join(format!(
+                    ".smolsandbox/artifacts/codex-devtools-{base}.smolmachine"
+                )),
+                "old",
+            )
+            .unwrap();
+        }
+        f.set_inventory(&inv);
+        reset_calls(&f);
+        let output = f
+            .command()
+            .env("SMOLVM_TEST_DELETE_FAIL_NAME", "codex-builder-222222222222")
+            .arg("purge")
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        let inv = f.inventory();
+        assert!(!inv
+            .iter()
+            .any(|m| m["name"] == "codex-builder-111111111111"));
+        for base in ["222222222222", "333333333333"] {
+            assert!(inv
+                .iter()
+                .any(|m| m["name"] == format!("codex-builder-{base}")));
+        }
+        for base in ["111111111111", "222222222222", "333333333333"] {
+            assert!(f
+                .home
+                .join(format!(
+                    ".smolsandbox/artifacts/codex-devtools-{base}.smolmachine"
+                ))
+                .exists());
+        }
+        assert!(!f
+            .log()
+            .contains("machine delete --name codex-builder-333333333333"));
+    }
+
+    #[test]
+    fn build_preserves_custom_configurations_when_automatic_purge_refuses() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["start"]));
+        assert_ok(&f.run(&["start", "--allow-host", "custom.example"]));
+        let before = f.inventory();
+        let old_artifact = f
+            .home
+            .join(".smolsandbox/artifacts/codex-devtools-111111111111.smolmachine");
+        fs::write(&old_artifact, "old").unwrap();
+        reset_calls(&f);
+        let output = f.run(&["build"]);
+        assert_ok(&output);
+        assert!(String::from_utf8_lossy(&output.stderr).contains("parallel configurations exist"));
+        assert!(!f.log().contains("machine delete --name"));
+        assert!(old_artifact.exists());
+        for machine in before {
+            assert!(f.inventory().iter().any(|m| m["name"] == machine["name"]));
+        }
+    }
+    #[test]
+    fn incompatible_port_capability_refuses_before_inventory_or_mutations() {
+        let f = Fixture::new();
+        f.configure("codex");
+        let output = f
+            .command()
+            .env("SMOLVM_TEST_INCOMPATIBLE_UPDATE", "1")
+            .arg("start")
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert_no_mutations(&f);
+        assert!(!calls(&f).iter().any(|a| a == &["machine", "ls", "--json"]));
+    }
+
+    #[test]
+    fn malformed_port_metadata_and_unknown_positive_sets_fail_before_mutation() {
+        for case in ["timestamp", "count", "unknown-state", "unknown-set"] {
+            let f = Fixture::new();
+            f.configure("codex");
+            assert_ok(&f.run(&["start"]));
+            let mut machine = workspace_machine(&f);
+            match case {
+                "timestamp" => machine["created_at"] = json!(true),
+                "count" => {
+                    machine.as_object_mut().unwrap().remove("_test_ports");
+                    machine["ports"] = json!(-1);
+                }
+                "unknown-state" => machine["state"] = json!("failed"),
+                _ => {
+                    machine["_test_ports"] = json!([4444]);
+                    machine["ports"] = json!(1);
+                }
+            }
+            f.set_inventory(std::slice::from_ref(&machine));
+            let (manifest, journal) = codex_sandbox::ports::paths(
+                &f.home.join(".smolsandbox/state"),
+                machine["name"].as_str().unwrap(),
+            );
+            if case == "unknown-set" {
+                fs::remove_file(manifest).unwrap();
+                assert!(!journal.exists());
+            }
+            reset_calls(&f);
+            assert!(
+                !f.run(&["start", "--port", "4444"]).status.success(),
+                "{case}"
+            );
+            assert_no_mutations(&f);
+        }
+    }
+
+    #[test]
+    fn new_zero_port_incarnation_replaces_stale_manifest_without_changing_identity() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["start", "--port", "3000"]));
+        let mut machine = workspace_machine(&f);
+        machine["_test_ports"] = json!([]);
+        machine["ports"] = json!(0);
+        machine["created_at"] = json!(2);
+        f.set_inventory(std::slice::from_ref(&machine));
+        assert_ok(&f.run(&["start", "--port", "4000"]));
+        let selected = workspace_machine(&f);
+        assert_eq!(selected["name"], machine["name"]);
+        assert_eq!(selected["_test_ports"], json!([4000]));
+        let (manifest, journal) = codex_sandbox::ports::paths(
+            &f.home.join(".smolsandbox/state"),
+            selected["name"].as_str().unwrap(),
+        );
+        let value: Value = serde_json::from_slice(&fs::read(manifest).unwrap()).unwrap();
+        assert_eq!(value["created_at"], 2);
+        assert_eq!(value["ports"], json!([4000]));
+        assert!(!journal.exists());
+    }
+
+    #[test]
+    fn exact_running_port_set_executes_harness_without_update_start_or_owned_stop() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["start", "--port", "3000"]));
+        let mut machine = workspace_machine(&f);
+        machine["state"] = json!("running");
+        f.set_inventory(&[machine]);
+        reset_calls(&f);
+        assert_ok(&f.run(&["start", "--port", "3000"]));
+        let calls = calls(&f);
+        assert!(calls.iter().any(|a| a.iter().any(|s| s == "--no-daemon")));
+        assert!(!calls.iter().any(|a| matches!(
+            a.get(1).map(String::as_str),
+            Some("start" | "stop" | "update")
+        ) && a.get(2).is_some_and(|s| s == "--name")));
+        assert_eq!(workspace_machine(&f)["state"], "running");
+    }
+
+    #[test]
+    fn successful_workspace_deletion_removes_manifest_and_pending_journal() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["start", "--port", "3000"]));
+        let machine = workspace_machine(&f);
+        let (manifest, journal) = codex_sandbox::ports::paths(
+            &f.home.join(".smolsandbox/state"),
+            machine["name"].as_str().unwrap(),
+        );
+        fs::write(&journal, "{}").unwrap();
+        assert_ok(&f.run(&["clean", "--workspace"]));
+        assert!(!manifest.exists());
+        assert!(!journal.exists());
+    }
+
+    #[test]
+    fn builders_are_packed_before_workspace_creation_and_removed_when_artifacts_exist() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["start"]));
+        let log = f.log();
+        let pack = log.find("pack create --from-vm").unwrap();
+        let workspace_create = log.find("codex-sandbox.kind=workspace").unwrap();
+        assert!(pack < workspace_create);
+        assert!(!f
+            .inventory()
+            .iter()
+            .any(|m| m["labels"]["codex-sandbox.kind"] == "builder"));
+        let workspace = workspace_machine(&f);
+        let base = workspace["labels"]["codex-sandbox.base-id"]
+            .as_str()
+            .unwrap();
+        let artifacts = f.home.join(".smolsandbox/artifacts");
+        fs::write(
+            artifacts.join("codex-devtools-111111111111.smolmachine"),
+            "old",
+        )
+        .unwrap();
+        let mut inventory = f.inventory();
+        for base in [base, "111111111111"] {
+            inventory.push(
+                json!({"name":format!("codex-builder-{base}"),"state":"stopped","labels":{}}),
+            );
+        }
+        f.set_inventory(&inventory);
+        reset_calls(&f);
+        assert_ok(&f.run(&["start"]));
+        for base in [base, "111111111111"] {
+            assert!(f.log().contains(&format!(
+                "machine delete --name codex-builder-{base} --force"
+            )));
+        }
+        assert!(!f.log().contains("pack create"));
+    }
+    #[test]
+    fn desired_machine_recovery_republishes_missing_and_stale_generation_caches() {
+        for missing in [false, true] {
+            let f = Fixture::new();
+            f.configure("codex");
+            assert_ok(&f.run(&["start"]));
+            let machine = workspace_machine(&f);
+            let root = f.home.join(".smolsandbox/state");
+            if missing {
+                for name in ["base-id", "machine-revision", "generation.json"] {
+                    fs::remove_file(root.join(name)).unwrap();
+                }
+            } else {
+                fs::write(root.join("base-id"), "stale-base\n").unwrap();
+                fs::write(root.join("machine-revision"), "99\n").unwrap();
+            }
+            reset_calls(&f);
+            assert_ok(&f.run(&["start"]));
+            assert!(!f.log().contains("machine create --name"));
+            let base = machine["labels"]["codex-sandbox.base-id"].as_str().unwrap();
+            assert_eq!(
+                fs::read_to_string(root.join("base-id")).unwrap(),
+                format!("{base}\n")
+            );
+            assert_eq!(
+                fs::read_to_string(root.join("machine-revision")).unwrap(),
+                "5\n"
+            );
+            let generation: Value =
+                serde_json::from_slice(&fs::read(root.join("generation.json")).unwrap()).unwrap();
+            assert_eq!(
+                generation,
+                json!({"version":1,"base_id":base,"revision":"5"})
+            );
+        }
+    }
+
+    #[test]
+    fn stale_only_normal_start_preserves_every_cache_and_machine() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["start"]));
+        let stale = stale_machine(&workspace_machine(&f), "4");
+        f.set_inventory(std::slice::from_ref(&stale));
+        let caches = cache_files(&f);
+        reset_calls(&f);
+        let output = f.run(&["start"]);
+        assert!(!output.status.success());
+        assert_no_mutations(&f);
+        assert_eq!(f.inventory(), vec![stale.clone()]);
+        assert_caches_unchanged(&caches);
+        let diagnostics = String::from_utf8_lossy(&output.stderr);
+        assert!(diagnostics.contains(stale["name"].as_str().unwrap()));
+        assert!(diagnostics.contains("--replace-stale"));
     }
 }

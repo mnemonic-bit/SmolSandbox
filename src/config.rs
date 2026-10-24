@@ -497,14 +497,238 @@ mod tests {
         assert!(definition.allow_hosts.is_empty());
     }
     #[test]
-    fn codex_template_preserves_baseline_provisioning_pins_and_verification() {
-        let baseline = include_str!("../devtools-base.smolfile");
-        assert!(Profile::Codex.template().ends_with(baseline));
-        assert!(Profile::Codex.template().contains("@openai/codex@0.164.0"));
-        assert!(Profile::Codex.template().contains("CBM_DOWNLOAD_URL=https://github.com/DeusData/codebase-memory-mcp/releases/download/v0.11.0"));
-        assert!(Profile::Codex
-            .template()
-            .contains("/root/.local/bin/codebase-memory-mcp --version"));
+    fn codex_template_preserves_provisioning_tools_pins_and_verification() {
+        let document: toml::Value = toml::from_str(Profile::Codex.template()).unwrap();
+        assert_eq!(document["image"].as_str(), Some("debian:bookworm-slim"));
+        let commands: Vec<_> = document["dev"]["init"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|command| command.as_str().unwrap())
+            .collect();
+        let package_command = commands
+            .iter()
+            .find(|command| {
+                command.contains("apt-get install -y --no-install-recommends")
+                    && command.contains("podman")
+            })
+            .unwrap();
+        let packages: Vec<_> = package_command.split_whitespace().collect();
+        for package in [
+            "bash",
+            "ca-certificates",
+            "coreutils",
+            "curl",
+            "git",
+            "grep",
+            "gzip",
+            "mawk",
+            "tar",
+            "openssh-client",
+            "build-essential",
+            "pkg-config",
+            "ripgrep",
+            "unzip",
+            "jq",
+            "sqlite3",
+            "httpie",
+            "pipx",
+            "python3",
+            "python3-pip",
+            "python3-venv",
+            "tzdata",
+            "libgssapi-krb5-2",
+            "libicu72",
+            "libssl3",
+            "zlib1g",
+            "podman",
+            "podman-docker",
+            "podman-compose",
+            "buildah",
+        ] {
+            assert!(packages.contains(&package), "missing package: {package}");
+        }
+        for command in [
+            "npm install -g @openai/codex@0.164.0",
+            "npx -y skills@1.7.0 add mattpocock/skills --skill=grill-me --skill=grilling --agent codex --global --yes",
+            "dotnet tool install -g dotnet-ef --version 8.0.31",
+            "dotnet tool install -g dotnet-dump --version 8.0.547301",
+            "dotnet tool install -g dotnet-trace --version 8.0.547301",
+            "dotnet tool install -g dotnet-counters --version 8.0.547301",
+            "pipx install uv==0.12.17",
+            "pipx install pytest==9.1.1",
+            "pipx install debugpy==1.8.22",
+            "pipx install ruff==0.16.8",
+            "npm install -g tsx@4.23.15 vitest@5.0.1",
+            "npm install -g playwright@1.63.0 @playwright/test@1.63.0",
+            "DEBIAN_FRONTEND=noninteractive playwright install --with-deps chromium",
+            "python3 -m pip install --break-system-packages playwright==1.63.0",
+            "python3 -m playwright install chromium",
+            "rustc --version && cargo --version && cargo fmt --version && cargo clippy --version",
+            "touch /etc/containers/nodocker",
+            "docker compose version",
+            "docker run --rm docker.io/library/alpine echo nested-podman-via-docker-ok",
+            "/root/.local/bin/codebase-memory-mcp --version",
+            "ln -sf /root/.local/bin/codebase-memory-mcp /usr/local/bin/",
+        ] {
+            assert!(commands.contains(&command), "missing init command: {command}");
+        }
+        for installer in [
+            "https://sh.rustup.rs -o /tmp/rustup-init.sh",
+            "--default-toolchain stable --profile minimal --component rustfmt --component clippy",
+            "https://dot.net/v1/dotnet-install.sh",
+            "--channel 8.0 --install-dir /usr/share/dotnet --no-path",
+            "https://deb.nodesource.com/setup_22.x",
+        ] {
+            assert!(
+                commands.iter().any(|command| command.contains(installer)),
+                "missing installer option: {installer}"
+            );
+        }
+        assert!(!commands
+            .iter()
+            .any(|command| command.contains("codebase-memory-mcp/main/scripts/setup.sh")));
+        let cbm = commands
+            .iter()
+            .find(|command| command.contains("codebase-memory-mcp/v0.11.0/install.sh"))
+            .unwrap();
+        assert!(cbm.contains("CBM_DOWNLOAD_URL=https://github.com/DeusData/codebase-memory-mcp/releases/download/v0.11.0"));
+        assert!(cbm.ends_with("bash -s -- --clients=codex"));
+        let codex_index = commands
+            .iter()
+            .position(|command| command.starts_with("npm install -g @openai/codex@"))
+            .unwrap();
+        let cbm_index = commands.iter().position(|command| command == cbm).unwrap();
+        assert!(codex_index < cbm_index);
+        let docker = commands
+            .iter()
+            .find(|command| command.contains("> /usr/local/bin/docker"))
+            .unwrap();
+        for fragment in [
+            "if [ \"$1\" = compose ]",
+            "shift",
+            "exec /usr/bin/podman-compose \"$@\"",
+            "exec /usr/bin/docker \"$@\"",
+            "chmod 0755 /usr/local/bin/docker",
+            "ln -sf /usr/bin/podman-compose /usr/local/bin/docker-compose",
+        ] {
+            assert!(
+                docker.contains(fragment),
+                "missing Docker compatibility fragment: {fragment}"
+            );
+        }
+        let storage = commands
+            .iter()
+            .find(|command| command.contains("> /etc/containers/storage.conf"))
+            .unwrap();
+        assert!(storage.contains("[storage]\\ndriver = \"overlay\"\\ngraphroot = \"/storage/containers/storage\"\\nrunroot = \"/run/containers/storage\"\\n"));
+        assert!(commands.last().unwrap().contains(
+            "mkdir -p /workspace/myrepo /opt/codex-home && cp -a /root/.codex/. /opt/codex-home/"
+        ));
+    }
+    #[test]
+    fn codex_template_seed_settings_are_parsed_and_explicit() {
+        let document: toml::Value = toml::from_str(Profile::Codex.template()).unwrap();
+        let command = document["dev"]["init"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(toml::Value::as_str)
+            .find(|command| command.contains("> /root/.codex/config.toml"))
+            .unwrap();
+        let expression =
+            regex::Regex::new(r"printf '([^']*)' > /root/\.codex/config\.toml").unwrap();
+        let captures = expression.captures(command).unwrap();
+        let settings: toml::Value = toml::from_str(&captures[1].replace("\\n", "\n")).unwrap();
+        assert_eq!(settings["model"].as_str(), Some("gpt-5.6-sol"));
+        assert_eq!(settings["model_reasoning_effort"].as_str(), Some("high"));
+        assert_eq!(
+            settings["model_context_window"].as_integer(),
+            Some(1_000_000)
+        );
+        assert_eq!(
+            settings["model_auto_compact_token_limit"].as_integer(),
+            Some(900_000)
+        );
+        assert_eq!(
+            settings["sandbox_mode"].as_str(),
+            Some("danger-full-access")
+        );
+        assert_eq!(settings["approval_policy"].as_str(), Some("never"));
+        let status_line: Vec<_> = settings["tui"]["status_line"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap())
+            .collect();
+        assert_eq!(
+            status_line,
+            [
+                "model-with-reasoning",
+                "current-dir",
+                "context-remaining",
+                "used-tokens",
+                "five-hour-limit",
+                "weekly-limit"
+            ]
+        );
+        assert_eq!(
+            settings["tui"]["status_line_use_colors"].as_bool(),
+            Some(true)
+        );
+        assert_eq!(
+            settings["projects"]["/workspace/myrepo"]["trust_level"].as_str(),
+            Some("trusted")
+        );
+    }
+    #[test]
+    fn codex_template_default_hosts_are_exposed_by_definition() {
+        let definition = Definition::parse(
+            PathBuf::from("codex.smlbx"),
+            Profile::Codex.template().as_bytes().to_vec(),
+        )
+        .unwrap();
+        let actual: std::collections::BTreeSet<_> =
+            definition.allow_hosts.iter().map(String::as_str).collect();
+        let expected = std::collections::BTreeSet::from([
+            "api.openai.com",
+            "auth.openai.com",
+            "chatgpt.com",
+            "api.nuget.org",
+            "globalcdn.nuget.org",
+            "registry.npmjs.org",
+            "sh.rustup.rs",
+            "static.rust-lang.org",
+            "index.crates.io",
+            "static.crates.io",
+            "crates.io",
+            "pypi.org",
+            "files.pythonhosted.org",
+            "registry-1.docker.io",
+            "auth.docker.io",
+            "production.cloudflare.docker.com",
+            "production.cloudfront.docker.com",
+            "ghcr.io",
+            "pkg-containers.githubusercontent.com",
+            "mcr.microsoft.com",
+            "dot.net",
+            "aka.ms",
+            "builds.dotnet.microsoft.com",
+            "ci.dot.net",
+            "cdn.playwright.dev",
+            "storage.googleapis.com",
+            "playwright.download.prss.microsoft.com",
+            "github.com",
+            "api.github.com",
+            "raw.githubusercontent.com",
+            "release-assets.githubusercontent.com",
+            "objects.githubusercontent.com",
+            "codeload.github.com",
+            "deb.debian.org",
+            "deb.nodesource.com",
+        ]);
+        assert_eq!(actual, expected);
+        assert_eq!(definition.allow_hosts.len(), expected.len());
     }
     #[cfg(windows)]
     #[test]

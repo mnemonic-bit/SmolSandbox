@@ -76,23 +76,25 @@ enum ParsedCommand {
     Build {
         #[command(flatten)]
         selection: Selection,
+        /// Select the workspace. The current directory is used when WORKSPACE is omitted.
         workspace: Option<PathBuf>,
     },
     /// Reconcile ports and start the selected guest harness.
     Start {
         #[command(flatten)]
         selection: Selection,
+        /// Add a host to the selected definition's network allowlist. Repeat --allow-host HOST or --allow-host=HOST before or after WORKSPACE. Each host must be nonempty, contain no line breaks, and not start with -.
         #[arg(long = "allow-host", value_parser = parse_host)]
         allow_hosts: Vec<String>,
-        /// Request an exact TCP port set; omission clears previous mappings.
+        /// Request an exact TCP port set; omission clears previous mappings. Repeat --port PORT or --port=PORT to publish the same guest and host port. Ports bind to host loopback by default.
         #[arg(long = "port", value_parser = parse_port)]
         ports: Vec<String>,
         workspace: Option<PathBuf>,
-        /// Pass arguments unchanged to the guest harness after --.
+        /// Pass arguments unchanged to the guest harness after --. Use -- --help to request help from the selected harness.
         #[arg(last = true, allow_hyphen_values = true)]
         harness_args: Vec<OsString>,
     },
-    /// Authenticate using the selected harness's supported login workflow.
+    /// Authenticate using the selected harness's supported login workflow. Codex uses device authentication; other harnesses use their own login workflow.
     Login {
         #[command(flatten)]
         selection: Selection,
@@ -102,17 +104,21 @@ enum ParsedCommand {
     Repair {
         #[command(flatten)]
         selection: Selection,
+        /// Inspect the selected workspace without replacing stale machines. Choose exactly one of --check or --replace-stale.
         #[arg(long)]
         check: bool,
+        /// Replace stale workspace machines after the replacement passes readiness checks.
         #[arg(long)]
         replace_stale: bool,
+        /// Permit removal of running stale machines. Use with --replace-stale only.
         #[arg(long, requires = "replace_stale", conflicts_with = "check")]
         force: bool,
+        /// Add a host to the workspace network allowlist used by start. Repeat --allow-host HOST or --allow-host=HOST before or after WORKSPACE. Each host must be nonempty, contain no line breaks, and not start with -.
         #[arg(long = "allow-host", value_parser = parse_host)]
         allow_hosts: Vec<String>,
         workspace: Option<PathBuf>,
     },
-    /// Remove the current generation or only machines for a workspace.
+    /// Remove the current generation or only machines for a workspace. Preserve shared harness state, including credentials and settings.
     Clean {
         #[command(flatten)]
         selection: Selection,
@@ -121,12 +127,14 @@ enum ParsedCommand {
         #[arg(requires = "workspace_only")]
         workspace: Option<PathBuf>,
     },
-    /// Purge eligible stopped machines and unprotected superseded artifacts.
+    /// Purge eligible stopped machines and unprotected superseded artifacts. Use the conservative policy when no force option is given. --force and --force-all are mutually exclusive. Preserve running machines and protected artifacts under every policy.
     Purge {
         #[command(flatten)]
         selection: Selection,
+        /// Remove eligible stopped custom and legacy machines while preserving the current base's stopped default configurations.
         #[arg(long, conflicts_with = "force_all")]
         force: bool,
+        /// Remove every eligible stopped managed machine, including stopped default configurations.
         #[arg(long)]
         force_all: bool,
     },

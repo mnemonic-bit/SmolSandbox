@@ -161,7 +161,13 @@ impl FileLock {
             match file.try_lock_exclusive() {
                 Ok(()) => return Ok(Self { file }),
                 Err(error)
-                    if error.raw_os_error() == fs2::lock_contended_error().raw_os_error() => {}
+                    if error.raw_os_error() == fs2::lock_contended_error().raw_os_error() =>
+                {
+                    #[cfg(feature = "test-adapter")]
+                    if let Some(marker) = std::env::var_os("SMOLVM_TEST_LOCK_CONTENDED") {
+                        fs::write(marker, path.to_string_lossy().as_bytes())?;
+                    }
+                }
                 Err(error) => {
                     return Err(error)
                         .with_context(|| format!("cannot acquire lock {}", path.display()))
@@ -232,6 +238,62 @@ pub fn virtualization_preflight() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn owner_only_windows_dacl(sddl: &str, directory: bool) -> bool {
+        if !sddl.starts_with("D:") {
+            return false;
+        }
+        let Some((_, ace)) = sddl.split_once('(') else {
+            return false;
+        };
+        let Some(ace) = ace.strip_suffix(')') else {
+            return false;
+        };
+        let fields: Vec<_> = ace.split(';').collect();
+        // Check effective owner access and propagation. ID records inheritance
+        // provenance and is not required in the ACL returned by the legacy API.
+        fields.len() == 6
+            && fields[0] == "A"
+            && fields[2] == "FA"
+            && fields[3].is_empty()
+            && fields[4].is_empty()
+            && fields[5] == "OW"
+            && fields[1]
+                .as_bytes()
+                .chunks(2)
+                .all(|flag| matches!(flag, b"OI" | b"CI" | b"ID"))
+            && (!directory || (fields[1].contains("OI") && fields[1].contains("CI")))
+    }
+
+    #[test]
+    fn windows_dacl_accepts_reported_owner_only_permissions_without_provenance_flag() {
+        assert!(owner_only_windows_dacl("D:(A;OICI;FA;;;OW)", true));
+        assert!(owner_only_windows_dacl("D:(A;;FA;;;OW)", false));
+    }
+
+    #[test]
+    fn windows_dacl_accepts_owner_only_permissions_with_provenance_flag() {
+        assert!(owner_only_windows_dacl("D:AI(A;OICIID;FA;;;OW)", true));
+        assert!(owner_only_windows_dacl("D:AI(A;ID;FA;;;OW)", false));
+    }
+
+    #[test]
+    fn windows_dacl_rejects_broad_access_and_broken_propagation() {
+        for (sddl, directory) in [
+            ("D:(A;OICIID;FA;;;WD)", true),
+            ("D:(A;OICIID;FA;;;OW)(A;;FR;;;WD)", true),
+            ("D:(D;OICIID;FA;;;OW)", true),
+            ("D:(A;OICIID;FR;;;OW)", true),
+            ("D:(A;OICIIOID;FA;;;OW)", true),
+            ("D:(A;OICINPID;FA;;;OW)", true),
+            ("D:(A;OIID;FA;;;OW)", true),
+            ("D:(A;CIID;FA;;;OW)", true),
+            ("D:(A;ID;FA;;;OW)", true),
+            ("D:", false),
+        ] {
+            assert!(!owner_only_windows_dacl(sddl, directory), "{sddl}");
+        }
+    }
     #[test]
     fn publication_never_clobbers() {
         let temp = tempfile::tempdir().unwrap();
@@ -343,7 +405,7 @@ mod tests {
         fs::create_dir(&nested).unwrap();
         let credential = nested.join("credentials.json");
         fs::write(&credential, b"private").unwrap();
-        for path in [&nested, &credential] {
+        for (path, directory) in [(&nested, true), (&credential, false)] {
             let filename: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
             let mut needed = 0u32;
             unsafe {
@@ -379,9 +441,11 @@ mod tests {
                 }
                 let sddl = String::from_utf16(std::slice::from_raw_parts(text, length)).unwrap();
                 LocalFree(text.cast());
-                assert_eq!(sddl.matches('(').count(), 1, "{sddl}");
-                assert!(sddl.contains(";;;OW)"), "{sddl}");
-                assert!(sddl.split(';').nth(1).unwrap().contains("ID"), "{sddl}");
+                assert!(
+                    owner_only_windows_dacl(&sddl, directory),
+                    "{}: {sddl}",
+                    path.display()
+                );
             }
         }
     }
