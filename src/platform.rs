@@ -211,7 +211,7 @@ pub fn virtualization_preflight() -> Result<()> {
         if library.is_null() {
             bail!("Windows Hypervisor Platform is unavailable; enable the Windows Hypervisor Platform optional feature");
         }
-        let symbol = GetProcAddress(library, b"WHvGetCapability\0".as_ptr());
+        let symbol = GetProcAddress(library, c"WHvGetCapability".as_ptr().cast());
         if symbol.is_null() {
             FreeLibrary(library);
             bail!("Windows Hypervisor Platform lacks the required capability interface");
