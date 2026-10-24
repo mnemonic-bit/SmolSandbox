@@ -1,2 +1,4 @@
 artifacts/
 .smolvm/
+target/
+.codebase-memory/

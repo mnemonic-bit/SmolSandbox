@@ -1,5 +1,10 @@
 # Codex in a SmolVM sandbox
 
+Feature 0004's Rust implementation and its validation commands are documented
+in [Rust application: operation and validation](RUST-APPLICATION.md). The scripts
+below remain the parity baseline until the native mocked and real SmolVM
+cutover gates pass.
+
 This repository builds a reusable, all-batteries-included `.smolmachine` for
 Codex and creates persistent VMs from it. The prepared Debian 12 slim environment
 contains Node.js 22, Python, .NET 8, Git, common diagnostics, Podman/Buildah
@@ -183,6 +188,17 @@ generation with:
 ```bash
 ./build-sandbox.sh [workspace]
 ```
+
+To remove only the sandbox machines associated with the current directory,
+across all generations and network configurations, run:
+
+```bash
+./clean-sandbox.sh --workspace
+```
+
+An explicit workspace path may follow `--workspace`. This workspace-only mode
+also removes a running matching machine, but preserves builders, login machines,
+base artifacts, generation caches, and shared Codex state.
 
 ## Purge superseded generations and configurations
 

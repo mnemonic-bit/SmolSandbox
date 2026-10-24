@@ -70,7 +70,7 @@ declare -A EXPECTED_USAGE_SUFFIX=(
   [codex-sandbox.sh]=' [--help] [--allow-host HOST]... [--port PORT]... [WORKSPACE] [-- CODEX_ARG...]'
   [start-login.sh]=' [--help]'
   [repair-sandbox.sh]=' [--help] (--check | --replace-stale [--force]) [--allow-host HOST]... [WORKSPACE]'
-  [clean-sandbox.sh]=' [--help]'
+  [clean-sandbox.sh]=' [--help] [--workspace [WORKSPACE]]'
   [purge-sandbox.sh]=' [--help] [--force | --force-all]'
 )
 
@@ -116,6 +116,7 @@ grep -Fq 'workspace network allowlist used by' "$TEST_ROOT/captures/repair-sandb
 grep -Fq 'start-codex.sh' "$TEST_ROOT/captures/repair-sandbox.sh.stdout"
 grep -Fq 'must be non-empty' "$TEST_ROOT/captures/repair-sandbox.sh.stdout"
 grep -Fq 'shared Codex state' "$TEST_ROOT/captures/clean-sandbox.sh.stdout"
+grep -Fq -- '--workspace' "$TEST_ROOT/captures/clean-sandbox.sh.stdout"
 for text in --force --force-all conservative 'mutually exclusive' Running 'protected artifacts'; do
   grep -Fq -- "$text" "$TEST_ROOT/captures/purge-sandbox.sh.stdout"
 done
@@ -147,6 +148,7 @@ assert_usage_error build-sandbox.sh one two
 assert_usage_error start-codex.sh --unknown
 assert_usage_error repair-sandbox.sh
 assert_usage_error clean-sandbox.sh unexpected
+assert_usage_error clean-sandbox.sh --workspace one two
 assert_usage_error purge-sandbox.sh --force --force-all
 
 echo 'PASS: lifecycle command help is complete, side-effect-free, and alias-aware'

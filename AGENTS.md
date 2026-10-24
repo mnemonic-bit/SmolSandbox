@@ -1,6 +1,7 @@
 # Repository instructions
 
 - Use the installed `codebase-memory` skill for structural codebase exploration.
+- Before writing natural-language text to any file, read AGENT-LANG.md and apply its rules to that text.
 
 ## Sandbox network policy
 

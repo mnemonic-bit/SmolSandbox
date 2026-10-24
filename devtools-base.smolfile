@@ -1,5 +1,5 @@
 # Smolfile — Dev tools base image for smolvm (smol-machines/smolvm)
-# One declarative microVM: Debian 12 slim + Node 22 + Python 3 + .NET 8 SDK,
+# One declarative microVM: Debian 12 slim + Node 22 + Python 3 + Rust + .NET 8 SDK,
 # OpenAI Codex CLI, Matt Pocock's grill-me/grilling skills,
 # DeusData's codebase-memory-mcp, Podman + Buildah for nested containers,
 # and Playwright + per-stack dev/debug tooling for live web-app testing.
@@ -37,6 +37,11 @@ allow_hosts = [
   "api.nuget.org",                 # NuGet — dotnet restore + global tools
   "globalcdn.nuget.org",           # NuGet package payload CDN
   "registry.npmjs.org",            # npm
+  "sh.rustup.rs",                  # Rust installer (provisioning)
+  "static.rust-lang.org",          # Rust toolchains + components
+  "index.crates.io",               # Cargo sparse registry index
+  "static.crates.io",              # Cargo crate downloads
+  "crates.io",                     # Cargo registry API
   "pypi.org",                      # pip index
   "files.pythonhosted.org",        # pip wheels
   "registry-1.docker.io",          # Docker Hub — podman pull / buildah
@@ -85,6 +90,11 @@ init = [
   "DEBIAN_FRONTEND=noninteractive apt-get update",
   "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bash ca-certificates coreutils curl git grep gzip mawk tar openssh-client build-essential pkg-config ripgrep unzip jq sqlite3 httpie pipx python3 python3-pip python3-venv tzdata libgssapi-krb5-2 libicu72 libssl3 zlib1g podman podman-docker podman-compose buildah",
 
+  # Rust: use rustup for a current stable toolchain on both x64 and Arm64.
+  # Expose its proxies on PATH even for non-login machine exec commands.
+  "curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs -o /tmp/rustup-init.sh && sh /tmp/rustup-init.sh -y --no-modify-path --default-toolchain stable --profile minimal --component rustfmt --component clippy && ln -sf /root/.cargo/bin/* /usr/local/bin/ && rm -f /tmp/rustup-init.sh",
+  "rustc --version && cargo --version && cargo fmt --version && cargo clippy --version",
+
   # Keep podman-docker's compatibility command indistinguishable from Docker
   # for tools that parse its output; this suppresses Podman's emulation banner.
   "touch /etc/containers/nodocker",
@@ -132,7 +142,7 @@ init = [
 
   # OpenAI Codex CLI (installed BEFORE codebase-memory-mcp so its `install`
   # subcommand can detect the Codex CLI and register itself with it)
-  "npm install -g @openai/codex@0.157.1",
+  "npm install -g @openai/codex@0.164.0",
 
   # Sol with high reasoning is the machine default; the footer exposes token,
   # context, and rate-limit headroom. Full permissions are appropriate inside

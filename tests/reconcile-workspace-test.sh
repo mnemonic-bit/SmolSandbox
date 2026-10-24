@@ -9,6 +9,7 @@ trap 'rm -rf "$TEST_ROOT"' EXIT
 
 SMOLVM_TEST_VERSION='smolvm test 1.0.0'
 MACHINE_REVISION="$SANDBOX_MACHINE_REVISION"
+test "$MACHINE_REVISION" -eq 5
 BASE_ID="$({ printf '%s\n' "$SMOLVM_TEST_VERSION"; cat "$REPO_ROOT/devtools-base.smolfile"; } | sha256sum | awk '{print substr($1, 1, 12)}')"
 
 prepare_case() {
@@ -169,7 +170,12 @@ for registry_host in \
   production.cloudfront.docker.com \
   ghcr.io \
   pkg-containers.githubusercontent.com \
-  storage.googleapis.com
+  storage.googleapis.com \
+  sh.rustup.rs \
+  static.rust-lang.org \
+  index.crates.io \
+  static.crates.io \
+  crates.io
 do
   grep -Fq -- "--allow-host $registry_host" "$CASE_ROOT/smolvm.log"
 done

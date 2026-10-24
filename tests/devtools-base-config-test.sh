@@ -32,6 +32,11 @@ assert {
     "ghcr.io",
     "pkg-containers.githubusercontent.com",
     "storage.googleapis.com",
+    "sh.rustup.rs",
+    "static.rust-lang.org",
+    "index.crates.io",
+    "static.crates.io",
+    "crates.io",
 } <= allow_hosts
 assert not any(
     "codebase-memory-mcp/main/scripts/setup.sh" in command
@@ -117,6 +122,7 @@ PY
 
 # shellcheck source=../sandbox-common.sh
 source "$REPO_ROOT/sandbox-common.sh"
+test "$SANDBOX_MACHINE_REVISION" -eq 5
 if ! diff -u \
   <(python3 - "$REPO_ROOT/devtools-base.smolfile" <<'PY'
 import sys

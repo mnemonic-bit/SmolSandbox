@@ -2,979 +2,634 @@
 
 ## Status
 
-Blocked
+Proposed
 
-Implementation is blocked until both decisions in **Required pre-implementation
-decisions** are resolved and recorded in this specification. Research and
-throwaway prototypes may continue, but production migration work shall not
-begin while either decision remains open.
+The configuration-location decision is recorded below. Provisioning-download
+integrity is out of scope and tracked separately in
+[Feature 0008](feature-0008-provisioning-download-integrity.md); it does not
+block this migration.
 
 ## Summary
 
 Replace the repository's Bash and Python lifecycle implementation with one
-cross-platform Rust application named `codex-sandbox`.
+cross-platform Rust executable named `codex-sandbox`. Users may copy the
+executable anywhere and run it without an installation directory, companion
+resources, Bash, Python, or a Rust toolchain on the host.
 
-The application shall preserve the current sandbox lifecycle semantics,
-machine identity, reconciliation safety, create-before-delete replacement, and
-Codex launch behavior on Linux, macOS, and Windows. It shall expose those
-workflows as `build`, `start`, `login`, `repair`, `clean`, and `doctor`
-subcommands rather than retaining the existing `.sh` entry points.
+The executable uses the current user's `~/.smolsandbox` directory for persistent
+state and user-wide sandbox definitions. Definitions are named Smolfiles such
+as `~/.smolsandbox/sandbox-name.smlbx`; a repository may provide files with the
+same names in its own `.smolsandbox` directory. Resolve definitions nearest
+first: repository, then user home. Select one complete file without merging.
+A new `create-config` command writes `~/.smolsandbox/default.smlbx` from a
+built-in template for exactly one of four harnesses: Claude, Codex, OpenCode,
+or Hermes Agent. Lifecycle commands accept `--smolfile <name-or-path>` to
+select another definition.
 
-Users shall install SmolVM separately and make a compatible `smolvm`
-executable available on the host. Codex is not a host dependency: the prepared
-guest shall continue to install and execute the pinned Codex CLI. The released
-`codex-sandbox` archives shall otherwise be ready to run without Bash, Python,
-a Rust toolchain, or platform command-line utilities.
+The work is a replacement of the existing sandbox scripts, with configuration
+generation and those four harness choices as the bounded additions. Preserve
+reconciliation, create-before-delete replacement, network allowlists, mutable
+port publishing, cleanup, and purge behavior. Do not turn this migration into
+a new configuration framework, diagnostics product, or provisioning-integrity
+project.
 
-Mutable state and user configuration shall move to a host-global
-`.codex-sandbox` directory in the user's home directory. There shall be no
-migration from repository-local shell-era state because this feature will be
-deployed on a clean slate.
+Users install SmolVM separately. The selected harness and development tools
+run inside the prepared guest, not on the host. The guest may continue to use
+shell scripts and Python during provisioning; removing host script dependencies
+does not require rewriting guest tools.
 
-The final cutover is atomic. No intermediate Rust implementation is a
-supported release, and all production scripts, script-based tests, the Python
-inventory helper, and script-based fixtures shall be removed when parity and
-release acceptance have passed.
-
-## Motivation
-
-The current implementation relies on Bash, Python, SHA-256 command-line
-utilities, and other Unix behavior. Its arrays, regular-expression syntax,
-signal traps, path handling, delimiter protocol, and fixture implementation do
-not run natively across Linux, macOS, and Windows.
-
-Portability is the primary reason for this migration. A Rust application can
-provide one compiled lifecycle implementation on all host platforms supported
-by SmolVM while retaining the existing safety model:
-
-- derive sandbox identity from authoritative inputs;
-- treat SmolVM inventory as untrusted input;
-- never interpret inventory failure as machine absence;
-- keep normal startup non-destructive;
-- create and verify a replacement before deleting stale machines;
-- serialize mutating operations; and
-- stop a started workspace or login machine when an interceptable termination
-  path ends the interactive session.
-
-Moving state out of the source checkout also allows the application to be
-installed globally and used from any workspace. Shipping platform release
-archives removes any requirement for users to install a Rust toolchain.
+There is no migration from repository-local shell-era state. The Rust cutover
+starts with a fresh application home. The old production scripts and their
+script-based tests and fixtures are removed only after Rust parity passes.
 
 ## Goals
 
-- Run the complete sandbox lifecycle on Linux, macOS, and Windows wherever a
-  compatible SmolVM release supports the host.
-- Replace the production Bash and Python implementation with one Rust
-  executable and Rust modules.
-- Replace Bash/Python tests and fixtures with Rust unit tests, integration
-  tests, and a Rust SmolVM test double.
-- Preserve the implemented behavior and safety invariants of Features 0001
-  and 0002.
-- Preserve current Linux behavior exactly where practical and define semantic
-  equivalents for platform-specific paths, signals, permissions, and process
-  handling elsewhere.
-- Provide one documented CLI with stable subcommands, usage errors, exit-code
-  categories, and actionable diagnostics.
-- Use a host-global application home for artifacts, state, locks, Codex state,
-  and user configuration.
-- Retain deterministic guest-tool version pins and definition-addressed base
-  artifacts.
-- Keep SmolVM behind a narrow adapter so a future supported library API can
-  replace subprocess integration without rewriting lifecycle policy.
-- Produce signed, checksummed, provenance-bearing release archives for the
-  supported SmolVM host matrix.
-- Complete one atomic cutover only after differential, cross-platform, real
-  SmolVM, packaging, and documentation acceptance has passed.
+- Replace the host Bash/Python lifecycle implementation and its tests with
+  Rust on Linux, macOS, and Windows wherever SmolVM supports the host.
+- Deliver one executable that works when copied to an arbitrary directory.
+- Keep persistent state and user-wide definitions under `~/.smolsandbox`, with
+  repository-local definitions taking precedence by filename.
+- Generate a usable `.smlbx` Smolfile for Claude, Codex, OpenCode, or Hermes Agent.
+- Preserve existing lifecycle outcomes, inventory validation, ownership,
+  locking, secret forwarding, and interactive cleanup guarantees.
+- Port every implemented feature and existing behavioral test.
+- Keep SmolVM behind a subprocess adapter and platform behavior behind
+  native filesystem, process, and locking interfaces.
 
 ## Non-goals
 
-- Bundling, redistributing, or directly linking SmolVM in the first release.
-- Requiring Codex to be installed on the host.
-- Preserving the old `.sh` filenames or providing compatibility launchers.
-- Preserving accidental shell quirks when they conflict with a clear,
-  cross-platform interface. In particular, `login` shall reject unexpected
-  arguments rather than silently ignoring them.
-- Migrating, importing, or merging repository-local `artifacts/` or `.smolvm/`
-  state.
-- Shipping a prebuilt `.smolmachine` guest artifact with application releases.
-- Supporting a platform or architecture that the selected SmolVM release does
-  not support.
-- Adding self-update, MSI, PKG, Homebrew, or other package-manager integration.
-- Providing a stable JSON output protocol before an automation consumer
-  requires one.
-- Sending usage, diagnostic, or crash telemetry.
-- Making host state portable or synchronizable between operating systems.
-- Resolving the two blocked implementation decisions implicitly in code.
+- Additional harnesses, third-party harness plugins, or arbitrary host command
+  execution through a harness setting.
+- Installing a harness on the host or implementing harness features such as
+  conversations, model selection, or credential management.
+- New provisioning-download verification rules; see Feature 0008.
+- A `doctor` command, workspace TOML configuration, or a workspace trust store.
+- A new release-signing or build-provenance system as a migration requirement.
+- Bundling, redistributing, or directly linking SmolVM.
+- Shipping or downloading prebuilt `.smolmachine` guest artifacts.
+- Retaining the old `.sh` entry points or providing compatibility wrappers.
+- Importing, merging, or deleting shell-era `artifacts/` or `.smolvm/` state.
+- Self-update, native installers, package-manager integration, or telemetry.
+- Synchronizing application state between different host operating systems.
+
+## Recorded design decisions
+
+### Portable executable and user-owned Smolfile
+
+The runtime default filename is `default.smlbx`. Look for it first in the
+repository's `.smolsandbox` directory, then in the native user's
+`~/.smolsandbox` directory. Named selections use the same order. Explicit
+paths bypass this lookup. The executable's location never affects discovery;
+no definition or resource beside the executable is required. The full
+selection rules are specified under Configuration and application home.
+
+The executable includes the template data needed by `create-config`. These
+are generation inputs, not an implicit runtime fallback. Lifecycle commands
+read the actual user-owned file; they do not silently generate it, download a
+replacement, or overwrite edits. A missing definition produces an error that
+names the searched paths and gives a `create-config` example.
+
+Template revisions are coupled to application releases. Updating or moving the
+executable does not update an existing `.smlbx` file. Generating a configuration
+requires an explicit command, and an existing file is never overwritten by
+`create-config`.
+
+The complete effective file bytes, including harness selection metadata,
+participate in the base ID with the selected SmolVM version output. Changing
+the definition therefore selects a new sandbox generation. The executable
+path and unused built-in templates do not participate in identity.
+
+### Provisioning-download integrity is deferred
+
+Feature 0004 preserves the provisioning behavior and checks already present
+in the source definition. It introduces no new global checksum, signature,
+installer-verification, or dependency-locking policy. Existing verification
+must not be removed as part of the port.
+
+[Feature 0008: Provisioning-download integrity](feature-0008-provisioning-download-integrity.md)
+contains that separate work. Its policy decisions and implementation are not
+prerequisites for Feature 0004. Existing build failure handling, non-empty
+artifact validation, atomic publication, and safe reuse remain required here.
 
 ## Relationship to earlier features
 
-Feature 0001's identity, inventory, reconciliation, explicit repair, and
-non-destructive startup requirements remain authoritative. Feature 0002's
-create-before-delete replacement protocol and readiness gate also remain
-authoritative. This feature changes their implementation language, command
-spelling, state location, locking mechanism, and platform abstractions; it does
-not weaken their safety invariants.
+The implemented behavior at cutover is the parity baseline:
 
-Feature 0003 remains a separate proposed feature. This feature shall not
-silently implement automatic superseded-artifact purging merely because the
-code is being rewritten. If Feature 0003 is implemented before the Feature
-0004 cutover, its then-current behavior becomes part of the differential parity
-baseline and shall be ported to Rust. Otherwise it remains independently
-proposed.
+- Feature 0001: authoritative identity, inventory validation, reconciliation,
+  compatibility caches, explicit repair, and non-destructive startup.
+- Feature 0002: prepare and freshly verify the desired replacement before
+  stopping or deleting an eligible stale machine.
+- Feature 0003: inventory-aware purge, conservative/force/force-all policies,
+  running-generation protection, and conservative purge after a build.
+- Feature 0005: repeatable additional network hosts and identity derived from
+  the complete immutable workspace-machine creation specification.
+- Feature 0006: useful help that exits without lifecycle work.
+- Feature 0007: exact-set port reconciliation on the same persistent machine,
+  including manifests, recovery journals, and update-before-start locking.
 
-The SmolVM integration decision is supported by
-[`RESEARCH/2026-09-20-smolvm-embedding.md`](../RESEARCH/2026-09-20-smolvm-embedding.md).
-As of SmolVM v1.16.2, its public high-level embedded API does not cover every
-pack, complete-inventory, create-from-pack, and interactive-TTY workflow this
-application needs. SmolVM's first-party Rust SDK also uses an executable
-boundary. Direct linking may be reconsidered later only after the required
-operations and Windows integration are supported upstream.
+This feature changes the host language, command spelling, default state
+location, and supported harness selection. It does not weaken the existing
+safety invariants. Later implemented shell changes, including workspace-only
+cleanup, must also be included in the cutover parity baseline.
 
-## Required pre-implementation decisions
-
-The feature is blocked on two deliberately unresolved questions.
-
-### 1. Default Smolfile packaging and discovery
-
-Before implementation begins, this specification shall be amended to choose
-how the default Smolfile is supplied. The decision shall compare at least:
-
-- embedding its bytes in `codex-sandbox`;
-- shipping it as a versioned resource beside the executable; and
-- another explicitly defined acquisition mechanism.
-
-The recorded decision shall define resource discovery, override behavior,
-release packaging, version coupling, failure behavior, and how the exact bytes
-participate in the base ID. No implementation shall assume that the default
-Smolfile is embedded merely because embedding was discussed during design.
-
-### 2. Provisioning-download integrity
-
-Before implementation begins, this specification shall be amended to define
-the integrity policy for every download performed while SmolVM builds the
-guest. The decision shall cover version pins, transport requirements, hashes or
-ecosystem integrity metadata where applicable, installer scripts, cache
-publication, partial failures, and the behavior when verification information
-is unavailable.
-
-Guest tools shall remain version-pinned, but this feature intentionally does
-not select a digest or verification policy until this blocker is resolved.
-
-### Resolving the block
-
-Both answers shall be written into this file, with corresponding acceptance
-criteria and test requirements. After that review, the status may move from
-`Blocked` to `Proposed`. Code intended for the migration shall not be merged
-before both gates are resolved. Source-reading, research notes, and disposable
-prototypes that answer the gates are allowed.
+The subprocess integration boundary is supported by
+[the SmolVM embedding assessment](../RESEARCH/2026-09-20-smolvm-embedding.md).
+The recorded decision is to use an independently installed executable rather
+than depend on SmolVM's internal engine modules.
 
 ## Terminology
 
-- **Application home:** The `.codex-sandbox` directory under the current
-  user's native home directory, or the directory selected by
-  `CODEX_SANDBOX_HOME`.
-- **Supported host:** An operating-system and architecture combination in the
-  documented support matrix for which both `codex-sandbox` and the selected
-  SmolVM release are supported and tested.
-- **Selected SmolVM:** The canonical host executable selected by the discovery
-  precedence in this feature and accepted by capability preflight.
-- **Default Smolfile:** The reviewed Smolfile supplied by the application using
-  the mechanism selected by the first implementation gate.
-- **Effective Smolfile:** The complete Smolfile bytes selected after applying
-  configuration and explicit overrides.
+- **Application home:** `~/.smolsandbox`, resolved using the current user's
+  native home directory rather than a shell expansion.
+- **Repository definition directory:** `.smolsandbox` at the root of the
+  repository containing the selected workspace, or containing the current
+  directory for commands without a workspace argument.
+- **Harness:** The guest coding-agent CLI selected by the sandbox definition.
+  This feature supports only Claude, Codex, OpenCode, and Hermes Agent.
+- **Harness profile:** Built-in template and guest launch/state conventions
+  for one supported harness. It is not a plugin interface.
+- **Effective Smolfile:** The complete repository-local or user-owned definition
+  selected by the filename lookup or an explicit path. Definitions are never
+  merged, inherited, or supplemented from another candidate file.
 - **Desired base ID:** The first 12 lowercase hexadecimal characters of the
   SHA-256 hash over the selected SmolVM version output, a newline, and the
-  complete effective Smolfile contents, preserving Feature 0001.
-- **Workspace hash:** The full SHA-256 hash of the deterministic native
-  representation of the canonical host workspace path.
+  complete effective Smolfile contents.
+- **Workspace hash:** The SHA-256 hash of the canonical set of immutable
+  machine-creation options, as defined by Feature 0005. The canonical workspace
+  path is included through its mount; requested ports are excluded.
+- **Workspace path digest:** The separate path-only digest used to associate
+  machines with a workspace across generations and configurations.
 - **Workspace ID:** The first 12 lowercase hexadecimal characters of the
   workspace hash.
-- **Dangerous workspace setting:** A workspace-controlled value that can add a
-  host mount, redirect an executable, expose a secret, replace provisioning
-  inputs, or otherwise extend access outside ordinary workspace behavior.
-- **Semantic compatibility:** Preservation of lifecycle outcomes, safety
-  invariants, side effects, exit-code categories, command ordering, and
-  actionable information while allowing native path formatting and
-  platform-specific diagnostic wording.
+- **Semantic compatibility:** Equivalent lifecycle outcomes, safety checks,
+  side effects, command ordering, and exit behavior, allowing native path and
+  operating-system diagnostic differences.
 
-## Supported hosts
+## Supported hosts and distribution
 
-The support matrix shall be aligned with the SmolVM release selected for an
-application release. Each `codex-sandbox` release shall document the exact
-operating-system, architecture, and SmolVM combinations it tests and supports.
+Build a native executable for each documented Linux, macOS, and Windows
+operating-system/architecture combination supported by the selected SmolVM.
+Target x86-64 and ARM64 where both Rust and SmolVM support the combination.
+Unsupported hosts fail capability preflight with an actionable error.
 
-The release process shall target x86-64 and ARM64 wherever both Rust and
-SmolVM support that combination. A build existing for an unsupported
-combination does not make that combination supported. Unsupported hosts shall
-fail capability preflight with an actionable message rather than run on a
-best-effort basis.
+An executable may be distributed in a platform archive, but extracting and
+copying that executable alone must be sufficient. No adjacent Smolfile,
+resource directory, installer, fixed working directory, or checkout is needed.
+The binary exposes `--version` and `--help`.
 
-`codex-sandbox` shall use Rust libraries and native operating-system APIs for
-hashing, copying, path handling, permissions, JSON, locking, and process
-lifecycle. It shall not invoke Bash, Python, `sha256sum`, `shasum`, `cp`, `mv`,
-or other host utilities.
-
-SmolVM is the only required host executable. Codex and all guest development
-tools are installed into the prepared guest by the effective Smolfile.
-
-## Distribution
-
-Release automation shall publish versioned:
-
-- `.tar.gz` archives for supported Linux and macOS targets; and
-- `.zip` archives for supported Windows targets.
-
-Each archive shall contain the `codex-sandbox` executable and the application
-resources selected by the Smolfile packaging decision. It shall not contain
-SmolVM or a prebuilt guest artifact.
-
-Every release archive shall have a SHA-256 checksum, a signature, and build
-provenance. Release validation shall confirm that SmolVM has not been included
-accidentally. The binary shall expose `codex-sandbox --version`.
-
-Users need neither a Rust toolchain nor Bash or Python to use a release.
-Initial base construction may access the network through SmolVM to download the
-pinned guest packages and tools required by the effective Smolfile. Fully
-offline first use is not a goal.
-
-Native installers, package-manager manifests, and in-application self-update
-are deferred to later features.
+SmolVM is the only required host executable. Native Rust libraries implement
+hashing, JSON, file operations, path handling, locking, and process lifecycle.
+Do not invoke host Bash, Python, `sha256sum`, `shasum`, `cp`, or `mv`.
+Provisioning the guest may require network access; offline first use is not a
+goal. Release signing and provenance infrastructure are not acceptance gates
+for this script replacement.
 
 ## Command-line interface
 
-The supported interface shall be:
-
 ```text
+codex-sandbox create-config --harness <claude|codex|opencode|hermes>
 codex-sandbox build [workspace]
-codex-sandbox start [workspace] [-- <codex arguments>...]
+codex-sandbox start [--allow-host HOST]... [--port PORT]... [workspace] [-- HARNESS_ARG...]
 codex-sandbox login
-codex-sandbox repair (--check | --replace-stale [--force]) [workspace]
-codex-sandbox clean
-codex-sandbox doctor [workspace]
+codex-sandbox repair (--check | --replace-stale [--force]) [--allow-host HOST]... [workspace]
+codex-sandbox clean [--workspace [workspace]]
+codex-sandbox purge [--force | --force-all]
 codex-sandbox --version
 codex-sandbox --help
 ```
 
-`workspace` defaults to the current directory where the corresponding shell
-workflow currently defaults to `$PWD`. A leading `--` after `start` means the
-current workspace and forwards all following arguments to the guest Codex CLI.
+Every lifecycle command (`build`, `start`, `login`, `repair`, `clean`, and
+`purge`) accepts `--smolfile <name-or-path>` before the standalone `--`.
+For example:
 
-The subcommands map to the old entry points as follows:
+```text
+codex-sandbox start --smolfile claude.smlbx /path/to/project
+codex-sandbox build --smolfile ./configs/custom.smlbx /path/to/project
+```
+
+Each command accepts `--help` without requiring a configuration file, SmolVM,
+or lifecycle work. Version output has the same independence. Workspace defaults
+and the first standalone `--` retain their current meaning: everything after
+the delimiter belongs to the selected guest harness.
 
 | Rust command | Replaced shell behavior |
 | --- | --- |
+| `create-config` | New generation of the user-owned sandbox definition |
 | `build` | `build-sandbox.sh` and its `build-login.sh` alias |
 | `start` | `start-codex.sh` and its `codex-sandbox.sh` alias |
-| `login` | `start-login.sh` |
+| `login` | `start-login.sh`, with harness-specific authentication |
 | `repair` | `repair-sandbox.sh` |
-| `clean` | `clean-sandbox.sh` |
-| `doctor` | New non-mutating host and configuration diagnostics |
+| `clean` | `clean-sandbox.sh`, including workspace-only cleanup |
+| `purge` | `purge-sandbox.sh` |
 
-`sandbox-common.sh` becomes internal Rust lifecycle and domain code.
-`sandbox-inventory.py` becomes internal Rust inventory parsing,
-classification, and readiness validation. Neither shall remain as an
-independently supported interface.
+Keep the executable name `codex-sandbox` for this migration; selecting another
+harness does not select a different executable. No `doctor` command is added.
+Unknown options, unsupported harness identifiers, conflicting modes, and excess
+arguments are usage errors with exit `2`. `login` rejects positional arguments
+instead of preserving the old script's accidental argument ignoring.
 
-Unknown options, conflicting repair modes, excess workspace arguments, and
-arguments supplied to `login` or `clean` shall produce usage and exit with
-code `2`. Operational failures shall exit non-zero without being reported as
-usage errors.
+## Configuration and application home
 
-## Compatibility contract
-
-The change from script filenames to one subcommand-based executable is the
-intentional command-level compatibility break. No compatibility wrapper,
-symlink, or multicall installation is required.
-
-Within each mapped subcommand, the application shall preserve:
-
-- default-workspace selection;
-- argument forwarding to guest Codex;
-- the distinction between usage and operational failure;
-- machine and artifact naming unless this feature explicitly defines native
-  path normalization;
-- all managed labels and inventory ownership rules;
-- normal-start, repair, replacement, and clean side effects;
-- create-before-delete ordering and readiness checks;
-- API-key forwarding by environment-variable name rather than value;
-- non-clobbering Codex-state seeding;
-- best-effort VM shutdown after interactive sessions; and
-- the exit status of the guest Codex process unless cleanup is the only
-  failure.
-
-On Linux, output and command ordering shall match the current implementation
-exactly where practical. Across platforms, tests shall assert semantic output
-rather than byte-for-byte path separators or operating-system diagnostic text.
-Messages that recommend a follow-up command shall use the new
-`codex-sandbox` syntax.
-
-The current `start-login.sh` behavior of ignoring arguments is considered an
-accidental quirk and shall not be preserved. `codex-sandbox login` accepts no
-positional arguments.
-
-## Configuration
-
-The application shall support:
+The default layout is:
 
 ```text
-~/.codex-sandbox/config.toml
-<workspace>/.codex-sandbox.toml
-```
-
-The user configuration applies across workspaces. Workspace configuration
-contains project-specific declarative settings and is subject to the trust
-model below.
-
-For every setting that has equivalent sources, precedence is:
-
-```text
-command-line option
-> environment variable
-> trusted workspace configuration
-> user configuration
-> application default
-```
-
-The implementation shall preserve these existing public environment
-overrides where they remain applicable:
-
-- `BASE_SMOLFILE`
-- `ARTIFACTS_DIR`
-- `STATE_ROOT`
-- `CODEX_HOME_DIR`
-- `BUILDER_MACHINE`
-- `LOGIN_MACHINE`
-- `CODEX_MACHINE`
-- `TMPDIR`
-- `OPENAI_API_KEY`
-
-`SANDBOX_ENSURE_LOGIN` is an internal shell implementation detail and shall
-not be supported.
-
-`CODEX_SANDBOX_HOME` is the new whole-tree application-home override.
-SmolVM executable discovery has its own precedence:
-
-```text
---smolvm <path> > SMOLVM_BIN > user configuration > PATH
-```
-
-Workspace configuration shall never select or redirect the SmolVM executable.
-The selected executable path shall be canonicalized before use.
-
-Unknown keys, invalid types, conflicting values, and unreadable configuration
-shall fail with the file and field identified. A partially parsed
-configuration shall never authorize mutation.
-
-## Workspace configuration trust
-
-Harmless declarative workspace settings may load automatically. A workspace
-configuration shall not automatically:
-
-- add host mounts outside the workspace;
-- redirect SmolVM or another executable;
-- expose host secrets;
-- replace the provisioning input;
-- relocate credential-bearing state; or
-- broaden guest access to host resources.
-
-Before honoring a dangerous workspace setting, the application shall require
-an explicit user trust decision. Trust shall be stored in application-owned
-state and keyed by both canonical workspace identity and the configuration
-digest. Changing dangerous configuration invalidates the prior decision.
-
-Trust prompts shall enumerate the sensitive effects being authorized. A
-non-interactive invocation without an applicable trust decision shall fail
-closed. Workspace configuration may never override the prohibition on
-selecting a SmolVM executable.
-
-## Application home and persisted state
-
-The default layout shall be:
-
-```text
-~/.codex-sandbox/
-  config.toml
+~/.smolsandbox/
+  default.smlbx
+  sandbox-name.smlbx
   artifacts/
   state/
+    ports/
   locks/
   codex-home/
+  harness-home/
+    claude/
+    opencode/
+    hermes/
 ```
 
-The native user-home API shall locate the parent directory on every platform;
-the child directory name remains `.codex-sandbox`. `CODEX_SANDBOX_HOME` may
-relocate the entire tree. Existing individual environment overrides may
-relocate the corresponding component after normal precedence is applied.
-
-No generated state shall be written into a workspace by default. The optional
-workspace `.codex-sandbox.toml` is configuration, not mutable state.
-
-Every application-owned persisted format shall carry a schema version from
-its first release. Unknown newer versions shall fail safely without mutation.
-Future features may introduce migrations from known older Rust-era formats,
-but this feature provides no migration from the shell-era `artifacts/` or
-`.smolvm/` directories. Those directories shall not be imported, merged, or
-deleted by the Rust application.
-
-The application home is host-local. Sharing or synchronizing it between
-operating systems is unsupported.
-
-## Permissions and secrets
-
-The application shall apply the strongest practical native user-only
-permissions to the application home, user configuration, and `codex-home`.
-On platforms with Unix modes this means directory and file permissions that
-exclude group and other access; on Windows it means a user-restricted ACL.
-
-If private access cannot be verified or enforced, an operation that would
-create, read, mount, or expose credential-bearing state shall refuse to
-continue. Non-sensitive artifacts, locks, and caches may continue after an
-explicit warning. The application shall never loosen permissions to make an
-operation succeed.
-
-`OPENAI_API_KEY` shall never be persisted or printed. When non-empty, it shall
-continue to be forwarded to the guest through SmolVM by environment-variable
-name rather than by embedding its value in arguments or configuration.
-Verbose diagnostics shall redact secrets and credential-bearing paths where
-appropriate.
-
-The application shall send no telemetry.
-
-## Workspace and machine identity
-
-The workspace shall be resolved with native filesystem canonicalization. Path
-representations shall be deterministic so alternate spellings of the same
-native path select the same workspace identity. Windows normalization shall
-account for drive-letter and case behavior. The normalized path shall be
-encoded deterministically as UTF-8 before hashing.
-
-Identity equivalence is required within one host operating system, not across
-different operating systems. A workspace accessed on Linux and Windows may
-have different workspace hashes and machines.
-
-Unless explicitly overridden, the desired machine name remains:
+The definition files shown above are examples; additional named `.smlbx` files
+may coexist. A repository may supply its own definitions:
 
 ```text
+<repository>/.smolsandbox/
+  default.smlbx
+  sandbox-name.smlbx
+```
+
+Resolve the effective Smolfile as follows:
+
+1. Use `--smolfile <name-or-path>` when supplied. Otherwise, preserve
+   `BASE_SMOLFILE` as an explicit path override. If neither is supplied, select
+   the filename `default.smlbx`.
+2. A flag value that is only a filename is looked up exactly as given, first
+   at `<repository>/.smolsandbox/<filename>`, then at
+   `~/.smolsandbox/<filename>`. Do not append an extension. Resolve the
+   repository from the selected workspace, including `clean --workspace`;
+   when no workspace is selected, use the current directory. Outside a
+   repository, search only the user's definition directory. Do not search
+   definitions beside the executable or in unrelated repositories.
+3. A flag value containing a path delimiter (such as `./custom.smlbx`,
+   `../configs/custom.smlbx`, or an absolute path) is an explicit path. Honor
+   native absolute-path and separator conventions, including Windows paths.
+   Resolve relative paths against the invocation's current directory, without
+   prepending either `.smolsandbox` directory or falling back to filename
+   lookup. `BASE_SMOLFILE` retains these explicit-path semantics even when
+   its value is a bare filename.
+4. Select the first existing candidate as one whole file. Only absence allows
+   continuing to the next directory. An unreadable, malformed, or unsupported
+   nearer definition is an error, not a reason to fall back. Never merge
+   contents, harness metadata, or settings between files. A missing named
+   file does not fall back to `default.smlbx`.
+5. Report the selected path in configuration diagnostics. If lookup fails,
+   report the candidate paths; if an explicit path fails, report that path
+   without trying repository or home alternatives.
+
+`codex-home` preserves the Codex state convention. Other profiles use separate
+persistent homes with their required guest mounts. Only the selected profile's
+credential-bearing state is mounted or seeded. Clean and purge preserve these
+homes and all user-owned or repository-local definition files.
+
+Preserve existing applicable environment overrides: `BASE_SMOLFILE`,
+`ARTIFACTS_DIR`, `STATE_ROOT`, `CODEX_HOME_DIR`, `BUILDER_MACHINE`,
+`LOGIN_MACHINE`, `CODEX_MACHINE`, `TMPDIR`, and `OPENAI_API_KEY`.
+`BASE_SMOLFILE` explicitly selects an alternative definition; `--smolfile`
+takes precedence over it, and both take precedence over default filename
+lookup. `create-config` always creates `default.smlbx` in the application home
+and does not follow `BASE_SMOLFILE` or repository-local discovery. The
+`--smolfile` flag selects definitions for lifecycle commands, not generation.
+`SANDBOX_ENSURE_LOGIN` remains an internal shell detail and is not supported.
+
+Do not add user/workspace TOML files or search for provisioning inputs outside
+the definition lookup described above. The previous draft's `.codex-sandbox`
+application home, `CODEX_SANDBOX_HOME` override, and workspace trust store are
+superseded by this design. Explicit component overrides remain available.
+
+Select SmolVM with `--smolvm <path>`, then `SMOLVM_BIN`, then `PATH`.
+Canonicalize the selected executable; never silently substitute a different
+executable after an explicit selection fails.
+
+No generated state is written into the workspace by default. Application-owned
+state and port manifests are versioned and written atomically. Unknown newer
+formats fail without rewriting them. The application home is host-local and
+is not imported from shell-era state.
+
+## Configuration generation and harness selection
+
+`create-config` requires one `--harness` choice. Accepted identifiers are:
+
+| Identifier | Harness |
+| --- | --- |
+| `claude` | Claude |
+| `codex` | Codex |
+| `opencode` | OpenCode |
+| `hermes` | Hermes Agent |
+
+For example:
+
+```text
+codex-sandbox create-config --harness codex
+codex-sandbox build /path/to/project
+codex-sandbox start /path/to/project -- --help
+```
+
+The command shall:
+
+1. Validate the choice before creating directories or files.
+2. Render the complete definition from built-in template data, including the
+   selected harness's guest installation and provisioning defaults.
+3. Record the profile identifier in application-readable metadata compatible
+   with the Smolfile format, so the one file is sufficient to identify the
+   guest harness. No separate profile registry is required.
+4. Create the application home if needed and publish `default.smlbx` atomically
+   without replacing any existing file, including a concurrent creation.
+5. Print the created path, selected harness, and next build/start commands.
+
+Generation works without SmolVM, host harness installations, credentials, or
+network access. It does not provision a guest, query inventory, create a
+machine, authenticate, or download templates. Invalid choices exit `2`;
+filesystem failures and an existing destination fail non-zero without changing
+that destination.
+
+The user may inspect and edit the generated file. Lifecycle commands validate
+the selected definition and profile metadata before mutation. A missing file,
+unreadable or malformed definition, or missing/unknown profile fails with an
+actionable error; none silently defaults to Codex. An explicitly overridden
+Smolfile has the same profile contract.
+
+Each profile supplies the guest installation, launch command, persistent-state
+mounts, seed locations, and any supported authentication invocation needed to
+use that harness. Share lifecycle policy across profiles. Do not reuse Codex
+flags, `OPENAI_API_KEY`, login commands, or state paths for another harness
+without that profile's documented support. If a harness has no separate login
+workflow, `login` reports that and its supported authentication approach before
+starting or creating any machine. Credentials remain the harness's concern.
+
+The fixed profile set is the entire harness scope. There is no plugin loader,
+automatic agent discovery, model/provider configuration UI, or mechanism to
+install arbitrary harnesses through this command.
+
+## Identity, guest preparation, and state
+
+Use native canonical workspace paths with deterministic UTF-8 encoding.
+Equivalent spellings on one host must select the same identity. Windows drive
+and filesystem case behavior require native handling. Cross-OS hash equality
+is not required.
+
+Preserve the current managed naming and labels, including:
+
+```text
+codex-builder-<base-id>
+codex-login-<base-id>-r<revision>
 codex-workspace-<base-id>-r<revision>-<workspace-id>
 ```
 
-New workspace machines shall retain the complete managed label set from
-Feature 0001, including the full workspace hash. Builder and login naming,
-runtime-policy revision, legacy-name recognition, and explicit override rules
-shall remain compatible with the current implementation.
+Preserve the path-only workspace label, full immutable-policy hash,
+configuration classification, runtime revision, strict legacy-name recognition,
+and explicit override rules. The workspace remains mounted at
+`/workspace/myrepo` inside the Linux guest.
 
-Regardless of host path syntax, the workspace shall remain mounted inside the
-Linux guest at:
+The base ID hashes the actual selected Smolfile bytes and SmolVM version.
+The selected filename, source directory, and path do not contribute to the
+base ID: identical complete definitions select the same base regardless of
+where they were found. Unselected files do not contribute to identity.
+Workspace identity includes canonical immutable creation options: artifact,
+CPU/memory allocation, all mounts, and effective default-plus-user allowlist.
+Different harness definitions therefore select separate generations and state
+mounts. Port choices remain mutable and never change identity.
 
-```text
-/workspace/myrepo
-```
+Build the base locally through SmolVM, retaining existing preparation,
+temporary publication, non-empty validation, and reuse rules. Do not silently
+update a user's definition when building or starting. Preserve existing
+provisioning pins and verification behavior when transferring the current
+Codex definition into its template. New profiles define their provisioning in
+their templates without adding a migration-wide integrity policy.
 
-## Guest and base artifact model
+Seed missing persistent harness state without overwriting existing files.
+For Codex, preserve `/opt/codex-home` seeding and its warning-only failure
+behavior. Never log or persist API-key values in application configuration or
+command arguments. Preserve Codex secret forwarding through SmolVM by
+environment-variable name. Apply native user-private permissions to
+credential-bearing state and retain separation between harness homes.
 
-The selected SmolVM shall build the base artifact locally from the effective
-Smolfile. Application releases shall not publish or download a prebuilt
-`.smolmachine` artifact.
+## SmolVM adapter and internal boundaries
 
-The effective Smolfile shall keep exact versions for Codex and other guest
-tools. Reviewed version changes alter the effective Smolfile bytes and
-therefore produce a new desired base ID and artifact. Ordinary startup shall
-never resolve an unpinned `latest` version silently.
+Invoke the independently installed SmolVM through one adapter. Before lifecycle
+mutation, check its canonical path, version, required operations, JSON output,
+and available host virtualization prerequisites. An incompatible executable
+fails before creation, replacement, update, or deletion.
 
-The mechanism by which the default Smolfile reaches the application and the
-integrity rules for provisioning downloads remain blocked decisions. All
-other artifact identity, temporary publication, non-empty validation, and
-reuse behavior shall remain compatible with the current implementation.
+The adapter owns argument construction, inventory capture, TTY attachment,
+secret forwarding, exit-status translation, and subprocess failures. Platform
+interfaces own native paths, filesystem operations, permissions, signals, and
+locks. Pure typed domain logic owns identity, inventory classification,
+readiness, replacement plans, and cleanup eligibility. The lifecycle service
+executes those plans in the required order. Harness profiles supply only the
+harness-specific provisioning and guest process/state conventions.
 
-Codex shall continue to be installed into the guest artifact and seeded from
-`/opt/codex-home` into the host-mounted `codex-home` without overwriting files
-that already exist. Failure to seed defaults remains a warning and does not by
-itself prevent Codex launch.
-
-## SmolVM integration
-
-The first release shall invoke an independently installed `smolvm` executable
-through a subprocess adapter. It shall neither bundle SmolVM nor depend on
-SmolVM's internal Rust engine modules.
-
-After applying discovery precedence, preflight shall:
-
-1. Canonicalize the executable path.
-2. Obtain and parse its version output.
-3. Verify the commands and machine-readable output capabilities required by
-   the requested operation.
-4. Verify that SmolVM reports the host virtualization prerequisites needed on
-   the current platform.
-5. Reject an incompatible executable before making lifecycle mutations.
-
-The reported version output remains part of the desired base ID. The
-application shall use capability checks rather than pinning Codex or the host
-application to one exact SmolVM release. Errors shall identify the missing
-capability and provide an actionable installation or upgrade instruction.
-
-No arbitrary `smolvm` from `PATH` may silently replace an explicitly selected
-executable. Workspace configuration cannot influence selection.
-
-The adapter shall own argument construction, JSON capture, TTY attachment,
-secret-environment forwarding, exit-status translation, and subprocess error
-classification. Domain reconciliation code shall not construct command lines
-or parse free-form CLI output.
-
-## Internal architecture
-
-The implementation shall preserve these explicit seams:
-
-```text
-CLI
- └─ lifecycle application service
-     ├─ pure identity, inventory, and reconciliation domain logic
-     ├─ SmolVM adapter
-     ├─ cross-platform filesystem, process, permission, and locking adapter
-     └─ configuration and state store
-```
-
-The pure domain layer shall own machine classification, readiness, replacement
-planning, clean selection, and safety decisions. It shall accept typed
-inventory and configuration and return an explicit plan or refusal; it shall
-not perform I/O.
-
-The lifecycle service shall execute plans, enforce refresh boundaries, and
-preserve operation ordering. All SmolVM access shall pass through the adapter.
-All platform-specific behavior shall pass through narrow platform interfaces.
-
-This separation is required for exhaustive tests and for a future replacement
-of the SmolVM subprocess adapter. The specification does not mandate a
-particular Rust crate count or directory layout.
-
-## Inventory handling
-
-SmolVM inventory is untrusted input. The Rust parser shall preserve or
-strengthen every validation currently performed by `sandbox-inventory.py`:
-
-- require valid UTF-8 and JSON;
-- require an array of uniquely named machine objects;
-- validate names, states, labels, and expected field types;
-- reject duplicate, incomplete, or contradictory managed ownership metadata;
-- classify desired, stale, ambiguous, unrelated, and legacy records using the
-  rules in Features 0001 and 0002; and
-- apply the stricter replacement readiness state set before destructive
-  cleanup.
-
-The Rust implementation shall use typed values rather than reproducing the
-unit-separator text protocol used between Bash and Python.
-
-An unavailable, invalid, partial, or unrecognized inventory shall fail closed.
-It shall never be treated as an empty inventory or authorize build, create,
-stop, delete, cache, or trust mutation.
+Inventory remains untrusted input. Preserve all current validation, including
+UTF-8/JSON shape, unique names, state and label types, complete and consistent
+ownership, creation timestamps, and port counts. Invalid or unavailable
+inventory must never become an empty inventory or authorize mutation.
 
 ## Lifecycle behavior
 
 ### `build`
 
-`build [workspace]` shall preserve `build-sandbox.sh` behavior:
-
-1. Resolve configuration, trust, workspace identity, the selected SmolVM, and
-   the effective Smolfile.
-2. Reconcile in non-destructive `start` mode.
-3. Ensure the current base artifact, workspace machine, and login machine.
-4. Preserve all Feature 0001 ambiguity and stale-only refusal rules.
-5. Print the ready artifact, machine, workspace, and next commands using the
-   new CLI syntax.
-
-It accepts zero or one workspace argument. Extra arguments are usage errors.
+Resolve the effective definition, selected profile, workspace, and compatible
+SmolVM. Reconcile non-destructively, ensure the current base, workspace, and
+supported login machine, and print next commands. Preserve stale-only refusal
+and ambiguity rules. Run Feature 0003's conservative post-build purge; its
+refusal does not turn a successful build into a failure.
 
 ### `start`
 
-`start [workspace] [-- <codex arguments>...]` shall:
+Preserve repeatable `--allow-host` and `--port` parsing, validation, and
+delimiter behavior. Reconcile immutable identity first. Reconcile the exact
+requested port set through Feature 0007's manifest/journal protocol while
+holding the existing mutation guarantees, then start the same selected
+machine. Omitting all ports clears earlier mappings. A running machine with a
+different or unknown set is never stopped just to change ports.
 
-1. Perform the same non-destructive workspace reconciliation as `build`,
-   without requiring a login machine.
-2. Start the selected workspace machine.
-3. Best-effort seed missing Codex state from `/opt/codex-home`.
-4. Run interactive guest Codex with every forwarded argument.
-5. Forward `OPENAI_API_KEY` only when the host value is non-empty.
-6. Best-effort stop the selected machine after the interactive process ends or
-   an interceptable termination request occurs.
-
-The guest Codex exit status shall be the command's exit status unless guest
-startup fails or cleanup is the only failure. A seed-copy failure remains a
-warning.
+Seed the selected profile's persistent state and run its interactive guest
+command with arguments after `--` passed unchanged. Codex retains current
+Codex-specific launch flags and secret forwarding. Return the harness exit
+status unless startup fails or cleanup is the only failure. Best-effort stop
+a machine started by this invocation on completion or interceptable
+termination; preserve the existing handling of an already-running machine.
 
 ### `login`
 
-`login` shall derive current desired identity, confirm the current-generation
-login machine from a valid fresh inventory, start it, seed Codex state, and run
-interactive:
-
-```text
-codex login --device-auth
-```
-
-inside the guest through SmolVM. It shall best-effort stop the login machine
-after completion or an interceptable termination request. It shall not create
-a missing login machine and accepts no positional arguments.
+For profiles with a separate authentication command, confirm an existing
+current-generation login machine from fresh valid inventory, start it, seed
+its state, and invoke the profile's interactive authentication command. Do not
+create a missing login machine. For Codex retain `codex login --device-auth`.
+Stop the machine best-effort after completion or interceptable termination.
+For profiles without a separate workflow, use the earlier profile refusal
+contract without lifecycle mutation.
 
 ### `repair`
 
-`repair --check [workspace]` shall be read-only and lock-free. It shall report
-the Feature 0001 classification without creating, stopping, deleting, or
-rewriting state.
-
-`repair --replace-stale [--force] [workspace]` shall preserve Feature 0002's
-complete create-before-delete protocol. It shall hold the workspace mutation
-lock across preflight, base preparation, desired creation, fresh readiness
-verification, stale cleanup, and state publication. `--force` authorizes only
-the post-readiness stop of running stale machines.
+`--check` is read-only and lock-free. `--replace-stale` preserves Feature 0002's
+preflight, preparation, fresh readiness gate, eligible stale cleanup, and final
+cache publication. `--force` permits stopping a running stale machine only
+after the desired replacement passes readiness. Repeat the same additional
+hosts to address the same immutable configuration.
 
 ### `clean`
 
-`clean` is generation-wide, not limited to one workspace. It shall preserve
-the existing selection scope:
+Default cleanup preserves the current generation-wide scope and ownership
+checks. `--workspace [workspace]` preserves the implemented workspace-only
+scope across generations and configurations. Preserve unrelated resources,
+harness state, and the user's definition. Remove local port state only after
+the corresponding machine has been successfully deleted.
 
-- the exact current builder;
-- current-base login machines at any numeric revision;
-- positively labelled current-base workspace machines; and
-- strictly named legacy current-base workspace machines.
+### `purge`
 
-Before mutation it shall print every selected resource. Contradictory managed
-metadata shall block cleanup. Selected machines shall be stopped best-effort
-and force-deleted as today. Current managed artifacts and compatibility state
-selected by existing behavior shall be removed, while `codex-home`, unrelated
-machines, unmanaged files, and other generations remain untouched.
+Port Feature 0003 completely: conservative refusal, mutually exclusive
+`--force` and `--force-all`, inventory/plan revalidation, artifact eligibility,
+protection of running machines and their generations, current artifact
+retention, and interrupted-builder recovery. Never stop a running machine as
+part of purge.
 
-If Feature 0003 is implemented before cutover, its additional artifact-purge
-behavior shall be ported according to **Relationship to earlier features**.
+## Concurrency, failures, and cleanup
 
-### `doctor`
+Preserve workspace serialization and the artifact/purge lock with native
+exclusive file locks. Keep the observable 60-second timeout. Refresh inventory
+after locking; hold replacement locks for the full handoff and port/start
+locks through verification and machine start. Never continue unlocked after a
+failure. Native lock release on process exit may replace stale-PID handling.
 
-`doctor [workspace]` is a new read-only command. It shall validate and report:
+`repair --check`, help, and version output perform no lifecycle or state
+mutation. `create-config` performs only its explicitly requested local file
+creation and does not require lifecycle locks or SmolVM.
 
-- user and workspace configuration;
-- application-home existence, schema, writability, and permission posture;
-- SmolVM discovery, canonical path, version, and required capabilities;
-- host virtualization prerequisites exposed by SmolVM;
-- workspace canonicalization and identity;
-- workspace trust status; and
-- required network reachability where it can be tested safely without
-  credentials or mutation.
+Support interactive I/O, terminal resize where available, Ctrl-C, child exit
+status, and interceptable termination notifications. Shutdown is best-effort;
+forced termination and host crashes cannot guarantee a machine stop. Preserve
+the guest failure as primary when cleanup also fails, and report cleanup
+separately. If only cleanup fails, return an operational failure.
 
-`doctor` shall not create, start, stop, delete, or alter a machine; build an
-artifact; change trust; or rewrite state. It exits non-zero when a required
-check fails and distinguishes warnings from blockers.
+Human-readable output distinguishes success, warning, usage, and operational
+failure without requiring color. Partial cleanup reports completed and
+unprocessed work without claiming rollback. Never print secrets.
 
-## Concurrency and locking
+## Testing and validation
 
-Mutating operations for one workspace identity shall be serialized with a
-cross-platform exclusive file lock under the application home's `locks/`
-directory. The observable timeout remains 60 seconds.
+Port all existing behavioral tests to Rust, using a cross-platform Rust SmolVM
+test double instead of Bash/Python fixtures. Cover identity, malformed
+inventory, reconciliation, replacement readiness and ordering, clean, purge,
+allowlists, ports, help, API-key forwarding, guest seeding, locking,
+interruption, and failure precedence.
 
-Operating-system-released locks shall replace PID-bearing lock directories
-where native locking provides crash recovery. The implementation shall not
-reproduce stale-PID deletion merely for literal compatibility.
+Add direct tests for the bounded new behavior:
 
-After acquiring a lock, a mutating operation shall refresh inventory before
-making create or delete decisions. Replacement shall keep the lock for the
-entire Feature 0002 handoff. `repair --check` and `doctor` remain lock-free and
-read-only.
+- Executable relocation and execution from an unrelated working directory.
+- Native application-home discovery and explicit component overrides.
+- Default and named `.smlbx` lookup: repository before home, home-only lookup
+  outside a repository, and repository selection from the workspace rather
+  than the executable location.
+- Whole-file selection with no merging; invalid or unreadable nearer files
+  fail instead of falling back, and missing names never select the default.
+- `--smolfile` precedence over `BASE_SMOLFILE`, exact filename matching, and
+  explicit absolute/relative paths bypassing repository/home lookup on each
+  supported host, with relative paths based on the invocation directory.
+- Identical bytes at different filenames/locations producing the same base
+  ID, and edits to unselected definitions leaving identity unchanged.
+- All four template choices, profile selection, and launch/state isolation.
+- Offline configuration creation without SmolVM or host harness tools.
+- No-clobber behavior, including concurrent creation and filesystem failures.
+- Missing or invalid definitions and unsupported profiles failing before
+  lifecycle mutation.
+- User edits and existing state surviving executable updates and relocation.
+- Base identity using the actual file bytes, not executable/template versions.
+- Harness-specific argument forwarding and supported/unsupported login paths.
 
-Any artifact publication or purge behavior that operates across workspaces
-shall use a distinct application-home artifact lock. Lock acquisition failure
-or timeout shall not authorize an unlocked fallback.
+Before deleting old files, run Linux differential tests against the script
+implementation for equivalent Codex configurations. Compare plans, operation
+order, labels, names, exit categories, and normalized output. Normalize only
+the explicit CLI, home-location, profile, and native-path changes specified
+here; other differences require a fix or specification amendment.
 
-## Interactive process and cleanup behavior
-
-The platform process adapter shall support interactive input/output, terminal
-resize where SmolVM supports it, child exit-status propagation, Ctrl-C, and the
-termination notifications the host operating system permits the application
-to intercept.
-
-The application shall attempt to stop a workspace or login machine after:
-
-- normal guest command completion;
-- Ctrl-C;
-- another interceptable termination request; or
-- a child-process startup failure after the machine was started.
-
-Cleanup is best-effort. Forced process termination, host crashes, power loss,
-and failures that prevent application code from running cannot guarantee a
-machine stop. Documentation and diagnostics shall state that limitation rather
-than promising impossible cleanup.
-
-If the guest command fails and cleanup also fails, the guest failure remains
-primary and cleanup is reported separately. If the guest command succeeds and
-cleanup alone fails, the command shall report an operational failure.
-
-## Output, errors, and diagnostics
-
-Human-readable output is the only stable output contract in this feature.
-Success, warning, usage, and operational failure shall remain distinguishable
-without relying solely on color.
-
-CLI misuse exits `2`. Operational failures exit non-zero. Interactive `start`
-and `login` preserve the guest process exit status where the host operating
-system can represent it. Platform-specific raw status values may be normalized
-without changing success versus failure.
-
-`--verbose` shall expose local diagnostic context such as selected paths,
-configuration sources, SmolVM capability checks, and operation phases. It
-shall not print secrets. Stable machine-readable JSON output is deferred.
-
-Every refusal before mutation shall say that no relevant resources were
-changed. Partial cleanup failures shall list the completed and unprocessed
-operations without claiming rollback.
-
-## Safety invariants
-
-- Unknown, invalid, or failed inventory never implies machine absence.
-- Normal `build` and `start` never delete a machine.
-- Normal reconciliation never creates a desired machine when stale-only or
-  ambiguous candidates require explicit repair.
-- A stale workspace machine is not stopped or deleted before the desired
-  machine passes Feature 0002 readiness.
-- A machine belonging to another workspace is never stopped or deleted.
-- Contradictory managed metadata blocks destructive action.
-- Read-only commands perform no lifecycle, state, or trust mutation.
-- Configuration or trust parse failure performs no lifecycle mutation.
-- A workspace cannot select an executable or silently authorize sensitive
-  host access.
-- Cache and state publication is atomic and follows successful verification.
-- A lock timeout never falls back to unlocked mutation.
-- Credential-bearing state is not used when private access cannot be ensured.
-- API-key values and guest credentials are never logged or persisted by the
-  application.
-- Guest-tool updates occur only through reviewed, pinned Smolfile changes.
-- Shell-era state is never imported, merged, or deleted.
-- SmolVM is never bundled in an application release.
-- Neither blocked implementation decision is resolved implicitly in code.
-
-## Testing strategy
-
-### Rust unit and property tests
-
-Pure tests shall cover:
-
-- canonical path normalization and workspace hashing on every platform;
-- base hashing from SmolVM version output and exact Smolfile bytes;
-- inventory JSON validation and duplicate detection;
-- desired, stale, legacy, ambiguous, unrelated, and override classification;
-- readiness and replacement planning;
-- clean selection and contradictory-label refusal;
-- configuration precedence and dangerous-setting trust invalidation;
-- state-schema handling; and
-- exit and cleanup result precedence.
-
-Property or generated tests shall exercise malformed inventory, adversarial
-names and labels, path variants, and plan invariants that prevent unrelated
-machine mutation.
-
-### Rust SmolVM test double
-
-A cross-platform Rust executable shall replace `tests/fixtures/smolvm`. It
-shall support version and inventory responses, sequenced inventories,
-interactive and non-interactive exec records, lifecycle state mutation,
-operation logging, and independent failure injection for inventory, build,
-pack, create, start, stop, delete, and guest seeding.
-
-The final test suite shall not execute Bash or Python.
-
-### Behavioral coverage
-
-Every scenario in the existing clean, reconciliation, replacement, start, and
-Smolfile-configuration tests shall be ported. New tests shall cover behavior
-currently lacking direct coverage, including:
-
-- `login` success, failure, cleanup, and argument validation;
-- `build` summaries and usage errors;
-- `repair --check` read-only behavior;
-- every CLI conflict and excess-argument case;
-- API-key forwarding without value exposure;
-- clean refusal for contradictory labels;
-- SmolVM discovery precedence and incompatible capabilities;
-- configuration precedence and workspace trust;
-- application-home permissions and schema versions;
-- interruption and dual-failure cleanup behavior; and
-- `doctor` success, warnings, failures, and non-mutation.
-
-### Differential compatibility
-
-Before the old files are deleted, Linux CI shall run a temporary differential
-suite against the shell/Python and Rust implementations using equivalent test
-doubles and fixtures. It shall compare lifecycle plans, SmolVM operation
-ordering, labels, names, exit-code categories, and normalized user-visible
-outcomes.
-
-The differential suite may normalize command spelling, native paths, and
-approved Q9 compatibility exceptions. Every other difference requires an
-explicit specification amendment or a fix before cutover.
-
-### Cross-platform and real-SmolVM verification
-
-The complete mocked suite shall pass on every supported release target. Before
-publishing, release CI shall also run at least one real SmolVM lifecycle smoke
-test on every supported operating-system and architecture combination. The
-smoke test shall cover discovery, build, machine creation, inventory, start,
-interactive execution sufficiently to validate TTY plumbing, stop, and safe
-cleanup.
-
-Release tests shall unpack each archive in a clean environment without a Rust
-toolchain, confirm that no Bash or Python is used, confirm that SmolVM is not
-bundled, and exercise both missing-SmolVM and compatible-SmolVM diagnostics.
+Run the mocked suite on every supported release target. Before cutover, run
+real SmolVM smoke tests for guest build, inventory, creation, interactive
+start, stop, and cleanup, including each supported harness. Validate that a
+copied binary runs without adjacent resources or host Bash/Python. New
+provisioning-integrity tests belong to Feature 0008 and are not a parity gate.
 
 ## Documentation requirements
 
-The cutover shall update `README.md` and any operator documentation to cover:
+At cutover, update the README and operator instructions for copying/running
+the executable, SmolVM installation, the supported host matrix, the
+`~/.smolsandbox` layout, `create-config` choices and no-clobber behavior,
+user-editable definitions, repository-before-home lookup without merging,
+`--smolfile` filename/path selection, override precedence, and old-script/subcommand
+mapping. Include examples for allowlists, port publishing, repair, clean,
+purge, and each harness's launch/authentication conventions.
 
-- release download and verification;
-- SmolVM installation as the sole host executable prerequisite;
-- the exact supported OS, architecture, and SmolVM matrix;
-- old-script to new-subcommand migration;
-- command examples and exit behavior;
-- application-home layout and permissions;
-- configuration files, environment variables, and precedence;
-- workspace trust and dangerous settings;
-- initial guest provisioning and network requirements;
-- workspace identity and fixed guest mount path;
-- generation-wide `clean` scope;
-- repair and create-before-delete guarantees;
-- `doctor` and troubleshooting;
-- the lack of shell-era state migration; and
-- the lack of self-update and native installers.
-
-Documentation shall not claim that Codex must be installed on the host or that
-SmolVM is included in the application archive.
+Explain that harnesses run in the guest, existing configuration is never
+automatically refreshed, shell-era state is not imported, and provisioning
+integrity improvements are separately tracked by Feature 0008. Do not require
+host agent installations or claim that SmolVM is bundled.
 
 ## Acceptance criteria
 
-1. The two required pre-implementation decisions are recorded in this file,
-   their acceptance tests are defined, and the feature is no longer marked
-   `Blocked` before migration implementation begins.
-2. `codex-sandbox` builds and runs on every documented SmolVM-supported release
-   target without Bash, Python, or a Rust toolchain on the user's host.
-3. Given no compatible `smolvm` on `PATH` and no explicit override, every
-   lifecycle command fails before mutation with an actionable installation
-   error.
-4. Given `--smolvm`, `SMOLVM_BIN`, user configuration, and `PATH` candidates,
-   discovery selects the highest-precedence allowed candidate and never reads
-   an executable path from workspace configuration.
-5. Given a selected SmolVM missing a required capability, preflight fails
-   before lifecycle mutation and identifies that capability.
-6. Given equivalent native spellings of one workspace path, canonicalization
-   produces one workspace identity on that host.
-7. Linux identities, machine names, labels, base IDs, and lifecycle operation
-   order remain compatible with the current implementation for unchanged
-   authoritative inputs.
-8. `build`, `start`, `login`, `repair`, and `clean` satisfy their mapped current
-   behavior and the safety requirements of Features 0001 and 0002.
-9. `login` and `clean` reject unexpected arguments with usage and exit `2`.
-10. `start` forwards all arguments following `--` to guest Codex unchanged and
-    returns its exit status unless cleanup is the only failure.
-11. An `OPENAI_API_KEY` is forwarded by name without its value appearing in
-    arguments, configuration, state, normal output, or verbose output.
-12. A guest seed-copy failure warns but does not prevent `start` or `login`
-    from launching Codex.
-13. Inventory failure, invalid JSON, duplicate names, or contradictory labels
-    authorizes no lifecycle mutation.
-14. Replacement creates and freshly verifies the desired machine before the
-    first stop or delete of a stale machine.
-15. Normal startup never deletes a machine and refuses stale-only ambiguity
-    without creating a new desired machine.
-16. `clean` reports and affects only the current generation's managed selection
-    and preserves unrelated machines, other generations, and `codex-home`.
-17. Two concurrent mutating operations for one workspace serialize, and a
-    waiting operation fails after 60 seconds rather than mutating unlocked.
-18. `repair --check` and `doctor` perform no machine, artifact, state, lock,
-    cache, permission, or trust mutation.
-19. A dangerous workspace setting is ignored or refused until the user grants
-    trust for the canonical workspace and exact configuration digest.
-20. Changing a trusted dangerous setting invalidates the stored trust decision.
-21. Credential-bearing operations refuse to continue when user-private access
-    cannot be verified or enforced.
-22. Unknown newer application-state schemas fail without rewriting state or
-    mutating SmolVM resources.
-23. Shell-era `artifacts/` and `.smolvm/` contents are neither imported nor
-    deleted by the Rust application.
-24. The Rust SmolVM test double supports every success, sequencing, and failure
-    case needed by the ported suite without invoking Bash or Python.
-25. Every existing behavioral test has a Rust replacement, and the uncovered
-    CLI, trust, permission, API-key, login, and doctor cases listed in this
-    feature have direct tests.
-26. The Linux differential suite reports no unapproved semantic difference
-    before the old implementation is removed.
-27. The mocked suite passes on every supported release target, and real SmolVM
-    smoke tests pass on every supported OS and architecture combination.
-28. Release archives run in clean environments without a Rust toolchain and
-    contain neither SmolVM nor a prebuilt guest artifact.
-29. Every release archive has a verified checksum, signature, and provenance.
-30. Updated documentation covers every item in **Documentation requirements**.
-31. The final repository contains no production or test Bash scripts, Python
-    lifecycle helper, or script-based SmolVM fixture, and none is required by
-    build, test, packaging, or runtime workflows.
-32. No intermediate migration stage is presented or published as a supported
-    release.
+1. The feature is `Proposed`; Feature 0008 is referenced as separate work and
+   is not an implementation or release prerequisite.
+2. A single native executable runs from any directory without companion
+   resources, host Bash/Python, or an end-user Rust toolchain.
+3. Default discovery selects `default.smlbx` from the repository's
+   `.smolsandbox` before `~/.smolsandbox`, independently of binary location.
+   `--smolfile` takes precedence over `BASE_SMOLFILE`; bare flag filenames use
+   the same nearest-first lookup, while explicit paths bypass it. Exactly one
+   whole file is used, without merging or fallback from an invalid nearer file.
+4. `create-config --harness` accepts exactly `claude`, `codex`, `opencode`, and
+   `hermes`, with the documented display names.
+5. Every choice generates a complete valid Smolfile identifying its profile
+   without network access, SmolVM, credentials, or host harness tools.
+6. Missing/invalid choices fail before file creation; existing files and
+   concurrent creations are never overwritten; failed writes publish no
+   partial destination.
+7. Missing, unreadable, malformed, or unsupported definitions fail before
+   lifecycle mutation with actionable diagnostics.
+8. Moving/updating the executable leaves user edits, selected profile, and
+   persistent state intact. The actual selected definition determines base
+   identity, and requested ports remain excluded from workspace identity.
+9. All mapped lifecycle commands preserve the current implemented behavior of
+   Features 0001, 0002, 0003, 0005, 0006, and 0007 and later shell changes in
+   the parity baseline.
+10. Normal reconciliation remains non-destructive; replacement verifies the
+    desired machine before stale cleanup; inventory failures never authorize
+    mutation; all relevant operations remain serialized.
+11. Harness launch, argument forwarding, state mounts, and authentication use
+    the selected profile. Another harness's credential state is not mounted
+    and Codex-only flags/secrets are not applied by default to other profiles.
+12. Help/version work without configuration or SmolVM. Usage errors exit `2`;
+    interactive processes preserve guest status and cleanup failure precedence.
+13. Clean and purge preserve the definition and harness homes, respect their
+    current scopes, and remove port state only after successful machine deletion.
+14. Existing provisioning pins and verification checks are preserved; no new
+    download-integrity policy is required to complete the Rust replacement.
+15. No doctor command, workspace TOML/trust system, additional harnesses, or
+    new signing/provenance project is required or added in this feature.
+16. Existing tests have Rust replacements, Linux differential parity passes,
+    the supported-platform mocked suite passes, and real SmolVM smoke tests
+    cover all four profiles before cutover.
+17. Cutover documentation is complete and all old production Bash scripts,
+    Python lifecycle helpers, and script-based tests/fixtures are removed.
 
 ## Implementation stages
 
-### Stage 0: Resolve the blockers
-
-1. Decide and document default Smolfile packaging and discovery.
-2. Decide and document provisioning-download integrity.
-3. Add acceptance tests implied by both decisions.
-4. Review the amended specification and move the status from `Blocked` to
-   `Proposed` before production migration work begins.
-
-### Stage 1: Establish the Rust boundaries
-
-1. Create the Rust workspace and `codex-sandbox` binary.
-2. Define typed configuration, inventory, identity, lifecycle plans, errors,
-   and persisted schemas.
-3. Implement the pure domain layer and Rust SmolVM test double test-first.
-4. Keep all production entry points on the current implementation.
-
-### Stage 2: Port lifecycle behavior
-
-1. Implement configuration, trust, state, platform, and SmolVM adapters.
-2. Port inventory classification and readiness validation from Python.
-3. Port build, start, login, repair, clean, and doctor workflows.
-4. Port every existing test and add the missing behavioral coverage.
-
-### Stage 3: Prove portability and parity
-
-1. Add the complete supported-platform CI matrix.
-2. Run the Linux differential suite while the old implementation remains.
-3. Run real SmolVM lifecycle smoke tests on every supported target.
-4. Resolve every difference or record an approved specification exception.
-
-### Stage 4: Validate distribution
-
-1. Build and unpack every release archive in a clean environment.
-2. Verify checksums, signatures, provenance, and resource discovery.
-3. Confirm SmolVM and prebuilt guest artifacts are absent.
-4. Complete installation, operation, security, and troubleshooting docs.
-
-### Stage 5: Atomic cutover
-
-1. Make `codex-sandbox` the only supported implementation.
-2. Remove the eight production Bash files.
-3. Remove `sandbox-inventory.py`.
-4. Remove all Bash tests and the Bash SmolVM fixture after their Rust
-   replacements pass.
-5. Remove any remaining Bash or Python requirement from build, test,
-   packaging, and runtime workflows.
-6. Publish no release until the complete definition of done below passes.
-
-## Definition of done
-
-This feature is complete only when:
-
-- both implementation blockers were resolved before migration work began;
-- the production and test implementation is Rust-only;
-- no Bash or Python is required to build, test, package, or run it;
-- the complete mocked suite passes on every supported platform;
-- real SmolVM smoke tests pass on every supported platform and architecture;
-- Linux differential parity passed before the old files were removed;
-- signed, checksummed, provenance-bearing release archives were produced and
-  validated without bundling SmolVM;
-- all required documentation is complete;
-- all legacy shell scripts, the Python helper, and script-based fixtures have
-  been removed; and
-- the single atomic cutover is ready to publish as the first supported Rust
-  implementation.
+1. Establish the Rust executable, typed domain model, SmolVM test double, and
+   native platform interfaces while keeping current scripts operational.
+2. Implement repository/home definition discovery, `--smolfile` filename/path
+   selection, and offline `create-config` templates for the four profiles,
+   with atomic no-clobber publication.
+3. Port existing identity, inventory, reconciliation, replacement, allowlist,
+   port, clean, purge, and interactive-process behavior.
+4. Implement profile-specific guest launch/state/authentication conventions and
+   port all tests. Preserve Codex parity throughout.
+5. Prove Linux differential parity, cross-platform execution, binary relocation,
+   and real SmolVM/harness smoke behavior.
+6. Update documentation and cut over atomically to the Rust implementation.
+   No intermediate Rust stage is a supported release. Feature 0008 may proceed
+   independently and does not hold this cutover open.

@@ -2,7 +2,7 @@
 # Shared authoritative identity, inventory, creation, and reconciliation logic.
 
 SANDBOX_ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-SANDBOX_MACHINE_REVISION=4
+SANDBOX_MACHINE_REVISION=5
 SANDBOX_WORKSPACE_MEMORY=12288
 SANDBOX_WORKSPACE_CPUS=4
 SANDBOX_REQUESTED_ALLOW_HOSTS=()
@@ -18,6 +18,11 @@ SANDBOX_DEFAULT_ALLOW_HOSTS=(
   objects.githubusercontent.com
   release-assets.githubusercontent.com
   registry.npmjs.org
+  sh.rustup.rs
+  static.rust-lang.org
+  index.crates.io
+  static.crates.io
+  crates.io
   api.nuget.org
   globalcdn.nuget.org
   pypi.org

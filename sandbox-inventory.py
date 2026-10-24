@@ -103,6 +103,8 @@ def normalize(inventory: list[dict[str, object]]) -> None:
             labels.get(MANAGED_KEYS[1], ""),
             labels.get(MANAGED_KEYS[2], ""),
             labels.get(MANAGED_KEYS[3], ""),
+            labels.get(MANAGED_KEYS[4], ""),
+            labels.get(MANAGED_KEYS[5], ""),
             "yes" if any(key in labels for key in MANAGED_KEYS) else "no",
         )
 
