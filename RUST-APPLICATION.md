@@ -1,19 +1,25 @@
-# Rust application: operation and validation
+# smolsandbox: operation and validation
 
 Feature 0004 remains `Proposed`. The Rust implementation is available for
 validation. The existing scripts remain the parity baseline until the native
 mocked suite and real SmolVM smoke tests pass on every release target. No
 intermediate Rust stage is a supported release.
 
+The Rust executable was renamed from `codex-sandbox` to `smolsandbox`. Update
+callers to invoke `smolsandbox`; no old-name executable alias is provided.
+Existing native definitions, credentials, application state, and machines are
+retained. Codex remains one of the four supported harnesses. This rename does
+not complete the Feature 0004 or Feature 0010 cutover gates.
+
 ## Executable and host requirements
 
 Build the application with:
 
 ```text
-cargo build --locked --release --bin codex-sandbox
+cargo build --locked --release --bin smolsandbox
 ```
 
-Copy `target/release/codex-sandbox` (Windows: `codex-sandbox.exe`) to any
+Copy `target/release/smolsandbox` (Windows: `smolsandbox.exe`) to any
 directory. The executable contains every configuration template. Running the
 copied executable requires no checkout, adjacent resources, host Bash, host
 Python, host harness installation, or Rust toolchain.
@@ -44,7 +50,7 @@ the mocked native runs; real guest tests remain separate cutover gates.
 Generate one user-owned definition without network access or SmolVM:
 
 ```text
-codex-sandbox create-config --harness codex
+smolsandbox create-config --harness codex
 ```
 
 The accepted choices are `claude` (Claude), `codex` (Codex), `opencode`
@@ -55,9 +61,11 @@ one created concurrently, is never overwritten. Invalid choices create no
 directories or files.
 
 Inspect and edit the generated Smolfile. Preserve its single
-`# codex-sandbox-harness: <identifier>` metadata line. Configuration selection
-uses exactly one complete file; definitions are never merged. Updating or
-moving the executable never refreshes an existing definition.
+`# codex-sandbox-harness: <identifier>` metadata line. The marker and the
+`codex-sandbox.` managed-label namespace are retained compatibility identifiers;
+the executable rename does not rewrite definitions or machine metadata.
+Configuration selection uses exactly one complete file; definitions are never
+merged. Updating or moving the executable never refreshes an existing definition.
 
 Lifecycle commands select a definition in this order:
 
@@ -78,15 +86,15 @@ lookup. `BASE_SMOLFILE` always has explicit-path semantics, even for a bare
 filename. The executable's directory never participates in discovery.
 
 ```text
-codex-sandbox start --smolfile claude.smlbx /path/to/project
-codex-sandbox build --smolfile ./configs/custom.smlbx /path/to/project
+smolsandbox start --smolfile claude.smlbx /path/to/project
+smolsandbox build --smolfile ./configs/custom.smlbx /path/to/project
 ```
 
 To keep all four profiles, generate one default, rename that file to a chosen
 filename, then generate another default. `create-config` always targets the
 user's `default.smlbx`; it ignores `BASE_SMOLFILE` and repository discovery.
 
-| Profile | Guest launch | `codex-sandbox login` | Persistent guest state |
+| Profile | Guest launch | `smolsandbox login` | Persistent guest state |
 | --- | --- | --- | --- |
 | Codex | `codex --no-daemon` | `codex login --device-auth` | `/root/.codex` |
 | Claude | `env CLAUDE_CONFIG_DIR=/root/.claude claude` | Same environment, `claude auth login` | `/root/.claude` |
@@ -105,17 +113,17 @@ authenticate through the harness in a workspace machine with the required
 ## Lifecycle commands
 
 ```text
-codex-sandbox build /path/to/project
-codex-sandbox login
-codex-sandbox start /path/to/project -- --help
-codex-sandbox start --allow-host packages.example.com --port 3000 /path/to/project
-codex-sandbox repair --check /path/to/project
-codex-sandbox repair --replace-stale --force /path/to/project
-codex-sandbox clean --workspace /path/to/project
-codex-sandbox clean
-codex-sandbox purge
-codex-sandbox purge --force
-codex-sandbox purge --force-all
+smolsandbox build /path/to/project
+smolsandbox login
+smolsandbox start /path/to/project -- --help
+smolsandbox start --allow-host packages.example.com --port 3000 /path/to/project
+smolsandbox repair --check /path/to/project
+smolsandbox repair --replace-stale --force /path/to/project
+smolsandbox clean --workspace /path/to/project
+smolsandbox clean
+smolsandbox purge
+smolsandbox purge --force
+smolsandbox purge --force-all
 ```
 
 Every lifecycle command accepts `--smolfile` and `--smolvm`. Help and version
@@ -222,7 +230,7 @@ Run the Rust checks with:
 cargo fmt --all -- --check
 cargo clippy --locked --features test-adapter --all-targets -- -D warnings
 cargo test --locked --features test-adapter --all-targets
-cargo build --locked --release --bin codex-sandbox
+cargo build --locked --release --bin smolsandbox
 ```
 
 `test-adapter` enables a test-only native-home injection and virtualization
@@ -251,5 +259,6 @@ Real guest provisioning, interactive terminal behavior, and cross-platform
 execution require their own observed results. Keep the scripts and their
 fixtures until every required gate has passed.
 
-The [validation record](FEATURES/feature-0004-validation.md) lists observed
-results and outstanding cutover evidence for this implementation.
+The historical [Feature 0004 validation record](FEATURES/feature-0004-validation.md)
+retains the executable names used in its recorded commands and lists outstanding
+cutover evidence. Current commands use `smolsandbox`.

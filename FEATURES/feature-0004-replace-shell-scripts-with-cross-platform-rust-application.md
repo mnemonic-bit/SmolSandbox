@@ -12,7 +12,7 @@ block this migration.
 ## Summary
 
 Replace the repository's Bash and Python lifecycle implementation with one
-cross-platform Rust executable named `codex-sandbox`. Users may copy the
+cross-platform Rust executable named `smolsandbox`. Users may copy the
 executable anywhere and run it without an installation directory, companion
 resources, Bash, Python, or a Rust toolchain on the host.
 
@@ -187,15 +187,15 @@ for this script replacement.
 ## Command-line interface
 
 ```text
-codex-sandbox create-config --harness <claude|codex|opencode|hermes>
-codex-sandbox build [workspace]
-codex-sandbox start [--allow-host HOST]... [--port PORT]... [workspace] [-- HARNESS_ARG...]
-codex-sandbox login
-codex-sandbox repair (--check | --replace-stale [--force]) [--allow-host HOST]... [workspace]
-codex-sandbox clean [--workspace [workspace]]
-codex-sandbox purge [--force | --force-all]
-codex-sandbox --version
-codex-sandbox --help
+smolsandbox create-config --harness <claude|codex|opencode|hermes>
+smolsandbox build [workspace]
+smolsandbox start [--allow-host HOST]... [--port PORT]... [workspace] [-- HARNESS_ARG...]
+smolsandbox login
+smolsandbox repair (--check | --replace-stale [--force]) [--allow-host HOST]... [workspace]
+smolsandbox clean [--workspace [workspace]]
+smolsandbox purge [--force | --force-all]
+smolsandbox --version
+smolsandbox --help
 ```
 
 Every lifecycle command (`build`, `start`, `login`, `repair`, `clean`, and
@@ -203,8 +203,8 @@ Every lifecycle command (`build`, `start`, `login`, `repair`, `clean`, and
 For example:
 
 ```text
-codex-sandbox start --smolfile claude.smlbx /path/to/project
-codex-sandbox build --smolfile ./configs/custom.smlbx /path/to/project
+smolsandbox start --smolfile claude.smlbx /path/to/project
+smolsandbox build --smolfile ./configs/custom.smlbx /path/to/project
 ```
 
 Each command accepts `--help` without requiring a configuration file, SmolVM,
@@ -222,9 +222,10 @@ the delimiter belongs to the selected guest harness.
 | `clean` | `clean-sandbox.sh`, including workspace-only cleanup |
 | `purge` | `purge-sandbox.sh` |
 
-Keep the executable name `codex-sandbox` for this migration; selecting another
-harness does not select a different executable. No `doctor` command is added.
-Unknown options, unsupported harness identifiers, conflicting modes, and excess
+Use the executable name `smolsandbox`, as specified by
+[Feature 0011](feature-0011-rename-executable-to-smolsandbox.md); selecting
+another harness does not select a different executable. No `doctor` command is
+added. Unknown options, unsupported harness identifiers, conflicting modes, and excess
 arguments are usage errors with exit `2`. `login` rejects positional arguments
 instead of preserving the old script's accidental argument ignoring.
 
@@ -327,9 +328,9 @@ is not imported from shell-era state.
 For example:
 
 ```text
-codex-sandbox create-config --harness codex
-codex-sandbox build /path/to/project
-codex-sandbox start /path/to/project -- --help
+smolsandbox create-config --harness codex
+smolsandbox build /path/to/project
+smolsandbox start /path/to/project -- --help
 ```
 
 The command shall:

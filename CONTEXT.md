@@ -1,7 +1,7 @@
-# Codex Sandbox Lifecycle
+# smolsandbox lifecycle
 
-This context describes the identities and retained state of reusable Codex
-sandboxes and their workspace-specific variants.
+This context describes the lifecycle terms used by smolsandbox and the
+retained Codex shell baseline.
 
 ## Language
 

@@ -1,5 +1,5 @@
 use clap::Parser;
-use codex_sandbox::cli::{Cli, Options};
+use smolsandbox::cli::{Cli, Options};
 use std::{
     collections::{BTreeMap, BTreeSet},
     ffi::OsString,
@@ -25,7 +25,7 @@ impl OfflineInvocation {
     }
 
     fn run(&self, arguments: &[&str]) -> Output {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_codex-sandbox"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_smolsandbox"));
         command
             .env_clear()
             .args(arguments)
@@ -48,11 +48,28 @@ impl OfflineInvocation {
         output
     }
 
-    fn usage_error(&self, arguments: &[&str]) {
+    fn usage_error(&self, arguments: &[&str]) -> String {
         let output = self.run(arguments);
         assert_eq!(output.status.code(), Some(2), "{arguments:?}: {output:?}");
         assert!(output.stdout.is_empty(), "{arguments:?}: {output:?}");
         assert!(!output.stderr.is_empty(), "{arguments:?}: {output:?}");
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        if stderr.lines().any(|line| line.starts_with("Usage:")) {
+            assert_usage_identity(&stderr, None);
+        }
+        stderr
+    }
+}
+
+fn assert_usage_identity(output: &str, subcommand: Option<&str>) {
+    let usage = output
+        .lines()
+        .find_map(|line| line.strip_prefix("Usage: "))
+        .unwrap_or_else(|| panic!("missing usage: {output}"));
+    let mut words = usage.split_whitespace();
+    assert_eq!(words.next(), Some("smolsandbox"), "{output}");
+    if let Some(subcommand) = subcommand {
+        assert_eq!(words.next(), Some(subcommand), "{output}");
     }
 }
 
@@ -75,11 +92,9 @@ fn snapshot(root: &Path) -> BTreeMap<PathBuf, Option<Vec<u8>>> {
 }
 
 fn parse(arguments: &[String]) -> Options {
-    Cli::try_parse_from(
-        std::iter::once("codex-sandbox").chain(arguments.iter().map(String::as_str)),
-    )
-    .unwrap()
-    .into_options()
+    Cli::try_parse_from(std::iter::once("smolsandbox").chain(arguments.iter().map(String::as_str)))
+        .unwrap()
+        .into_options()
 }
 
 #[test]
@@ -199,7 +214,10 @@ fn help_is_complete_and_does_not_require_tools_configuration_or_mutation() {
         assert!(output.status.success(), "{arguments:?}: {output:?}");
         assert!(output.stderr.is_empty(), "{arguments:?}: {output:?}");
         let stdout = String::from_utf8(output.stdout).unwrap();
-        assert!(!stdout.is_empty());
+        assert_usage_identity(
+            &stdout,
+            arguments.first().copied().filter(|arg| *arg != "--help"),
+        );
         let normalized = stdout.split_whitespace().collect::<Vec<_>>().join(" ");
         for text in expected
             .iter()
@@ -229,9 +247,24 @@ fn usage_errors_exit_two_on_stderr_before_any_lifecycle_work() {
         vec!["clean", "--workspace", "one", "two"],
         vec!["purge", "--force", "--force-all"],
         vec!["create-config"],
-        vec!["create-config", "--harness", "unknown"],
     ] {
-        invocation.usage_error(&arguments);
+        let stderr = invocation.usage_error(&arguments);
+        assert_usage_identity(&stderr, None);
+    }
+    invocation.usage_error(&["create-config", "--harness", "unknown"]);
+}
+
+#[test]
+fn version_reports_manifest_identity_without_tools_configuration_or_mutation() {
+    let invocation = OfflineInvocation::new();
+    for flag in ["--version", "-V"] {
+        let output = invocation.run(&[flag]);
+        assert_eq!(output.status.code(), Some(0), "{output:?}");
+        assert!(output.stderr.is_empty(), "{output:?}");
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            format!("smolsandbox {}\n", env!("CARGO_PKG_VERSION")),
+        );
     }
 }
 

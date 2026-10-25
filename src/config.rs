@@ -83,11 +83,11 @@ impl Profile {
     pub fn authentication_hint(self) -> &'static str {
         match self {
             Self::Claude => {
-                "Run codex-sandbox login for Claude authentication, or use /login inside Claude."
+                "Run smolsandbox login for Claude authentication, or use /login inside Claude."
             }
-            Self::Codex => "Run codex-sandbox login for Codex device authentication.",
-            Self::OpenCode => "Run codex-sandbox login to select and authenticate a provider.",
-            Self::Hermes => "Run codex-sandbox login to configure Hermes Agent with hermes setup.",
+            Self::Codex => "Run smolsandbox login for Codex device authentication.",
+            Self::OpenCode => "Run smolsandbox login to select and authenticate a provider.",
+            Self::Hermes => "Run smolsandbox login to configure Hermes Agent with hermes setup.",
         }
     }
     pub fn login_hosts(self) -> Vec<&'static str> {
@@ -158,7 +158,7 @@ impl Definition {
             .map(str::trim)
             .collect();
         if profiles.len() != 1 {
-            bail!("selected Smolfile {} requires exactly one '# codex-sandbox-harness: <profile>' metadata line; generate an example with codex-sandbox create-config --harness codex",path.display());
+            bail!("selected Smolfile {} requires exactly one '# codex-sandbox-harness: <profile>' metadata line; generate an example with smolsandbox create-config --harness codex",path.display());
         }
         let profile = Profile::parse(profiles[0])
             .with_context(|| format!("invalid selected Smolfile {}", path.display()))?;
@@ -362,7 +362,7 @@ pub fn select_definition(
             }
         }
     }
-    bail!("Smolfile not found; searched: {}. Run codex-sandbox create-config --harness codex, or select an existing file with --smolfile",candidates.iter().map(|p|p.display().to_string()).collect::<Vec<_>>().join(", "))
+    bail!("Smolfile not found; searched: {}. Run smolsandbox create-config --harness codex, or select an existing file with --smolfile",candidates.iter().map(|p|p.display().to_string()).collect::<Vec<_>>().join(", "))
 }
 pub fn create_config(harness: &str) -> Result<PathBuf> {
     let profile = Profile::parse(harness)?;
@@ -370,7 +370,7 @@ pub fn create_config(harness: &str) -> Result<PathBuf> {
     Definition::parse(destination.clone(), profile.template().as_bytes().to_vec())?;
     platform::publish_new(&destination, profile.template().as_bytes())?;
     println!(
-        "Created {} for {}.\nNext: codex-sandbox build\nThen: codex-sandbox start",
+        "Created {} for {}.\nNext: smolsandbox build\nThen: smolsandbox start",
         destination.display(),
         profile.display_name()
     );

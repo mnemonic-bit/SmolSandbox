@@ -1,13 +1,19 @@
-# Codex in a SmolVM sandbox
+# smolsandbox
+
+The Rust application supports Claude, Codex, OpenCode, and Hermes Agent. Its
+executable was renamed from `codex-sandbox` to `smolsandbox`; update callers to
+use `smolsandbox`. Existing native definitions, credentials, application state,
+and machines are retained. Codex remains a supported harness.
 
 Feature 0004's Rust implementation and its validation commands are documented
-in [Rust application: operation and validation](RUST-APPLICATION.md). The scripts
+in [smolsandbox: operation and validation](RUST-APPLICATION.md). The scripts
 below remain the parity baseline until the native mocked and real SmolVM
-cutover gates pass.
+cutover gates pass. The executable rename does not complete those gates or
+Feature 0010's documentation cutover.
 
-This repository builds a reusable, all-batteries-included `.smolmachine` for
-Codex and creates persistent VMs from it. The prepared Debian 12 slim environment
-contains Node.js 22, Python, .NET 8, Git, common diagnostics, Podman/Buildah
+The retained shell workflow builds a reusable, all-batteries-included
+`.smolmachine` for Codex and creates persistent VMs from it. The prepared
+Debian 12 slim environment contains Node.js 22, Python, .NET 8, Git, common diagnostics, Podman/Buildah
 with a Docker-compatible command, Playwright/Chromium, Codex, selected Codex
 skills, and codebase-memory-mcp.
 

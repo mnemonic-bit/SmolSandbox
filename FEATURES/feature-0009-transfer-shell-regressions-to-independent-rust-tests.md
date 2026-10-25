@@ -172,7 +172,7 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo clippy --locked --features test-adapter --all-targets -- -D warnings
 cargo test --locked --all-targets
 cargo test --locked --features test-adapter --all-targets
-cargo build --locked --release --bin codex-sandbox
+cargo build --locked --release --bin smolsandbox
 ```
 
 Run the independent mocked suite on the release targets in

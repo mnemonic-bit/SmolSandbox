@@ -1,5 +1,5 @@
 [package]
-name = "codex-sandbox"
+name = "smolsandbox"
 version = "0.4.0"
 edition = "2021"
 description = "Persistent coding-agent sandboxes through SmolVM"
@@ -21,7 +21,7 @@ tempfile = "3"
 toml = "0.8"
 
 [[bin]]
-name = "codex-sandbox"
+name = "smolsandbox"
 path = "src/main.rs"
 
 [[bin]]

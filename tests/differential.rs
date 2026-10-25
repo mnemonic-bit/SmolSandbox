@@ -1,8 +1,8 @@
-use codex_sandbox::{
+use serde_json::{json, Value};
+use smolsandbox::{
     domain::{self, Category, Identity, Machine, PurgePolicy},
     ports::{self, PortAction},
 };
-use serde_json::{json, Value};
 use std::{collections::BTreeMap, fs, path::Path};
 
 fn cases(data: &str, expected_count: usize) -> Vec<Value> {
@@ -268,4 +268,51 @@ fn port_publication_commit_and_interrupted_recovery_have_fixed_expectations() {
     }
     ports::remove(root.path(), "target").unwrap();
     assert_eq!(read_state(root.path()), vec![None, None]);
+}
+
+#[test]
+fn future_port_state_preserves_compatibility_path_and_recommends_smolsandbox_upgrade() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("codex-sandbox-existing-state");
+    let future = json!({"version":2,"future_field":"preserve"});
+    port_state(&directory, &future, &Value::Null);
+    let before = read_state(&directory);
+    let error = ports::prepare(
+        &directory,
+        &port_machine("stopped", 0),
+        &"a".repeat(64),
+        &[],
+        false,
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("codex-sandbox-existing-state"));
+    assert!(error.contains("upgrade smolsandbox before retrying"));
+    assert_eq!(read_state(&directory), before);
+}
+
+#[test]
+fn authentication_guidance_uses_smolsandbox_for_every_profile() {
+    use smolsandbox::config::Profile;
+
+    for (profile, expected) in [
+        (
+            Profile::Claude,
+            "Run smolsandbox login for Claude authentication, or use /login inside Claude.",
+        ),
+        (
+            Profile::Codex,
+            "Run smolsandbox login for Codex device authentication.",
+        ),
+        (
+            Profile::OpenCode,
+            "Run smolsandbox login to select and authenticate a provider.",
+        ),
+        (
+            Profile::Hermes,
+            "Run smolsandbox login to configure Hermes Agent with hermes setup.",
+        ),
+    ] {
+        assert_eq!(profile.authentication_hint(), expected);
+    }
 }

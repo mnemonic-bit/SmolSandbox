@@ -6,7 +6,7 @@ Proposed
 
 ## Summary
 
-Make the Rust `codex-sandbox` application the documented user and contributor
+Make the Rust `smolsandbox` application the documented user and contributor
 interface when Feature 0004's cutover gates pass. Replace active shell-based
 instructions with Rust commands, document the application home and definition
 selection rules, and update repository maintenance guidance to reference the

@@ -29,7 +29,7 @@ impl Fixture {
         }
     }
     fn command(&self) -> Command {
-        let mut c = Command::new(env!("CARGO_BIN_EXE_codex-sandbox"));
+        let mut c = Command::new(env!("CARGO_BIN_EXE_smolsandbox"));
         c.current_dir(&self.workspace)
             .env("HOME", &self.home)
             .env("USERPROFILE", &self.home)
@@ -167,14 +167,16 @@ fn usage_errors_do_not_create_state_or_call_smolvm() {
 fn every_template_is_offline_and_no_clobber() {
     for harness in ["claude", "codex", "opencode", "hermes"] {
         let f = Fixture::new();
-        assert_ok(
-            &f.command()
-                .env("PATH", "")
-                .env("SMOLVM_BIN", f.root.path().join("missing"))
-                .args(["create-config", "--harness", harness])
-                .output()
-                .unwrap(),
-        );
+        let output = f
+            .command()
+            .env("PATH", "")
+            .env("SMOLVM_BIN", f.root.path().join("missing"))
+            .args(["create-config", "--harness", harness])
+            .output()
+            .unwrap();
+        assert_ok(&output);
+        assert!(String::from_utf8_lossy(&output.stdout)
+            .contains("Next: smolsandbox build\nThen: smolsandbox start"));
         let before = fs::read(f.definition()).unwrap();
         let parsed: toml::Value = toml::from_str(std::str::from_utf8(&before).unwrap()).unwrap();
         assert!(parsed.is_table());
@@ -216,7 +218,7 @@ fn copied_binary_generates_configuration_without_adjacent_resources() {
         .root
         .path()
         .join(format!("relocated{}", std::env::consts::EXE_SUFFIX));
-    copy_executable(Path::new(env!("CARGO_BIN_EXE_codex-sandbox")), &destination);
+    copy_executable(Path::new(env!("CARGO_BIN_EXE_smolsandbox")), &destination);
     let mut command = Command::new(destination);
     command
         .env("HOME", &f.home)
@@ -252,7 +254,8 @@ fn invalid_and_missing_definitions_fail_without_lifecycle_mutation() {
     let f = Fixture::new();
     let missing = f.run(&["build"]);
     assert!(!missing.status.success());
-    assert!(String::from_utf8_lossy(&missing.stderr).contains("create-config"));
+    assert!(String::from_utf8_lossy(&missing.stderr)
+        .contains("Run smolsandbox create-config --harness codex"));
     f.configure("codex");
     for definition in [
         "garbage",
@@ -644,6 +647,7 @@ mod lifecycle {
         let refused = f.run(&["start"]);
         assert!(!refused.status.success());
         assert!(String::from_utf8_lossy(&refused.stderr).contains(&stale));
+        assert!(String::from_utf8_lossy(&refused.stderr).contains("run smolsandbox repair --check"));
         assert!(!f.log().contains("machine create"));
         f.clear_log();
         assert_ok(&f.run(&["repair", "--replace-stale"]));
@@ -895,9 +899,17 @@ mod lifecycle {
         for harness in ["codex", "claude", "opencode", "hermes"] {
             let f = Fixture::new();
             f.configure(harness);
-            assert!(!f.run(&["login"]).status.success());
+            let missing = f.run(&["login"]);
+            assert!(!missing.status.success());
+            assert!(
+                String::from_utf8_lossy(&missing.stderr).contains("run smolsandbox build first")
+            );
             assert!(!f.log().contains("machine create --name"));
-            assert_ok(&f.run(&["build"]));
+            let built = f.run(&["build"]);
+            assert_ok(&built);
+            let stdout = String::from_utf8_lossy(&built.stdout);
+            assert!(stdout.contains("Next: smolsandbox login"));
+            assert!(stdout.contains("smolsandbox start "));
             f.clear_log();
             assert_ok(&f.run(&["login"]));
             let expected = match harness {
@@ -1223,7 +1235,7 @@ mod lifecycle {
             f.configure("codex");
             assert_ok(&f.run(&["start", "--port", "3000"]));
             let machine = workspace_machine(&f);
-            let (manifest, journal) = codex_sandbox::ports::paths(
+            let (manifest, journal) = smolsandbox::ports::paths(
                 &f.home.join(".smolsandbox/state"),
                 machine["name"].as_str().unwrap(),
             );
@@ -1719,13 +1731,13 @@ mod lifecycle {
             let before = fs::read_dir(f.home.join(".smolsandbox/artifacts"))
                 .unwrap()
                 .count();
-            let (_, pending) = codex_sandbox::ports::paths(
+            let (_, pending) = smolsandbox::ports::paths(
                 &f.home.join(".smolsandbox/state"),
                 old["name"].as_str().unwrap(),
             );
             fs::create_dir_all(pending.parent().unwrap()).unwrap();
             fs::write(&pending, "{}").unwrap();
-            let (manifest, _) = codex_sandbox::ports::paths(
+            let (manifest, _) = smolsandbox::ports::paths(
                 &f.home.join(".smolsandbox/state"),
                 desired["name"].as_str().unwrap(),
             );
@@ -2028,7 +2040,7 @@ mod lifecycle {
                 }
             }
             f.set_inventory(std::slice::from_ref(&machine));
-            let (manifest, journal) = codex_sandbox::ports::paths(
+            let (manifest, journal) = smolsandbox::ports::paths(
                 &f.home.join(".smolsandbox/state"),
                 machine["name"].as_str().unwrap(),
             );
@@ -2059,7 +2071,7 @@ mod lifecycle {
         let selected = workspace_machine(&f);
         assert_eq!(selected["name"], machine["name"]);
         assert_eq!(selected["_test_ports"], json!([4000]));
-        let (manifest, journal) = codex_sandbox::ports::paths(
+        let (manifest, journal) = smolsandbox::ports::paths(
             &f.home.join(".smolsandbox/state"),
             selected["name"].as_str().unwrap(),
         );
@@ -2094,7 +2106,7 @@ mod lifecycle {
         f.configure("codex");
         assert_ok(&f.run(&["start", "--port", "3000"]));
         let machine = workspace_machine(&f);
-        let (manifest, journal) = codex_sandbox::ports::paths(
+        let (manifest, journal) = smolsandbox::ports::paths(
             &f.home.join(".smolsandbox/state"),
             machine["name"].as_str().unwrap(),
         );

@@ -289,7 +289,7 @@ change the reconciliation, replacement, purge, or configurable-network policy
 defined by Features 0001, 0002, 0003, and 0005.
 
 Feature 0004 proposes removing these scripts in favor of the Rust
-`codex-sandbox` command and already requires top-level help. If that migration
+`smolsandbox` command and already requires top-level help. If that migration
 proceeds, its subcommands shall retain equivalent discoverability for their
 then-current options, but implementing this feature neither resolves Feature
 0004's blockers nor commits to its CLI design.

@@ -414,7 +414,7 @@ Feature 0006's help contract applies to the new option. The synopsis and
 option descriptions for `start-codex.sh` and `codex-sandbox.sh` shall be
 updated; every other entry point's help remains unchanged.
 
-If Feature 0004's Rust migration proceeds, its `codex-sandbox start` command
+If Feature 0004's Rust migration proceeds, its `smolsandbox start` command
 shall expose the same repeatable `--port PORT` behavior and preserve the
 mutable update-before-start semantics. This feature supersedes Feature 0004's
 current `start` synopsis to that extent.

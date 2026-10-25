@@ -176,7 +176,7 @@ fn main() -> Result<()> {
             "test-adapter",
             "--all-targets",
         ],
-        vec!["build", "--locked", "--release", "--bin", "codex-sandbox"],
+        vec!["build", "--locked", "--release", "--bin", "smolsandbox"],
     ] {
         check(copy.path(), &arguments)?;
     }

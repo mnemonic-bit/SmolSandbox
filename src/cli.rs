@@ -245,7 +245,7 @@ mod tests {
     #[test]
     fn delimiter_preserves_harness_arguments() {
         let options = Cli::try_parse_from([
-            "codex-sandbox",
+            "smolsandbox",
             "start",
             "--port",
             "00080",
@@ -278,7 +278,7 @@ mod tests {
             vec!["clean", "somewhere"],
         ] {
             assert!(
-                Cli::try_parse_from(std::iter::once("codex-sandbox").chain(args.clone())).is_err(),
+                Cli::try_parse_from(std::iter::once("smolsandbox").chain(args.clone())).is_err(),
                 "{args:?}"
             );
         }
