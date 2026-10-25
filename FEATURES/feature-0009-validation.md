@@ -1,5 +1,20 @@
 # Feature 0009 validation record
 
+## Completion update: 2026-10-25
+
+Feature status: `Implemented`. The user confirmed that CI is green and
+requested that Feature 0009 be marked completed. AC-7 is `passed` based on
+that confirmation of the native release-target matrix. The remaining
+acceptance criteria passed in the historical validation below.
+
+No additional checks were run for this update. CI results were reported by
+the user; no CI run URL was supplied or independently inspected. The dated
+`not_run` results below describe the earlier validation, before CI confirmation.
+This completion update does not report new real SmolVM guest checks or baseline
+removal.
+
+## Historical validation: 2026-10-24
+
 Date: 2026-10-24 UTC. Comparison revision:
 `55df3db989ba410e61ae64883224badf5115e613`. Feature status remains `Proposed`:
 native release-target execution for AC-7 is `not_run` on three targets.

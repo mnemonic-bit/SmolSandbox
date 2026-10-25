@@ -852,7 +852,7 @@ pub fn run(options: &Options) -> Result<i32> {
             .harness
             .as_deref()
             .context("create-config requires --harness")?;
-        crate::config::create_config(harness)?;
+        crate::config::create_config(harness, options.file.as_deref())?;
         return Ok(0);
     }
     let config = Config::resolve(options)?;

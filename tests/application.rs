@@ -191,6 +191,111 @@ fn every_template_is_offline_and_no_clobber() {
 }
 
 #[test]
+fn named_configuration_uses_invocation_directory_without_changing_default_or_permissions() {
+    for harness in ["claude", "codex", "opencode", "hermes"] {
+        let f = Fixture::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&f.workspace, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let output = f
+            .command()
+            .env("PATH", "")
+            .env("SMOLVM_BIN", f.root.path().join("missing"))
+            .env("BASE_SMOLFILE", f.root.path().join("ignored.smlbx"))
+            .args([
+                "create-config",
+                "--harness",
+                harness,
+                "--smolfile",
+                "named.smlbx",
+            ])
+            .output()
+            .unwrap();
+        assert_ok(&output);
+        assert!(String::from_utf8_lossy(&output.stdout).contains("--smolfile"));
+        let destination = f.workspace.join("named.smlbx");
+        let bytes = fs::read(&destination).unwrap();
+        let text = std::str::from_utf8(&bytes).unwrap();
+        assert!(text.starts_with(&format!("# codex-sandbox-harness: {harness}\n")));
+        toml::from_str::<toml::Value>(text).unwrap();
+        assert!(!f.home.join(".smolsandbox").exists());
+        assert!(!f
+            .run(&[
+                "create-config",
+                "--harness",
+                "codex",
+                "--smolfile",
+                "named.smlbx"
+            ])
+            .status
+            .success());
+        assert_eq!(fs::read(&destination).unwrap(), bytes);
+        assert_eq!(fs::read_dir(&f.workspace).unwrap().count(), 1);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(&f.workspace).unwrap().permissions().mode() & 0o777,
+                0o755
+            );
+            assert_eq!(
+                fs::metadata(&destination).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        assert!(f.log().is_empty());
+    }
+}
+
+#[test]
+fn named_configuration_accepts_absolute_paths_and_creates_parent_directories() {
+    let f = Fixture::new();
+    f.configure("codex");
+    let default = fs::read(f.definition()).unwrap();
+    let destination = f.root.path().join("custom configs/claude.smlbx");
+    assert_ok(
+        &f.command()
+            .args(["create-config", "--harness", "claude", "--smolfile"])
+            .arg(&destination)
+            .output()
+            .unwrap(),
+    );
+    assert!(fs::read_to_string(destination)
+        .unwrap()
+        .starts_with("# codex-sandbox-harness: claude\n"));
+    assert_eq!(fs::read(f.definition()).unwrap(), default);
+    assert_eq!(fs::read_dir(&f.workspace).unwrap().count(), 0);
+    assert!(f.log().is_empty());
+}
+
+#[test]
+fn named_configuration_preserves_existing_destination_directories() {
+    let f = Fixture::new();
+    let destination = f.workspace.join("claude.smlbx");
+    fs::create_dir(&destination).unwrap();
+    fs::write(destination.join("sentinel"), "preserve").unwrap();
+    assert!(!f
+        .run(&[
+            "create-config",
+            "--harness",
+            "claude",
+            "--smolfile",
+            "claude.smlbx"
+        ])
+        .status
+        .success());
+    assert_eq!(
+        fs::read_to_string(destination.join("sentinel")).unwrap(),
+        "preserve"
+    );
+    assert_eq!(fs::read_dir(&f.workspace).unwrap().count(), 1);
+    assert!(!f.home.join(".smolsandbox").exists());
+    assert!(f.log().is_empty());
+}
+
+#[test]
 fn concurrent_configuration_creation_publishes_one_complete_file() {
     let f = Fixture::new();
     let mut a = f

@@ -138,6 +138,7 @@ fn help_is_complete_and_does_not_require_tools_configuration_or_mutation() {
             &[
                 "without replacing an existing file",
                 "--harness",
+                "--smolfile",
                 "claude",
                 "codex",
                 "opencode",
@@ -269,6 +270,8 @@ fn usage_errors_exit_two_on_stderr_before_any_lifecycle_work() {
         assert_usage_identity(&stderr, None);
     }
     invocation.usage_error(&["create-config", "--harness", "unknown"]);
+    invocation.usage_error(&["create-config", "--harness", "claude", "--smolfile"]);
+    invocation.usage_error(&["create-config", "--harness", "claude", "--smolfile", ""]);
 }
 
 #[test]

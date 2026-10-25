@@ -28,6 +28,7 @@ pub struct Options {
     pub force_all: bool,
     pub workspace_only: bool,
     pub harness: Option<String>,
+    pub file: Option<PathBuf>,
 }
 
 impl Options {
@@ -68,10 +69,13 @@ struct Selection {
 
 #[derive(Debug, Subcommand)]
 enum ParsedCommand {
-    /// Create ~/.smolsandbox/default.smlbx without replacing an existing file.
+    /// Create a configuration without replacing an existing file.
     CreateConfig {
         #[arg(long, value_parser = ["claude", "codex", "opencode", "hermes"])]
         harness: String,
+        /// Write to PATH, relative to the current directory. Defaults to ~/.smolsandbox/default.smlbx.
+        #[arg(long = "smolfile", alias = "file", value_name = "PATH", value_parser = clap::value_parser!(PathBuf))]
+        file: Option<PathBuf>,
     },
     /// Build the selected base and prepare persistent machines.
     Build {
@@ -163,9 +167,10 @@ impl Cli {
     pub fn into_options(self) -> Options {
         let mut result = Options::default();
         let selection = match self.command {
-            ParsedCommand::CreateConfig { harness } => {
+            ParsedCommand::CreateConfig { harness, file } => {
                 result.command = Command::CreateConfig;
                 result.harness = Some(harness);
+                result.file = file;
                 None
             }
             ParsedCommand::Build {

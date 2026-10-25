@@ -364,16 +364,28 @@ pub fn select_definition(
     }
     bail!("Smolfile not found; searched: {}. Run smolsandbox create-config --harness codex, or select an existing file with --smolfile",candidates.iter().map(|p|p.display().to_string()).collect::<Vec<_>>().join(", "))
 }
-pub fn create_config(harness: &str) -> Result<PathBuf> {
+pub fn create_config(harness: &str, file: Option<&Path>) -> Result<PathBuf> {
     let profile = Profile::parse(harness)?;
-    let destination = application_home()?.join("default.smlbx");
+    let destination = match file {
+        Some(path) => absolute(&env::current_dir()?, path),
+        None => application_home()?.join("default.smlbx"),
+    };
     Definition::parse(destination.clone(), profile.template().as_bytes().to_vec())?;
-    platform::publish_new(&destination, profile.template().as_bytes())?;
+    if file.is_some() {
+        platform::publish_new_file(&destination, profile.template().as_bytes())?;
+    } else {
+        platform::publish_new(&destination, profile.template().as_bytes())?;
+    }
     println!(
-        "Created {} for {}.\nNext: smolsandbox build\nThen: smolsandbox start",
+        "Created {} for {}.",
         destination.display(),
         profile.display_name()
     );
+    if file.is_some() {
+        println!("Select this path with --smolfile when running build or start.");
+    } else {
+        println!("Next: smolsandbox build\nThen: smolsandbox start");
+    }
     Ok(destination)
 }
 

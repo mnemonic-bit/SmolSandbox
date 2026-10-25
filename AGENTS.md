@@ -16,12 +16,12 @@
 
 ## Sandbox network policy
 
-- Keep the `[network].allow_hosts` list in `devtools-base.smolfile` synchronized
-  with the workspace machine's `--allow-host` arguments in `sandbox-common.sh`.
+- Keep the `[network].allow_hosts` list in `src-old/devtools-base.smolfile` synchronized
+  with the workspace machine's `--allow-host` arguments in `src-old/sandbox-common.sh`.
 - Whenever either URL allowlist changes, increment
-  `SANDBOX_MACHINE_REVISION` in `sandbox-common.sh`. Existing machines retain
+  `SANDBOX_MACHINE_REVISION` in `src-old/sandbox-common.sh`. Existing machines retain
   their creation-time network policy, so the revision change is required to
   replace them with machines that use the new allowlist.
 - Update the allowlist and revision assertions in
-  `tests/devtools-base-config-test.sh` and
-  `tests/reconcile-workspace-test.sh`, then run every `tests/*-test.sh` script.
+  `src-old/tests/devtools-base-config-test.sh` and
+  `src-old/tests/reconcile-workspace-test.sh`, then run every `src-old/tests/*-test.sh` script.

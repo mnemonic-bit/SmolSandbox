@@ -1,9 +1,12 @@
 # smolsandbox: operation and validation
 
-Feature 0004 remains `Proposed`. The Rust implementation is available for
-validation. The existing scripts remain the parity baseline until the native
-mocked suite and real SmolVM smoke tests pass on every release target. No
-intermediate Rust stage is a supported release.
+Features 0004 and 0009 are marked `Implemented` at the user's request on
+2026-10-25 following confirmation that CI is green. Their validation records
+distinguish the completion decisions from historical execution results.
+The existing scripts and their tests remain in
+[`src-old/`](src-old/README.md). Feature 0010's documentation
+cutover is still pending; real SmolVM checks and baseline removal are not
+established by these status updates.
 
 The Rust executable was renamed from `codex-sandbox` to `smolsandbox`. Update
 callers to invoke `smolsandbox`; no old-name executable alias is provided.
@@ -60,6 +63,16 @@ tools and the selected harness inside the guest. The command creates
 one created concurrently, is never overwritten. Invalid choices create no
 directories or files.
 
+Use `--smolfile <path>` to choose the destination. Relative paths resolve against
+the current directory; absolute paths are accepted. Missing parent directories
+are created. Existing files are never overwritten, and existing directory
+permissions are preserved.
+
+```text
+smolsandbox create-config --harness claude --smolfile claude.smlbx
+smolsandbox start --smolfile ./claude.smlbx
+```
+
 Inspect and edit the generated Smolfile. Preserve its single
 `# codex-sandbox-harness: <identifier>` metadata line. The marker and the
 `codex-sandbox.` managed-label namespace are retained compatibility identifiers;
@@ -90,9 +103,9 @@ smolsandbox start --smolfile claude.smlbx /path/to/project
 smolsandbox build --smolfile ./configs/custom.smlbx /path/to/project
 ```
 
-To keep all four profiles, generate one default, rename that file to a chosen
-filename, then generate another default. `create-config` always targets the
-user's `default.smlbx`; it ignores `BASE_SMOLFILE` and repository discovery.
+To keep multiple profiles, generate a separate file for each harness with
+`--smolfile`. Without `--smolfile`, `create-config` targets the user's `default.smlbx`.
+Configuration creation ignores `BASE_SMOLFILE` and repository discovery.
 
 | Profile | Guest launch | `smolsandbox login` | Persistent guest state |
 | --- | --- | --- | --- |
@@ -235,9 +248,9 @@ cargo build --locked --release --bin smolsandbox
 
 `test-adapter` enables a test-only native-home injection and virtualization
 bypass for the Rust SmolVM test double. The default release has neither
-bypass. Do not distribute builds with that feature enabled. Linux differential
-tests also invoke the retained shell/Python baseline; the application itself
-does not invoke those host tools.
+bypass. Do not distribute builds with that feature enabled. The Rust tests use fixed expectations and a Rust SmolVM test double.
+The baseline-independence check excludes `src-old/` from its source copy
+before running the Rust checks.
 
 The [native CI matrix](.github/workflows/rust.yml) runs the mocked suite and
 builds the executable on every release target. CI configuration alone is not

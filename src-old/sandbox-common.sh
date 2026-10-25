@@ -2,6 +2,7 @@
 # Shared authoritative identity, inventory, creation, and reconciliation logic.
 
 SANDBOX_ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+SANDBOX_REPOSITORY_ROOT="$(CDPATH= cd -- "$SANDBOX_ROOT/.." && pwd -P)"
 SANDBOX_MACHINE_REVISION=5
 SANDBOX_WORKSPACE_MEMORY=12288
 SANDBOX_WORKSPACE_CPUS=4
@@ -149,8 +150,8 @@ sandbox_prepare_workspace_options() {
 
 sandbox_prepare_environment() {
   BASE_SMOLFILE="${BASE_SMOLFILE:-$SANDBOX_ROOT/devtools-base.smolfile}"
-  ARTIFACTS_DIR="${ARTIFACTS_DIR:-$SANDBOX_ROOT/artifacts}"
-  STATE_ROOT="${STATE_ROOT:-$SANDBOX_ROOT/.smolvm}"
+  ARTIFACTS_DIR="${ARTIFACTS_DIR:-$SANDBOX_REPOSITORY_ROOT/artifacts}"
+  STATE_ROOT="${STATE_ROOT:-$SANDBOX_REPOSITORY_ROOT/.smolvm}"
   CODEX_HOME_DIR="${CODEX_HOME_DIR:-$STATE_ROOT/codex-home}"
 
   sandbox_require_tools || return 1

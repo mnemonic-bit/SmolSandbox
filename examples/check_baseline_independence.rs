@@ -10,6 +10,7 @@ use std::{
 };
 
 const BASELINE: &[&str] = &[
+    "src-old",
     "build-sandbox.sh",
     "build-login.sh",
     "start-codex.sh",

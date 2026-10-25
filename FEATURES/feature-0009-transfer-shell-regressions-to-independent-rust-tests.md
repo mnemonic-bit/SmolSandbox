@@ -2,7 +2,11 @@
 
 ## Status
 
-Proposed
+Implemented
+
+Completed on 2026-10-25 following the user's confirmation that CI is green
+and request to mark this feature completed. See the
+[validation record](feature-0009-validation.md) for the completion update.
 
 ## Summary
 

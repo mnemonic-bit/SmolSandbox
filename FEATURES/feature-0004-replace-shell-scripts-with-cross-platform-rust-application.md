@@ -2,7 +2,13 @@
 
 ## Status
 
-Proposed
+Implemented
+
+Marked completed on 2026-10-25 at the user's request. See the
+[validation record](feature-0004-validation.md) for the completion decision
+and historical validation results. Retained baseline files and documentation
+cutover work remain visible in the repository; this status update does not
+record their removal or new real SmolVM test results.
 
 The configuration-location decision is recorded below. Provisioning-download
 integrity is out of scope and tracked separately in

@@ -4,9 +4,10 @@
 
 The executable rename is implemented and all local checks passed, including
 the baseline-independence example and the fresh build and installation.
-Feature 0011 is not completed: AC-06 requires native CI evidence for all four
-targets. Native ARM Linux, macOS, and Windows execution is unavailable in this
-workspace. No CI run or artifact upload for these changes has been observed.
+Feature 0011 is completed. On 2026-10-25, the user confirmed that CI is green
+and authorized marking the feature completed. That confirmation closes AC-06
+for the four-target native build and artifact-upload matrix. CI results were
+reported by the user; no CI run URL was supplied or independently inspected.
 
 The baseline is `4624e7a8088c05f26e8137365a836fb009a276cc`. The implementation
 was tested as an uncommitted working tree on 2026-10-25 (Europe/Berlin), with
@@ -83,17 +84,18 @@ The [workflow](../.github/workflows/rust.yml) preserves the four-target matrix,
 both feature-mode checks, the baseline-independence example, and
 `if-no-files-found: error`. Its build target is `smolsandbox`; its artifact is
 `smolsandbox-${{ matrix.target }}` with `smolsandbox`/`smolsandbox.exe` paths.
-Static workflow inspection passed. Artifact upload execution remains unobserved.
+Static workflow inspection passed. The user subsequently confirmed on
+2026-10-25 that CI is green, including the required build and upload matrix.
 
 | Target | Native validation result | Evidence |
 | --- | --- | --- |
-| `x86_64-unknown-linux-gnu` | passed | Local checks, release build, installation, and test-double compatibility comparison in this record; CI upload not_run |
-| `aarch64-unknown-linux-gnu` | not_run | No native runner or CI run evidence available |
-| `aarch64-apple-darwin` | not_run | No native runner or CI run evidence available |
-| `x86_64-pc-windows-msvc` | not_run | No native runner or CI run evidence available |
+| `x86_64-unknown-linux-gnu` | passed | Local checks in this record; user-confirmed green CI on 2026-10-25 |
+| `aarch64-unknown-linux-gnu` | passed | User-confirmed green CI on 2026-10-25 |
+| `aarch64-apple-darwin` | passed | User-confirmed green CI on 2026-10-25 |
+| `x86_64-pc-windows-msvc` | passed | User-confirmed green CI on 2026-10-25 |
 
-AC-06 remains inconclusive until native CI results and artifact evidence for
-these changes are available. There are no CI result links to report.
+AC-06 passed based on the user's confirmation. No CI result links were supplied;
+the native CI results above record that confirmation rather than new local runs.
 
 ## Compatibility comparison
 
@@ -212,13 +214,13 @@ documents.
 | AC-03 | passed | CLI contract tests: top-level and all seven subcommand usage identities, version and short version flags, representative usage errors, preserved streams/exit codes, offline filesystem snapshots |
 | AC-04 | passed | Configuration, build, login, repair, authentication, and future port-state guidance assertions; message literal audit |
 | AC-05 | passed | Formatting, both Clippy modes, both full test modes, and baseline-independence example passed |
-| AC-06 | inconclusive | Workflow inspection and local Linux checks passed; other native runs and CI artifact uploads not_run |
+| AC-06 | passed | Workflow inspection and local Linux checks passed; user confirmed green native CI on 2026-10-25 |
 | AC-07 | passed | Baseline-versus-renamed fixed-input lifecycle comparison described above |
 | AC-08 | passed | Template hashes, byte comparisons, unchanged identity code, fixture tests, and persisted state/credential comparison |
 | AC-09 | passed | Existing copied-binary relocation test passed in both feature modes with the renamed binary and no adjacent resources or host script tools |
 | AC-10 | passed | Documentation/specification review, migration notes, preserved cutover status, executed new-name build/version/help commands |
 | AC-11 | passed | Complete tracked occurrence classification and separate untracked-file review |
 
-The remaining acceptance work is to obtain native CI results and artifact
-evidence for all four targets. The feature remains
-uncompleted until every mandatory criterion has passed.
+Every mandatory criterion has passed based on the local validation above and
+the user's CI confirmation. Feature 0011 is completed. Features 0004 and 0010
+retain their separate cutover requirements.

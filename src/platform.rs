@@ -115,6 +115,15 @@ pub fn publish_new(path: &Path, bytes: &[u8]) -> Result<()> {
         .parent()
         .context("destination has no parent directory")?;
     private_dir(parent)?;
+    publish_new_file(path, bytes)
+}
+
+pub fn publish_new_file(path: &Path, bytes: &[u8]) -> Result<()> {
+    let parent = path
+        .parent()
+        .context("destination has no parent directory")?;
+    fs::create_dir_all(parent)
+        .with_context(|| format!("cannot create directory {}", parent.display()))?;
     let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
     set_private(temporary.path(), false)?;
     temporary.write_all(bytes)?;

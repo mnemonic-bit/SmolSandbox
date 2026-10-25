@@ -1,5 +1,19 @@
 # Feature 0004 validation record
 
+## Completion update: 2026-10-25
+
+Feature status: `Implemented`. The user requested that Feature 0004 be marked
+completed after confirming that CI is green. This status records the user's
+completion decision. No additional checks were run for this update, and no CI
+run URL or real SmolVM results were supplied or independently inspected.
+
+The shell/Python baseline remains in the repository. Feature 0010's
+documentation cutover remains separate work. The historical `not_run` results
+below retain their original meaning; this status update does not establish
+that real guest checks or baseline removal occurred.
+
+## Historical validation: 2026-10-24
+
 Date: 2026-10-24. Feature status: `Proposed`. Cutover result: `not_run`.
 
 The implementation uses one Rust executable, four embedded Smolfile templates,
@@ -40,7 +54,7 @@ review identified and checked corrections to schema validation, early signal
 handling, Windows UNC paths, lock namespaces, superseded empty artifacts,
 adapter capability checks, and Windows credential ACL inheritance.
 
-## Outstanding cutover evidence
+## Outstanding cutover evidence at historical validation
 
 | Check | Result | Cause and next action |
 | --- | --- | --- |
@@ -50,6 +64,7 @@ adapter capability checks, and Windows credential ACL inheritance.
 | Real terminal resize and interactive authentication | not_run | These checks require SmolVM, a terminal, and the selected harness's authentication workflow. |
 | Final removal of shell/Python production files and fixtures | not_run | Feature 0004 requires native mocked and real guest validation before deletion. Retain the baseline until those gates pass. |
 
-The coordinator must record the outstanding execution results before claiming
-Feature 0004 completed or removing the baseline. Feature 0008 remains separate
-work and is not a cutover prerequisite.
+At historical validation, the outstanding execution results were required
+before claiming Feature 0004 completed or removing the baseline. The completion
+update above records the subsequent user decision. Feature 0008 remains
+separate work and is not a cutover prerequisite.
