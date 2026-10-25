@@ -1,41 +1,40 @@
 # smolsandbox: operation and validation
 
-Features 0004 and 0009 are marked `Implemented` at the user's request on
-2026-10-25 following confirmation that CI is green. Their validation records
-distinguish the completion decisions from historical execution results.
-The existing scripts and their tests remain in
-[`src-old/`](src-old/README.md). Feature 0010's documentation
-cutover is still pending; real SmolVM checks and baseline removal are not
-established by these status updates.
+This is the authoritative operating reference for the Rust `smolsandbox`
+application. Start with the [README first-use sequence](README.md#first-use).
+The application supports Claude, Codex, OpenCode, and Hermes Agent through
+complete user-owned Smolfile definitions and a separately installed SmolVM.
 
-The Rust executable was renamed from `codex-sandbox` to `smolsandbox`. Update
-callers to invoke `smolsandbox`; no old-name executable alias is provided.
-Existing native definitions, credentials, application state, and machines are
-retained. Codex remains one of the four supported harnesses. This rename does
-not complete the Feature 0004 or Feature 0010 cutover gates.
+Rust-first documentation is prepared. Final cutover remains pending because
+the shell/Python baseline is retained in `src-old/` and real guest validation
+has not been established for every required profile and release target. The
+[Feature 0010 validation record](FEATURES/feature-0010-validation.md) separates
+observed checks from outstanding gates. The historical completion decisions
+for Features 0004 and 0009 remain recorded in their validation records.
 
 ## Executable and host requirements
 
-Build the application with:
+Build the application from this checkout with a Rust toolchain:
 
 ```text
 cargo build --locked --release --bin smolsandbox
 ```
 
-Copy `target/release/smolsandbox` (Windows: `smolsandbox.exe`) to any
-directory. The executable contains every configuration template. Running the
-copied executable requires no checkout, adjacent resources, host Bash, host
-Python, host harness installation, or Rust toolchain.
+Copy `target/release/smolsandbox` (Windows: `smolsandbox.exe`) to a directory
+on `PATH`. The executable embeds every configuration template at compile
+time. Running the copied executable needs no checkout, adjacent resources,
+host Bash/Python, host harness installation, or Rust toolchain. Guest
+provisioning can use shell commands, Python, and other tools from its template.
 
 Install [SmolVM](https://github.com/smol-machines/smolvm#install) separately.
-SmolVM is neither bundled nor downloaded by this application. Select SmolVM
-with `--smolvm <path>`, then `SMOLVM_BIN`, then `PATH`, in that order. An explicit
-selection that fails is an error. Capability preflight checks the selected
-executable, required CLI operations, inventory JSON, and native virtualization
-prerequisites before lifecycle mutation.
+SmolVM is neither bundled nor downloaded by this application. Runtime
+selection uses `--smolvm <path>`, then nonempty `SMOLVM_BIN`, then `PATH`.
+An explicit selection that fails is an error; another executable is not
+silently selected. Capability preflight checks the required SmolVM operations,
+inventory JSON, and native virtualization prerequisites before lifecycle
+mutation. Help, version, and configuration generation require no SmolVM.
 
-The validation matrix follows the native CLI distributions documented by
-[SmolVM v1.16.2](https://github.com/smol-machines/smolvm/blob/v1.16.2/README.md):
+The [native CI matrix](.github/workflows/rust.yml) defines these release targets:
 
 | Host | Architecture | Native prerequisite | Rust target |
 | --- | --- | --- | --- |
@@ -44,94 +43,248 @@ The validation matrix follows the native CLI distributions documented by
 | macOS | ARM64 | Hypervisor.framework | `aarch64-apple-darwin` |
 | Windows | x86-64 | Windows Hypervisor Platform | `x86_64-pc-windows-msvc` |
 
-macOS Intel and Windows ARM64 are outside this release matrix. Compiling a
-target does not establish native execution or guest compatibility. CI defines
-the mocked native runs; real guest tests remain separate cutover gates.
+macOS Intel and Windows ARM64 are outside this release matrix. A configured
+CI job or successful cross-compilation does not establish native execution or
+real guest compatibility. Recorded native mocked results and real guest
+procedures have separate evidence requirements under
+[validation and cutover gates](#validation-and-cutover-gates).
 
 ## Configuration and profiles
 
-Generate one user-owned definition without network access or SmolVM:
+Generate one complete definition without network access or SmolVM:
 
 ```text
 smolsandbox create-config --harness codex
 ```
 
-The accepted choices are `claude` (Claude), `codex` (Codex), `opencode`
-(OpenCode), and `hermes` (Hermes Agent). Each template installs development
-tools and the selected harness inside the guest. The command creates
-`~/.smolsandbox/default.smlbx` atomically. An existing destination, including
-one created concurrently, is never overwritten. Invalid choices create no
-directories or files.
+The command accepts exactly `claude`, `codex`, `opencode`, and `hermes`.
+Each embedded template installs development tools and one harness in the
+guest. The default destination is `~/.smolsandbox/default.smlbx`.
+Creation is atomic and refuses to replace an existing destination, including
+one published concurrently. Invalid choices create no directories or files.
 
-Use `--smolfile <path>` to choose the destination. Relative paths resolve against
-the current directory; absolute paths are accepted. Missing parent directories
-are created. Existing files are never overwritten, and existing directory
-permissions are preserved.
+Use `--smolfile <path>` to choose a destination. Relative destinations resolve
+against the invocation directory; absolute paths are accepted. Missing parent
+directories are created. Existing destination files are never overwritten,
+and existing directory permissions are preserved for a custom destination.
+Configuration creation ignores `BASE_SMOLFILE` and repository discovery.
 
 ```text
 smolsandbox create-config --harness claude --smolfile claude.smlbx
-smolsandbox start --smolfile ./claude.smlbx
+smolsandbox build --smolfile ./claude.smlbx /path/to/project
+smolsandbox login --smolfile ./claude.smlbx
+smolsandbox start --smolfile ./claude.smlbx /path/to/project
 ```
 
-Inspect and edit the generated Smolfile. Preserve its single
-`# codex-sandbox-harness: <identifier>` metadata line. The marker and the
-`codex-sandbox.` managed-label namespace are retained compatibility identifiers;
-the executable rename does not rewrite definitions or machine metadata.
-Configuration selection uses exactly one complete file; definitions are never
-merged. Updating or moving the executable never refreshes an existing definition.
+Inspect and edit the generated file. Preserve its single
+`# codex-sandbox-harness: <identifier>` metadata line. That marker and the
+`codex-sandbox.` managed-label namespace are retained compatibility
+identifiers. Moving or updating the executable does not rewrite existing
+definitions, credentials, or machine metadata.
 
-Lifecycle commands select a definition in this order:
+### Whole-file selection
+
+Lifecycle commands select exactly one complete file, without merging:
 
 1. Use `--smolfile <name-or-path>` when supplied.
-2. Otherwise, use `BASE_SMOLFILE` as an explicit path.
+2. Otherwise, use nonempty `BASE_SMOLFILE` as an explicit path.
 3. Otherwise, select the filename `default.smlbx`.
 
 A bare flag filename is matched exactly under the selected workspace's
-repository `.smolsandbox` directory, then under `~/.smolsandbox`. Without a
-workspace argument, discovery uses the invocation directory. Outside a
-repository, filename lookup searches only the user directory. A missing named
-file never selects the default. An invalid, unreadable, or unsupported nearer
-file fails instead of selecting a farther candidate.
+repository `.smolsandbox/` directory, then under `~/.smolsandbox/`. The
+repository is the nearest workspace ancestor with a `.git` directory or file.
+Without a workspace argument, selection uses the invocation directory.
+Outside a repository, filename lookup searches only the user directory.
+A missing named file never selects the default. An invalid, unreadable, or
+unsupported nearer file fails instead of falling back to a farther candidate.
 
-A flag value containing a native path delimiter is an explicit path. Relative
-paths resolve against the invocation directory. Explicit paths bypass filename
+An absolute path or a value containing a native path delimiter is an explicit
+path. Relative explicit paths resolve against the invocation directory,
+including when another workspace is supplied. Explicit paths bypass filename
 lookup. `BASE_SMOLFILE` always has explicit-path semantics, even for a bare
-filename. The executable's directory never participates in discovery.
+filename. The executable's directory is not a search path.
 
 ```text
 smolsandbox start --smolfile claude.smlbx /path/to/project
 smolsandbox build --smolfile ./configs/custom.smlbx /path/to/project
 ```
 
-To keep multiple profiles, generate a separate file for each harness with
-`--smolfile`. Without `--smolfile`, `create-config` targets the user's `default.smlbx`.
-Configuration creation ignores `BASE_SMOLFILE` and repository discovery.
+In the first example, `claude.smlbx` must already exist in the repository or
+user lookup directory. A file generated in the invocation directory is selected
+with an explicit path such as `./claude.smlbx`.
 
-| Profile | Guest launch | `smolsandbox login` | Persistent guest state |
+### Template adoption
+
+User definitions remain user-owned. Updating the executable does not refresh
+or merge an existing definition. To adopt a newer embedded template, generate
+a separate destination with `create-config --harness <profile> --smolfile
+<new-path>`, compare the files, and explicitly select or edit the desired
+file. Existing edits and harness state are preserved. Changing definition
+bytes selects a new base generation on the next lifecycle operation.
+
+### Harness profiles and authentication
+
+The application uses these profile-specific commands and mounts:
+
+| Profile | Guest launch | Guest authentication command | Persistent guest state mount |
 | --- | --- | --- | --- |
 | Codex | `codex --no-daemon` | `codex login --device-auth` | `/root/.codex` |
-| Claude | `env CLAUDE_CONFIG_DIR=/root/.claude claude` | Same environment, `claude auth login` | `/root/.claude` |
+| Claude | `env CLAUDE_CONFIG_DIR=/root/.claude claude` | `env CLAUDE_CONFIG_DIR=/root/.claude claude auth login` | `/root/.claude` |
 | OpenCode | `opencode` | `opencode auth login` | `/root/.local/share/opencode` |
 | Hermes Agent | `hermes` | `hermes setup` | `/root/.hermes` |
 
-These conventions follow the selected profiles' authentication documentation:
-[Claude](https://code.claude.com/docs/en/authentication),
-[OpenCode](https://opencode.ai/docs/cli/), and
-[Hermes Agent](https://hermes-agent.nousresearch.com/docs/getting-started/installation/).
-Only the selected harness's home is mounted. Each login machine uses the
-profile's authentication allowlist. For providers outside that allowlist,
-authenticate through the harness in a workspace machine with the required
-`--allow-host` additions. Credentials remain the harness's concern.
+Run `smolsandbox login` after `build` to execute the selected authentication
+command. Login requires an existing current-generation login machine and
+never creates a missing one. Use the same `--smolfile` selection as the build.
+Only the selected harness's persistent home is mounted. Initial seeding copies
+missing files without overwriting existing credentials, settings, or sessions;
+a seed failure produces a warning and preserves existing contents.
+
+Each login machine has the profile's authentication allowlist. If a selected
+provider needs other hosts, authenticate inside the harness on a workspace
+machine with the required `--allow-host` additions. Harnesses manage their own
+provider settings and credentials. Claude also supports `/login` within its
+interactive harness; OpenCode login selects a provider; Hermes login runs its
+setup workflow.
+
+For Codex workspace starts, a nonempty host `OPENAI_API_KEY` is passed by a
+SmolVM environment-variable secret reference. The value is never written into
+machine arguments or the definition. Other profiles do not receive Codex
+launch flags or that secret reference by default.
 
 ## Lifecycle commands
 
+All lifecycle commands accept `--smolfile` and `--smolvm`. `build`, `start`,
+and `repair` accept an optional workspace; `clean` accepts a workspace only
+with `--workspace`. The current directory is the default workspace.
+
+| Command | Effect |
+| --- | --- |
+| `build [WORKSPACE]` | Build or reuse the selected base, then prepare login and workspace machines. |
+| `start [WORKSPACE] [-- HARNESS_ARGS...]` | Reconcile the workspace and exact port set, then launch the selected guest harness. |
+| `login` | Run the selected profile's authentication workflow in its prepared login machine. |
+| `repair --check [WORKSPACE]` | Inspect workspace reconciliation without writing state or taking lifecycle locks. |
+| `repair --replace-stale [WORKSPACE]` | Prepare and verify the desired machine before deleting eligible stale machines. |
+| `clean [--workspace [WORKSPACE]]` | Delete the selected generation or one workspace's managed machines. |
+| `purge [--force \| --force-all]` | Delete eligible stopped machines and unprotected superseded artifacts. |
+
+A completed build attempts conservative purge. A refusal or failure in that
+post-build purge is reported as a warning and does not change a successful
+build into a failure.
+
+Application help and version require neither a definition nor SmolVM.
+Arguments after the first standalone `--` on `start` belong to the guest
+harness and retain their argument boundaries:
+
 ```text
-smolsandbox build /path/to/project
-smolsandbox login
+smolsandbox --help
+smolsandbox --version
+smolsandbox start --help
 smolsandbox start /path/to/project -- --help
-smolsandbox start --allow-host packages.example.com --port 3000 /path/to/project
+```
+
+The third command displays application options; the fourth launches the guest
+harness with its own `--help` argument. Unknown options, conflicting modes,
+excess positional arguments, and invalid option values exit `2`. Operational
+failures exit nonzero.
+
+### Identity and additional hosts
+
+The complete selected definition bytes and SmolVM version determine the base
+generation. Workspace identity covers the base artifact path, runtime CPU and
+memory allocation, canonical workspace and harness-state mounts, and the
+complete effective network allowlist. The runtime revision also participates
+in managed machine names and ownership. Reopening the same configuration and
+runtime revision reuses the workspace machine and its writable overlay.
+
+Repeat `--allow-host` on `start` or `repair` to extend the selected definition's
+allowlist. Values are sorted and deduplicated. Additional hosts may appear
+before or after the workspace, before the standalone `--`. A host is nonempty,
+contains no line breaks, and does not begin with `-`.
+
+```text
+smolsandbox start --allow-host packages.example.com /path/to/project --allow-host downloads.example.com
+smolsandbox repair --check --allow-host packages.example.com --allow-host downloads.example.com /path/to/project
+```
+
+Repeat the same additions when inspecting or replacing that workspace
+configuration. A host already in the definition does not make a configuration
+custom; an additional host beyond the definition does. Changing immutable
+options selects a different workspace machine. Ports are mutable and excluded
+from immutable identity.
+
+### Exact-set TCP ports
+
+Repeat `--port` on `start` to publish the same guest and host TCP port numbers:
+
+```text
+smolsandbox start --port 3000 /path/to/project --port 5173 --port 9229
+```
+
+Ports are ASCII decimal integers from 1 through 65535. Duplicates and leading
+zeros are normalized; at most 64 distinct ports are accepted. Listeners bind
+to host loopback by default, so port 3000 can be reached at
+`http://127.0.0.1:3000`. Publishing a port neither starts the guest service nor
+changes the service's guest bind address.
+
+Every start requests an exact set. Omitting all `--port` values clears previous
+mappings; adding or removing ports preserves machine identity and writable
+state. Port manifests and pending journals track the machine incarnation and
+requested set. Interrupted updates recover from that journal before start.
+A running machine with a different or unknown port set is refused without
+stopping it. Stop the active session before requesting another set.
+
+### Reconciliation and replacement
+
+Normal reconciliation derives desired identity from the selected definition,
+runtime version, and immutable options, then checks SmolVM inventory. Missing
+or stale compatibility caches do not prevent recovery of a verified matching
+machine. Malformed inventory fails, and ambiguous ownership never authorizes
+replacement. A verified desired machine may be reused while other stale or
+ambiguous candidates remain; the application warns about those candidates.
+If only stale machines match the workspace, normal startup refuses rather
+than creating or deleting machines.
+
+Inspect candidates and then explicitly authorize replacement:
+
+```text
 smolsandbox repair --check /path/to/project
+smolsandbox repair --replace-stale /path/to/project
 smolsandbox repair --replace-stale --force /path/to/project
+```
+
+`repair --check` is read-only and lock-free. Replacement prepares the current
+base, creates the desired machine if needed, and verifies readiness from fresh
+inventory before deleting eligible stale machines. `--force` authorizes
+stopping running stale machines only after that readiness verification. Only
+positively associated workspace machines are eligible; unrelated machines
+remain untouched.
+
+A failed preparation or verification preserves stale machines and caches.
+A newly registered desired machine is retained for inspection after failure.
+If later deletion fails, cleanup stops, leaving the verified desired machine
+and unprocessed stale machines available; compatibility caches are not
+rewritten after that partial handoff.
+
+### Session completion and failures
+
+The application stops a workspace machine that the invocation started after
+the guest exits or an interceptable termination. A workspace machine already
+running before `start` remains running. Login stops its login machine after
+the authentication command. Forced termination or a host crash cannot
+guarantee cleanup.
+
+The guest's nonzero exit status remains primary when stopping the machine also
+fails. A cleanup failure after a successful guest command produces an
+operational failure. Failed start attempts still attempt owned-machine stop;
+seeding failure warns and continues with existing harness contents.
+
+### Cleanup and purge
+
+Cleanup deletes managed guest disk state. Select the definition and scope
+before invoking a cleanup command:
+
+```text
 smolsandbox clean --workspace /path/to/project
 smolsandbox clean
 smolsandbox purge
@@ -139,68 +292,52 @@ smolsandbox purge --force
 smolsandbox purge --force-all
 ```
 
-Every lifecycle command accepts `--smolfile` and `--smolvm`. Help and version
-require neither configuration nor SmolVM. Unknown options, conflicting modes,
-excess positional arguments, and invalid values exit `2`. Operational errors
-exit nonzero. Arguments after the first standalone `--` belong to the guest
-harness and retain their original argument boundaries.
+`clean --workspace` stops and deletes positively owned workspace machines for
+the canonical path across generations and configurations. It preserves
+builders, login machines, artifacts, generation caches, and other workspaces.
+Default `clean` stops and deletes the selected generation's managed machines,
+then removes its cached artifact and generation caches. Both clean modes can
+stop a selected running machine. Both preserve definition files, harness
+homes, and unrelated resources.
 
-`--allow-host` is repeatable on `start` and `repair`. Additions extend the
-definition's allowlist. Sorted, deduplicated immutable creation options select
-the workspace machine. Repeat the same additional hosts on repair commands
-for that configuration. The complete selected file bytes and SmolVM version
-determine the base generation.
+Purge policies operate only on eligible stopped managed machines:
 
-`--port` is repeatable on `start`. Ports are ASCII decimal integers from 1
-through 65535, with at most 64 distinct values. Ports publish TCP on host
-loopback using the same guest and host number. Every launch requests an exact
-set; omission clears previous mappings. Port changes retain machine identity
-and disk state. A running machine with a different or unknown set is refused
-without stopping that machine.
+| Policy | Selected machines |
+| --- | --- |
+| `purge` | Superseded generations; refuses all cleanup if a current custom workspace configuration exists. |
+| `purge --force` | Superseded generations and current custom workspace configurations, while preserving current defaults. |
+| `purge --force-all` | All stopped managed builders, login machines, and workspaces in scope. |
 
-Normal reconciliation preserves stale machines. Explicit replacement prepares
-and verifies the desired machine from fresh inventory before deleting eligible
-stale machines. `--force` permits stopping running stale machines only after
-that readiness gate. `repair --check` is read-only and lock-free.
+Every purge policy preserves running machines, their artifact generations,
+and the current artifact. Purge never stops a running machine. Ambiguous
+managed metadata or a relevant inventory change stops cleanup. A missing
+current artifact permits only the bounded recovery of a stopped current
+builder; other machines and artifacts remain preserved for that recovery.
 
-`login` requires an existing current-generation login machine. It never creates
-a missing login machine. Startup seeds missing harness files without
-overwriting existing state. Codex forwards a nonempty `OPENAI_API_KEY` by
-SmolVM environment-variable reference; the value is never placed in arguments
-or configuration. Other profiles do not receive Codex flags or this secret
-reference by default.
-
-The application stops a machine started by its invocation after the guest
-command finishes or an interceptable termination. An already-running workspace
-machine remains running. The guest exit status remains primary if cleanup
-also fails; cleanup failure alone produces operational failure. Forced
-termination and host crashes cannot guarantee cleanup.
-
-Default `clean` removes the selected generation's machines, artifact, and
-generation caches. `clean --workspace [path]` removes only positively owned
-workspace machines across generations and configurations. Both preserve
-definition files and harness homes. Port state is removed only after the
-associated machine has been deleted.
-
-Conservative `purge` refuses all cleanup when a current custom workspace
-configuration exists. `--force` may remove stopped custom configurations and
-legacy machines while retaining current defaults. `--force-all` may remove
-all stopped managed machines in scope. Every policy preserves running
-machines, their artifact generations, and the current artifact. Purge never
-stops a running machine.
+Machine deletion precedes removal of the machine's port manifest and pending
+journal. A failed deletion preserves that port state and stops processing later
+machines. Generation clean and purge preserve artifacts when a machine
+deletion fails. Definitions and harness state survive every cleanup policy.
 
 ## State and overrides
+
+The application uses the native current user's `~/.smolsandbox/` directory:
 
 ```text
 ~/.smolsandbox/
   default.smlbx
   artifacts/
+    codex-devtools-<base-id>.smolmachine
   state/
     generation.json
     base-id
     machine-revision
     ports/
+      <machine>.json
+      <machine>.pending.json
   locks/
+    artifacts.lock
+    workspace-<workspace-path-sha256>.lock
   codex-home/
   harness-home/
     claude/
@@ -208,19 +345,51 @@ stops a running machine.
     hermes/
 ```
 
-The application uses the native current user's home. Applicable component
-overrides are `ARTIFACTS_DIR`, `STATE_ROOT`, `CODEX_HOME_DIR`, `BUILDER_MACHINE`,
-`LOGIN_MACHINE`, and `CODEX_MACHINE`. Native temporary-file creation honors
-the platform's temporary-directory conventions, including `TMPDIR` on Unix.
-There is no `CODEX_SANDBOX_HOME` or `SANDBOX_ENSURE_LOGIN` interface. State and
-port formats are versioned; unknown newer formats fail without rewriting.
+`generation.json` records versioned generation state; `base-id` and
+`machine-revision` are compatibility caches. Port manifests store committed
+sets, and pending journals permit recovery of interrupted updates. Unknown
+newer state formats fail while preserving the files. Locks coordinate artifact
+cleanup and workspace lifecycle work. Codex uses `codex-home/`; the other
+profiles have separate directories under `harness-home/`.
 
-The Rust application starts with fresh application state. It neither imports
-nor removes shell-era `artifacts/` or `.smolvm/` contents. No generated state is
-written to the workspace by default. The workspace is mounted at
-`/workspace/myrepo` in the Linux guest.
+The canonical workspace is mounted at `/workspace/myrepo` in the Linux guest.
+Only the selected profile's host harness home is mounted at the guest state
+path listed in the profile table. No generated application state is written
+to the workspace by default.
 
-| Shell entry point | Rust command |
+| Environment variable | Meaning |
+| --- | --- |
+| `BASE_SMOLFILE` | Explicit definition path when `--smolfile` is absent; relative to the invocation directory. |
+| `SMOLVM_BIN` | Runtime executable path when `--smolvm` is absent. |
+| `ARTIFACTS_DIR` | Override the artifact directory. |
+| `STATE_ROOT` | Override generation caches and port-state directory. |
+| `CODEX_HOME_DIR` | Override persistent Codex state for the Codex profile. |
+| `BUILDER_MACHINE` | Override the builder machine name. |
+| `LOGIN_MACHINE` | Override the login machine name. |
+| `CODEX_MACHINE` | Override the workspace machine name; ownership validation still applies. |
+| `OPENAI_API_KEY` | Forward a nonempty key to Codex workspace execution by secret reference. |
+
+Nonempty relative directory overrides resolve against the invocation directory.
+Native temporary-file creation follows platform conventions, including
+`TMPDIR` on Unix. `SMOLVM_TEST_HOME` is available only in `test-adapter` builds;
+it is not a production application-home override. There is no production
+`CODEX_SANDBOX_HOME` or `SANDBOX_ENSURE_LOGIN` interface.
+
+## Historical shell workflow and state
+
+The retained shell workflow and its Python helpers, definition, shell tests,
+and fixture are archived in [`src-old/`](src-old/README.md). Active Rust
+commands and checks do not require that directory. Earlier feature
+specifications and research preserve historical command names and paths.
+
+Rust starts with fresh application state. It neither imports nor removes
+legacy repository-local `artifacts/` or `.smolvm/` contents. Those paths remain
+legacy state; automatic migration and automatic deletion are not provided.
+The historical executable name `codex-sandbox` has no executable wrapper or
+alias. Existing native Rust definitions and state survive the executable
+rename. Returning users can map historical shell actions to Rust commands:
+
+| Historical shell entry point in `src-old/` | Rust command |
 | --- | --- |
 | `build-sandbox.sh`, `build-login.sh` | `build` |
 | `start-codex.sh`, `codex-sandbox.sh` | `start` |
@@ -229,49 +398,69 @@ written to the workspace by default. The workspace is mounted at
 | `clean-sandbox.sh` | `clean` |
 | `purge-sandbox.sh` | `purge` |
 
-The final cutover removes the old entry points without wrappers. Provisioning
-pins and existing verification are preserved in the Codex template.
+The table maps actions; the former shell names are not Rust compatibility
+commands. The metadata marker, managed resource names, and label namespace
+retain their historical spelling to preserve identity and ownership.
 [Feature 0008](FEATURES/feature-0008-provisioning-download-integrity.md) tracks
-additional download integrity work independently; that work does not block
-Feature 0004.
+additional provisioning-download integrity independently of migration and
+documentation completion.
 
 ## Validation and cutover gates
 
-Run the Rust checks with:
+Run the independent Rust checks from the checkout:
 
 ```text
 cargo fmt --all -- --check
+cargo clippy --locked --all-targets -- -D warnings
 cargo clippy --locked --features test-adapter --all-targets -- -D warnings
+cargo test --locked --all-targets
 cargo test --locked --features test-adapter --all-targets
 cargo build --locked --release --bin smolsandbox
+cargo run --locked --example check_baseline_independence
 ```
 
-`test-adapter` enables a test-only native-home injection and virtualization
-bypass for the Rust SmolVM test double. The default release has neither
-bypass. Do not distribute builds with that feature enabled. The Rust tests use fixed expectations and a Rust SmolVM test double.
-The baseline-independence check excludes `src-old/` from its source copy
-before running the Rust checks.
+The tests use fixed expectations and a Rust SmolVM test double.
+`check_baseline_independence` copies the source while excluding `src-old/`,
+builds and runs both feature configurations, builds a release executable,
+and runs the compiled tests with an empty `PATH`. This checks that the Rust
+suite needs neither retained shell/Python sources nor host script tools.
 
-The [native CI matrix](.github/workflows/rust.yml) runs the mocked suite and
-builds the executable on every release target. CI configuration alone is not
-evidence that those runs passed. Before removing the baseline, record passing
-native mocked runs and execute the following real SmolVM checks on each target
-with each profile:
+`test-adapter` enables native-home injection and a virtualization bypass for
+the Rust test double. Distributed executables use the default features;
+exclude `test-adapter` from release builds. The
+[regression coverage map](FEATURES/feature-0009-coverage.md) identifies the
+independent policy tests. [AGENTS.md](AGENTS.md) contains the maintenance rules
+for templates, runtime revision, and lifecycle regression checks.
 
-1. Generate and retain a separate complete definition for the profile.
+The [native CI matrix](.github/workflows/rust.yml) runs mocked suites and builds
+the executable on each release target, including Windows credential-permission
+tests. The [Feature 0009 validation record](FEATURES/feature-0009-validation.md)
+records the user's confirmation that CI was green; no CI run URL accompanied
+that confirmation. Preserve the dated observations separately from new results.
+The [Feature 0004 validation record](FEATURES/feature-0004-validation.md) retains
+its user-directed `Implemented` marker and historical execution results;
+that marker does not establish real guest validation or baseline removal.
+
+Final cutover requires recorded native mocked execution, real guest validation
+for every profile and release target, and physical removal of the retained
+baseline. Until those gates pass, keep the baseline and record the affected
+completion claim as pending. Archiving sources in `src-old/` does not establish
+physical removal.
+
+On compatible native hosts, use a disposable native user account and workspace
+for the real guest procedure. For each profile:
+
+1. Generate and retain a complete profile definition with `create-config`.
 2. Build the guest and inspect `smolvm machine ls --json` for managed labels.
-3. Run the profile's authentication workflow and interactive guest harness.
+3. Run authentication and the interactive guest harness.
 4. Publish a guest service, change the exact port set, and clear the mappings.
-5. Verify guest exit status, terminal resize, Ctrl-C, and stop behavior.
+5. Check guest exit status, terminal resize, Ctrl-C, and stop behavior.
 6. Replace an eligible stale machine and verify creation precedes deletion.
 7. Exercise workspace clean, generation clean, and purge with unrelated state.
-8. Copy only the executable to an unrelated directory and repeat startup
-   without host Bash/Python on `PATH`.
+8. Copy only the release executable to an unrelated directory and repeat
+   startup without host Bash/Python on `PATH`.
 
-Real guest provisioning, interactive terminal behavior, and cross-platform
-execution require their own observed results. Keep the scripts and their
-fixtures until every required gate has passed.
-
-The historical [Feature 0004 validation record](FEATURES/feature-0004-validation.md)
-retains the executable names used in its recorded commands and lists outstanding
-cutover evidence. Current commands use `smolsandbox`.
+Record the source revision, native target, profile, commands or smoke procedure,
+and `passed`, `failed`, `not_run`, or `inconclusive` for each result. Include
+CI run links when CI supplies the evidence. Real provisioning, interactive
+terminal behavior, and authentication require observed results of their own.

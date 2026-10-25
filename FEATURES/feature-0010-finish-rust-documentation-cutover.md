@@ -2,7 +2,15 @@
 
 ## Status
 
-Proposed
+In progress — documentation prepared; final cutover pending
+
+The 2026-10-25 implementation makes the Rust application the active user and
+maintenance interface. The retained baseline remains in `src-old/`, following
+the user's archive decision. Real guest validation and a final baseline-removal
+decision remain separate prerequisites. See the
+[validation record](feature-0010-validation.md) for local checks, historical
+CI confirmation, and the remaining cutover gates. This documentation update
+does not change Feature 0004's prior user-directed completion marker.
 
 ## Summary
 
@@ -17,7 +25,7 @@ recorded and baseline removal is included in the cutover changeset, retain an
 accurate pre-cutover status. Documentation changes alone do not establish a
 supported release or complete Feature 0004.
 
-## Problem
+## Original problem (historical context)
 
 `README.md` still teaches the shell entry points, requires host Python for
 lifecycle operations, and describes repository-local `.smolvm/` state as the

@@ -1,5 +1,9 @@
 # SmolVM port-publishing lifecycle and sandbox identity
 
+Historical research: this record describes the 2026-09-26 shell workflow.
+Use the [operating reference](../RUST-APPLICATION.md) for current Rust commands.
+Local source links point to the retained shell baseline in `src-old/`.
+
 Date: 2026-09-26
 
 Decision scope: how a repeatable published-port option in `start-codex.sh` should map to SmolVM, and whether requested ports belong in this repository's workspace identity hash.
@@ -62,7 +66,7 @@ SmolVM's documented persistence model says machine filesystem changes survive st
 
 ## Implications for `WORKSPACE_SHA256`
 
-Today [`sandbox_prepare_workspace_options`](../sandbox-common.sh#L74-L128) hashes the artifact, memory, CPUs, two volume mounts, and the complete allow-host set. [`sandbox_create_workspace_machine`](../sandbox-common.sh#L397-L418) passes that same configuration to `smolvm machine create`. The repository documentation describes these as the immutable options that determine machine identity and says changing one selects a different persistent machine ([current identity contract](../README.md#L127-L134)).
+Today [`sandbox_prepare_workspace_options`](../src-old/sandbox-common.sh) hashes the artifact, memory, CPUs, two volume mounts, and the complete allow-host set. [`sandbox_create_workspace_machine`](../src-old/sandbox-common.sh) passes that same configuration to `smolvm machine create`. The repository documentation describes these as the immutable options that determine machine identity and says changing one selects a different persistent machine ([current identity contract](../src-old/README.md#run-codex)).
 
 SmolVM's lifecycle means published ports do not have to join that identity:
 

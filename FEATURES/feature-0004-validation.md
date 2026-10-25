@@ -1,5 +1,14 @@
 # Feature 0004 validation record
 
+## Documentation preparation update: 2026-10-25
+
+Feature 0010 makes the Rust application the active documented interface. The
+retained shell/Python baseline and its fixtures are archived in `src-old/`;
+archiving does not establish the final removal gate. The
+[Feature 0010 validation record](feature-0010-validation.md) records new local
+checks and outstanding real guest and final cutover evidence. The completion
+decision and historical observations below retain their original meaning.
+
 ## Completion update: 2026-10-25
 
 Feature status: `Implemented`. The user requested that Feature 0004 be marked
