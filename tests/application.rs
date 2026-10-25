@@ -67,7 +67,7 @@ impl Fixture {
         assert_ok(&self.run(&["create-config", "--harness", harness]));
     }
     fn definition(&self) -> PathBuf {
-        self.home.join(".smolsandbox/default.smlbx")
+        self.home.join(".smolsandbox").join("default.smlbx")
     }
     #[cfg(feature = "test-adapter")]
     fn inventory(&self) -> Vec<Value> {
@@ -270,6 +270,20 @@ fn invalid_and_missing_definitions_fail_without_lifecycle_mutation() {
 
 #[test]
 fn discovery_uses_workspace_repository_then_home_and_exact_names() {
+    let assert_selected_definition = |output: &Output, expected: &Path| {
+        assert_ok(output);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let selected = stdout
+            .lines()
+            .find_map(|line| line.strip_prefix("Selected definition: "))
+            .and_then(|line| line.strip_suffix(" (Codex)"))
+            .unwrap_or_else(|| panic!("missing selected Codex definition: {stdout}"));
+        assert_eq!(
+            Path::new(selected).canonicalize().unwrap(),
+            expected.canonicalize().unwrap(),
+            "{stdout}"
+        );
+    };
     let f = Fixture::new();
     f.configure("codex");
     fs::create_dir_all(f.workspace.join(".git")).unwrap();
@@ -285,18 +299,12 @@ fn discovery_uses_workspace_repository_then_home_and_exact_names() {
         .arg(&f.workspace)
         .output()
         .unwrap();
-    assert_ok(&selected);
-    assert!(
-        String::from_utf8_lossy(&selected.stdout).contains(&repo_definition.display().to_string())
-    );
+    assert_selected_definition(&selected, &repo_definition);
     fs::write(&repo_definition, "invalid nearer definition").unwrap();
     assert!(!f.run(&["repair", "--check"]).status.success());
     fs::remove_file(&repo_definition).unwrap();
     let selected = f.run(&["repair", "--check"]);
-    assert_ok(&selected);
-    assert!(
-        String::from_utf8_lossy(&selected.stdout).contains(&f.definition().display().to_string())
-    );
+    assert_selected_definition(&selected, &f.definition());
     fs::copy(f.definition(), f.home.join(".smolsandbox/custom")).unwrap();
     assert_ok(&f.run(&["repair", "--check", "--smolfile", "custom"]));
     assert!(!f
@@ -994,7 +1002,8 @@ mod lifecycle {
         let mut input = b"smolvm test 1.19.2\n".to_vec();
         input.extend_from_slice(&definition);
         let base = digest(&input)[..12].to_owned();
-        let artifact_dir = f.home.join(".smolsandbox/artifacts");
+        let application_home = f.home.join(".smolsandbox");
+        let artifact_dir = application_home.join("artifacts");
         fs::create_dir_all(&artifact_dir).unwrap();
         let artifact = artifact_dir.join(format!("codex-devtools-{base}.smolmachine"));
         fs::write(&artifact, "prepared artifact").unwrap();
@@ -1005,7 +1014,7 @@ mod lifecycle {
             "--cpus=4".into(),
             format!(
                 "--volume={}:/root/.codex",
-                f.home.join(".smolsandbox/codex-home").display()
+                application_home.join("codex-home").display()
             ),
             format!("--volume={}:/workspace/myrepo", workspace),
         ];
@@ -1147,7 +1156,9 @@ mod lifecycle {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
         while fs::read_to_string(&contended).unwrap_or_default()
             != f.home
-                .join(".smolsandbox/locks/artifacts.lock")
+                .join(".smolsandbox")
+                .join("locks")
+                .join("artifacts.lock")
                 .to_string_lossy()
         {
             assert!(

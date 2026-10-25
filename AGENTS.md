@@ -3,6 +3,17 @@
 - Use the installed `codebase-memory` skill for structural codebase exploration.
 - Before writing natural-language text to any file, read AGENT-LANG.md and apply its rules to that text.
 
+## Versioning
+
+- Include a version bump in `Cargo.toml` and the matching `smolsandbox` package
+  entry in `Cargo.lock` with every software change, including changes to tests,
+  dependencies, and build configuration.
+- Use `MAJOR.MINOR.PATCH`: increment `PATCH` for bug fixes, `MINOR` for features,
+  and `MAJOR` for breaking changes. Reset lower components to zero when
+  incrementing `MINOR` or `MAJOR`.
+- If a change only adds feature specifications or bug reports, leave the
+  software version unchanged.
+
 ## Sandbox network policy
 
 - Keep the `[network].allow_hosts` list in `devtools-base.smolfile` synchronized
