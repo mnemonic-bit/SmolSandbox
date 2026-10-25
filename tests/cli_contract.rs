@@ -98,6 +98,23 @@ fn parse(arguments: &[String]) -> Options {
 }
 
 #[test]
+fn usage_identity_is_independent_of_executable_suffix() {
+    for executable in ["smolsandbox", "smolsandbox.exe"] {
+        for (arguments, subcommand) in [
+            (vec!["--help"], None),
+            (vec!["start", "--help"], Some("start")),
+            (vec![], None),
+            (vec!["unknown"], None),
+            (vec!["start", "--unknown"], Some("start")),
+        ] {
+            let error =
+                Cli::try_parse_from(std::iter::once(executable).chain(arguments)).unwrap_err();
+            assert_usage_identity(&error.to_string(), subcommand);
+        }
+    }
+}
+
+#[test]
 fn help_is_complete_and_does_not_require_tools_configuration_or_mutation() {
     let invocation = OfflineInvocation::new();
     let cases: &[(&[&str], &[&str])] = &[

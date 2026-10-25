@@ -47,6 +47,7 @@ impl Options {
 
 #[derive(Debug, Parser)]
 #[command(
+    bin_name = "smolsandbox",
     version,
     about = "Run a coding-agent harness in a persistent SmolVM sandbox"
 )]
