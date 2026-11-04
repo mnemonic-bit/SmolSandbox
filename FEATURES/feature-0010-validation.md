@@ -165,3 +165,27 @@ and interactive sessions keep inherited standard handles. The mocked stream
 and PTY observations do not establish real guest boot, rendering, raw mode,
 authentication, or final cutover completion. Earlier observations and source
 revisions above remain unchanged.
+
+## Feature 0012 current-source verification: 2026-11-04
+
+Feature 0012 already exists in commit `16318af`. Verification of revision
+`5f439cdbb5db8fbb2bb142533bf101be77de8da9`, package `0.7.0`, ran with Rust
+`1.99.1` on native `x86_64-unknown-linux-gnu`. Two agents reviewed the
+implementation against the specification and reported no concrete gaps.
+This verification changed documentation only; no software version bump was
+required. Detailed command and acceptance results are appended to
+[Feature 0012 validation](feature-0012-validation.md#current-source-verification-2026-11-04).
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Formatting and both Clippy configurations | passed | All three required commands exited 0 |
+| Default-feature regression suite | passed | Exit 0: 60 library, 12 application, 11 CLI contract, 8 fixed-data, and 9 listing tests; `/tmp/feature-0012-current-default.log` |
+| Adapter-feature regression suite | passed | Exit 0: 60 library, 64 application, 11 CLI contract, 8 fixed-data, and 10 listing tests; `/tmp/feature-0012-current-adapter.log` |
+| Production release and offline help/version | passed | Release build, `list --help`, and `--version` exited 0 without `test-adapter` |
+| Baseline-independent validation | passed | `cargo run --locked --example check_baseline_independence` exited 0; isolated checks and eight compiled test executables per configuration passed with empty `PATH`; `/tmp/feature-0012-current-independence.log` |
+| Native Windows, macOS ARM64, and Linux ARM64 execution | not_run | No new native CI execution was observed; retain a run URL and tested revision when available |
+| Real SmolVM inventory and guest validation | not_run | `smolvm` is absent from `PATH`, and `/dev/kvm` is absent; run the existing native procedure on compatible hosts |
+
+These local mocked results do not establish real guest behavior or complete
+the remaining Feature 0010 cutover gates. Earlier validation observations and
+their source revisions remain unchanged.

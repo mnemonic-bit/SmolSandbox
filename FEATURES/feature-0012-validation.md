@@ -82,3 +82,48 @@ native Windows execution nor real SmolVM behavior.
 These results do not complete Feature 0010's cutover or replace historical
 validation observations. See [Feature 0010 validation](feature-0010-validation.md)
 for the continuing native, guest, and removal requirements.
+
+## Current-source verification: 2026-11-04
+
+Feature 0012 was already implemented in commit `16318af`. This verification
+tested revision `5f439cdbb5db8fbb2bb142533bf101be77de8da9`, package `0.7.0`,
+with Rust `1.99.1` on native `x86_64-unknown-linux-gnu`. Two agents independently
+reviewed the implementation against the specification and reported no concrete
+implementation gaps. No software files changed during this verification;
+the package version remains unchanged.
+
+All commands below ran from the repository root.
+
+| Command | Result | Exit code | Evidence |
+| --- | --- | --- | --- |
+| `cargo fmt --all -- --check` | passed | 0 | Current source formatting |
+| `cargo clippy --locked --all-targets -- -D warnings` | passed | 0 | Default configuration |
+| `cargo clippy --locked --features test-adapter --all-targets -- -D warnings` | passed | 0 | Adapter configuration |
+| `cargo test --locked --all-targets` | passed | 0 | 60 library, 12 application, 11 CLI contract, 8 fixed-data, and 9 listing tests; `/tmp/feature-0012-current-default.log` |
+| `cargo test --locked --features test-adapter --all-targets` | passed | 0 | 60 library, 64 application, 11 CLI contract, 8 fixed-data, and 10 listing tests; `/tmp/feature-0012-current-adapter.log` |
+| `cargo build --locked --release --bin smolsandbox` | passed | 0 | Production release without `test-adapter` |
+| `target/release/smolsandbox list --help` | passed | 0 | Scope, comparison context, legacy association limits, and read-only behavior |
+| `target/release/smolsandbox --version` | passed | 0 | Printed `smolsandbox 0.7.0` |
+| `cargo run --locked --example check_baseline_independence` | passed | 0 | Isolated checks and eight compiled test executables per feature configuration passed with empty `PATH`; `/tmp/feature-0012-current-independence.log` |
+| `git diff --check` | passed | 0 | No whitespace errors |
+
+| Criterion | Result | Current-source evidence and remaining work |
+| --- | --- | --- |
+| AC-01 | passed | Mixed-inventory fixture and agent review of path association across generations, revisions, profiles, and configurations |
+| AC-02 | inconclusive | Native Linux explicit/relative paths, symlinks, subdirectories, and `--all` context passed; native Windows execution remains not_run |
+| AC-03 | passed | Mixed fixture includes shared, legacy, and labelled custom-name machines while excluding unrelated rows |
+| AC-04 | passed | Fixed identity expectations and listing unit tests cover precedence, simultaneous differences, and unfamiliar states |
+| AC-05 | passed | Independent identity fixture, normalized hosts, name override, port rejection, and unchanged shared `Lifecycle::new` calculation |
+| AC-06 | passed | Missing/malformed path counts and matching-path contradictions remain visible without inferred associations |
+| AC-07 | passed | Adapter fixture checks absent defaults, explicit missing definitions, invalid nearer definitions, and unavailable-reference host additions |
+| AC-08 | passed | Human/JSON assertions cover full identities, ordering, reasons, nulls, and empty scopes |
+| AC-09 | passed | State snapshots and runtime-call assertions verify read-only inspection without virtualization preflight |
+| AC-10 | passed | Failure fixtures preserve empty JSON stdout for fatal inventory failures; contradictory rows remain inspectable |
+| AC-11 | passed | Release help, help tests, README, and operating-reference review |
+| AC-12 | passed | Both regression configurations passed; agent review found no changes to creation policy, templates, labels, hash inputs, revision, cleanup validators, or repair behavior |
+
+Native Windows, macOS ARM64, and Linux ARM64 execution remains `not_run` in
+this session. Real SmolVM inventory and guest validation remains `not_run`:
+`smolvm` is absent from `PATH`, and `/dev/kvm` is absent. Temporary log paths
+above identify local observations rather than durable CI artifacts. Earlier
+results and their source revisions remain unchanged.

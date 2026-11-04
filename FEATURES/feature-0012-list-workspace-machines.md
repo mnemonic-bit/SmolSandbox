@@ -2,10 +2,16 @@
 
 ## Status
 
-Proposed
+Implemented
 
-This specification defines implementation work. The `list` command is not
-implemented by adding this document.
+Implemented in commit `16318af`. Verification of revision
+`5f439cdbb5db8fbb2bb142533bf101be77de8da9` passed all seven required Rust
+checks on native Linux x86-64. Two agents reviewed specification coverage
+and reported no concrete implementation gaps.
+
+Native Windows, macOS ARM64, Linux ARM64, and real SmolVM validation remain
+pending. See [Feature 0012 validation](feature-0012-validation.md) for the
+recorded results and remaining checks.
 
 ## Summary
 
