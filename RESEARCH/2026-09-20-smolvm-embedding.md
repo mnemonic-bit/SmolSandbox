@@ -3,7 +3,8 @@
 Historical research: the recommendations below describe the 2026-09-20
 assessment. The current application requires separately installed SmolVM;
 use the [operating reference](../RUST-APPLICATION.md) for current behavior.
-Local shell-source links point to the retained baseline in `src-old/`.
+Historical shell-source links are pinned to Git revision
+`16318afadc4b37fc5ec7919997ee83de1b19abcf`, before source removal.
 
 Date: 2026-09-20  
 Decision scope: whether the planned cross-platform Rust rewrite should link SmolVM as a Rust library or drive a SmolVM executable.
@@ -74,7 +75,7 @@ Consequently, both subprocess bundling and direct linking require a release comp
 
 ## Codex dependency boundary
 
-Codex is not a host dependency. This repository's [`devtools-base.smolfile`](../src-old/devtools-base.smolfile) installs the pinned Codex CLI inside the guest with npm while preparing the reusable artifact. [`start-codex.sh`](../src-old/start-codex.sh) and [`start-login.sh`](../src-old/start-login.sh) then execute `codex` and `codex login --device-auth` through `smolvm machine exec` inside that VM. The Rust application's required host-side external runtime is therefore SmolVM only—and even that can be privately bundled—while Codex remains part of the built guest artifact.
+Codex is not a host dependency. This repository's [`devtools-base.smolfile`](https://github.com/mnemonic-bit/AI-Sandbox/blob/16318afadc4b37fc5ec7919997ee83de1b19abcf/src-old/devtools-base.smolfile) installs the pinned Codex CLI inside the guest with npm while preparing the reusable artifact. [`start-codex.sh`](https://github.com/mnemonic-bit/AI-Sandbox/blob/16318afadc4b37fc5ec7919997ee83de1b19abcf/src-old/start-codex.sh) and [`start-login.sh`](https://github.com/mnemonic-bit/AI-Sandbox/blob/16318afadc4b37fc5ec7919997ee83de1b19abcf/src-old/start-login.sh) then execute `codex` and `codex login --device-auth` through `smolvm machine exec` inside that VM. The Rust application's required host-side external runtime is therefore SmolVM only—and even that can be privately bundled—while Codex remains part of the built guest artifact.
 
 ## Decision gate for future direct linking
 

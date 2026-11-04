@@ -2,7 +2,8 @@
 
 This context defines lifecycle terms for the Rust `smolsandbox` application.
 The [operating reference](RUST-APPLICATION.md) contains command and state rules.
-The shell/Python workflow in `src-old/` is a retained historical baseline.
+The former shell/Python workflow was removed in commit
+`28087885c2b84077c62ee92c5560a2cab1b68997` and remains available in Git history.
 
 ## Language
 

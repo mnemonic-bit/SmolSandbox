@@ -2,15 +2,16 @@
 
 ## Status
 
-In progress — documentation prepared; final cutover pending
+In progress — documentation and source removal complete; runtime evidence pending
 
-The 2026-10-25 implementation makes the Rust application the active user and
-maintenance interface. The retained baseline remains in `src-old/`, following
-the user's archive decision. Real guest validation and a final baseline-removal
-decision remain separate prerequisites. See the
-[validation record](feature-0010-validation.md) for local checks, historical
-CI confirmation, and the remaining cutover gates. This documentation update
-does not change Feature 0004's prior user-directed completion marker.
+The Rust application is the active user and maintenance interface. Commit
+`28087885c2b84077c62ee92c5560a2cab1b68997` removed the shell/Python baseline
+and fixtures. The 2026-11-04 documentation audit corrects references to the
+deleted archive and records removal as passed. Final acceptance still requires
+native execution evidence and real SmolVM checks for every required profile
+and release target, including authentication and terminal behavior. See the
+[latest validation audit](feature-0010-validation.md#source-removal-and-documentation-audit-2026-11-04).
+Feature 0004's prior user-directed completion marker remains unchanged.
 
 ## Summary
 
@@ -215,8 +216,9 @@ completion.
   helper, fixture, or definition. Historical exceptions are listed in the
   implementation's validation record.
 - **AC-8:** Cutover completion claims cite passing prerequisite evidence and
-  match actual baseline removal. Feature 0004 remains incomplete while any
-  required validation or removal step is outstanding.
+  match actual baseline removal. Keep final cutover acceptance pending while
+  required execution evidence is outstanding. Preserve Feature 0004's
+  historical user-directed `Implemented` marker separately from those gates.
 
 ## Validation and implementation outline
 

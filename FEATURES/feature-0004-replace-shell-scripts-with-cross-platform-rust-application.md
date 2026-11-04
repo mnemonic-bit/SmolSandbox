@@ -6,9 +6,11 @@ Implemented
 
 Marked completed on 2026-10-25 at the user's request. See the
 [validation record](feature-0004-validation.md) for the completion decision
-and historical validation results. Retained baseline files and documentation
-cutover work remain visible in the repository; this status update does not
-record their removal or new real SmolVM test results.
+and historical validation results. That status update did not record baseline
+removal or new real SmolVM results. Commit
+`28087885c2b84077c62ee92c5560a2cab1b68997` subsequently removed the baseline
+and fixtures. The [latest Feature 0010 audit](feature-0010-validation.md#source-removal-and-documentation-audit-2026-11-04)
+records source removal separately from pending runtime validation.
 
 The configuration-location decision is recorded below. Provisioning-download
 integrity is out of scope and tracked separately in

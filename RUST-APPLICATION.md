@@ -5,9 +5,10 @@ application. Start with the [README first-use sequence](README.md#first-use).
 The application supports Claude, Codex, OpenCode, and Hermes Agent through
 complete user-owned Smolfile definitions and a separately installed SmolVM.
 
-Rust-first documentation is prepared. Final cutover remains pending because
-the shell/Python baseline is retained in `src-old/` and real guest validation
-has not been established for every required profile and release target. The
+The Rust documentation reflects source removal in commit
+`28087885c2b84077c62ee92c5560a2cab1b68997`. Final cutover acceptance remains
+pending because real guest validation has not been established for every
+required profile and release target. The
 [Feature 0010 validation record](FEATURES/feature-0010-validation.md) separates
 observed checks from outstanding gates. The historical completion decisions
 for Features 0004 and 0009 remain recorded in their validation records.
@@ -466,10 +467,11 @@ it is not a production application-home override. There is no production
 
 ## Historical shell workflow and state
 
-The retained shell workflow and its Python helpers, definition, shell tests,
-and fixture are archived in [`src-old/`](src-old/README.md). Active Rust
-commands and checks do not require that directory. Earlier feature
-specifications and research preserve historical command names and paths.
+The shell workflow, Python helpers, definition, shell tests, and fixture were
+removed from `src-old/` in commit `28087885c2b84077c62ee92c5560a2cab1b68997`.
+The sources remain available in Git history at the preceding revision,
+`16318afadc4b37fc5ec7919997ee83de1b19abcf`. Earlier feature specifications and
+research preserve historical command names and paths.
 
 Rust starts with fresh application state. It neither imports nor removes
 legacy repository-local `artifacts/` or `.smolvm/` contents. Those paths remain
@@ -478,7 +480,7 @@ The historical executable name `codex-sandbox` has no executable wrapper or
 alias. Existing native Rust definitions and state survive the executable
 rename. Returning users can map historical shell actions to Rust commands:
 
-| Historical shell entry point in `src-old/` | Rust command |
+| Removed historical shell entry point | Rust command |
 | --- | --- |
 | `build-sandbox.sh`, `build-login.sh` | `build` |
 | `start-codex.sh`, `codex-sandbox.sh` | `start` |
@@ -512,7 +514,7 @@ The tests use fixed expectations and a Rust SmolVM test double.
 `check_baseline_independence` copies the source while excluding `src-old/`,
 builds and runs both feature configurations, builds a release executable,
 and runs the compiled tests with an empty `PATH`. This checks that the Rust
-suite needs neither retained shell/Python sources nor host script tools.
+suite needs neither historical shell/Python sources nor host script tools.
 
 `test-adapter` enables native-home injection and a virtualization bypass for
 the Rust test double. Distributed executables use the default features;
@@ -528,13 +530,16 @@ records the user's confirmation that CI was green; no CI run URL accompanied
 that confirmation. Preserve the dated observations separately from new results.
 The [Feature 0004 validation record](FEATURES/feature-0004-validation.md) retains
 its user-directed `Implemented` marker and historical execution results;
-that marker does not establish real guest validation or baseline removal.
+that marker does not establish real guest validation. Physical baseline
+removal is now recorded separately in the
+[current Feature 0010 audit](FEATURES/feature-0010-validation.md#source-removal-and-documentation-audit-2026-11-04).
 
-Final cutover requires recorded native mocked execution, real guest validation
-for every profile and release target, and physical removal of the retained
-baseline. Until those gates pass, keep the baseline and record the affected
-completion claim as pending. Archiving sources in `src-old/` does not establish
-physical removal.
+Final cutover acceptance requires recorded native mocked execution, real
+guest validation for every profile and release target, and physical baseline
+removal. Source removal has passed. Keep final acceptance pending until the
+remaining execution evidence is recorded. The configured CI workflow runs
+mocked checks; real guest authentication and terminal checks require separate
+native execution.
 
 On compatible native hosts, use a disposable native user account and workspace
 for the real guest procedure. For each profile:

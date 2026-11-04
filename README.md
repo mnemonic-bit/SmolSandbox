@@ -165,11 +165,13 @@ for profiles, environment overrides, application state, lifecycle safeguards,
 and contributor checks. Repository maintenance instructions are in
 [AGENTS.md](AGENTS.md).
 
-The former shell workflow is retained as [historical source in `src-old/`](src-old/README.md).
+The former shell/Python sources and fixtures were removed in commit
+`28087885c2b84077c62ee92c5560a2cab1b68997`; they remain available in Git history.
 Rust uses `~/.smolsandbox/` and neither imports nor removes the legacy
 repository-local `artifacts/` or `.smolvm/` state.
 
 Features 0004 and 0009 retain their recorded `Implemented` status following
-the user's CI confirmation. Feature 0010 prepares Rust-first documentation;
-final cutover still requires the real guest evidence and baseline removal
-listed in the [Feature 0010 validation record](FEATURES/feature-0010-validation.md).
+the user's CI confirmation. Feature 0010's documentation and source-removal
+work is complete; final acceptance still requires native and real guest
+validation recorded in the
+[Feature 0010 validation record](FEATURES/feature-0010-validation.md#source-removal-and-documentation-audit-2026-11-04).

@@ -64,17 +64,18 @@ cargo run --locked --example check_baseline_independence
 `test-adapter` enables test-only home injection and virtualization bypass for
 the Rust SmolVM test double. Distribute builds without `test-adapter`.
 `check_baseline_independence` runs the checks in a source copy without the
-retained shell/Python baseline and executes compiled tests with an empty
+historical shell/Python baseline and executes compiled tests with an empty
 `PATH`. Native CI targets are defined in
 [rust.yml](.github/workflows/rust.yml); cross-compilation does not establish
 native execution or real guest behavior.
 
 ## Historical baseline and cutover evidence
 
-`src-old/` contains the retained shell/Python baseline and its historical
-tests. Active Rust maintenance uses the templates, policy, and checks above.
-Keep previous validation observations and their source revisions unchanged.
-Record new results and pending native or real guest checks in
-[Feature 0010 validation](FEATURES/feature-0010-validation.md). Documentation
-changes and baseline-independent tests do not establish physical baseline
-removal or passing real SmolVM checks.
+The shell/Python baseline and its tests were removed in commit
+`28087885c2b84077c62ee92c5560a2cab1b68997`; consult Git history for those sources.
+Use the Rust templates, policy, and checks above for maintenance.
+When recording validation, preserve previous observations and their source
+revisions. Append new results and pending native or real guest checks to
+[Feature 0010 validation](FEATURES/feature-0010-validation.md).
+For cutover status, use the latest dated audit in that record. Source removal
+and baseline-independent tests do not establish passing real SmolVM checks.
