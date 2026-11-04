@@ -8,6 +8,7 @@ pub enum Command {
     Build,
     Start,
     List,
+    Remove,
     Login,
     Repair,
     Clean,
@@ -33,6 +34,8 @@ pub struct Options {
     pub file: Option<PathBuf>,
     pub all: bool,
     pub json: bool,
+    pub global: bool,
+    pub dry_run: bool,
 }
 
 impl Options {
@@ -125,6 +128,31 @@ enum ParsedCommand {
         /// Select the reference workspace. Defaults to the invocation directory, including with --all.
         workspace: Option<PathBuf>,
     },
+    /// Remove eligible managed machines and their guest writable state, preserving base artifacts and host harness state.
+    #[command(
+        long_about = "Remove managed workspace machines whose machine policy revision is older than the executable's current policy revision. The canonical current directory is the default workspace; a repository subdirectory remains a separate workspace. Use --all to include current and newer revisions within the same scope. Use --force to stop selected running machines, verify they stopped, and delete them; without --force, running machines are skipped. Use --global to include all managed workspaces and shared login machines visible to this runtime and user registry; builders are eligible only with --global --all. WORKSPACE conflicts with --global. The flags --all, --force, and --global compose independently. Removal deletes guest writable state without a confirmation prompt. Base artifacts, definitions, generation caches, and persistent host harness state and credentials are preserved. Use --dry-run to preview selection without application writes or lifecycle locks. No definition, artifact, or guest boot is required. Runtime inventory queries and deletion are not an atomic transaction."
+    )]
+    Remove {
+        /// Select the independently installed SmolVM executable. SMOLVM_BIN supplies the default.
+        #[arg(long, value_name = "PATH")]
+        smolvm: Option<PathBuf>,
+        /// Include current and newer policy revisions within the selected scope.
+        #[arg(long)]
+        all: bool,
+        /// Stop and verify selected running machines before deletion.
+        #[arg(long)]
+        force: bool,
+        /// Include all managed workspaces and shared machines in this runtime's user registry.
+        #[arg(long, conflicts_with = "workspace")]
+        global: bool,
+        /// Preview planned actions without stopping, deleting, changing application state, or taking lifecycle locks.
+        #[arg(long)]
+        dry_run: bool,
+        /// Select the canonical workspace directory. Defaults to the invocation directory.
+        workspace: Option<PathBuf>,
+        #[arg(last = true, hide = true, value_parser = reject_remove_guest_argument)]
+        unsupported_guest_args: Vec<OsString>,
+    },
     /// Authenticate using the selected harness's supported login workflow. Codex uses device authentication; other harnesses use their own login workflow.
     Login {
         #[command(flatten)]
@@ -176,6 +204,10 @@ fn parse_host(raw: &str) -> Result<String, String> {
         return Err("a host must be nonempty, contain no line breaks, and not start with -".into());
     }
     Ok(raw.to_owned())
+}
+
+fn reject_remove_guest_argument(_: &str) -> Result<OsString, String> {
+    Err("remove does not accept guest command arguments".into())
 }
 
 fn parse_port(raw: &str) -> Result<String, String> {
@@ -273,6 +305,24 @@ impl Cli {
                 result.all = all;
                 result.json = json;
                 Some(selection)
+            }
+            ParsedCommand::Remove {
+                smolvm,
+                workspace,
+                all,
+                force,
+                global,
+                dry_run,
+                unsupported_guest_args: _,
+            } => {
+                result.command = Command::Remove;
+                result.smolvm = smolvm;
+                result.workspace = workspace;
+                result.all = all;
+                result.force = force;
+                result.global = global;
+                result.dry_run = dry_run;
+                None
             }
             ParsedCommand::Repair {
                 selection,

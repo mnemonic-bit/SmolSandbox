@@ -155,9 +155,10 @@ launch flags or that secret reference by default.
 
 ## Lifecycle commands
 
-All lifecycle commands accept `--smolfile` and `--smolvm`. `build`, `start`,
-and `repair` accept an optional workspace; `clean` accepts a workspace only
-with `--workspace`. The current directory is the default workspace.
+All lifecycle commands accept `--smolvm`. Commands other than `remove` accept
+`--smolfile`. `build`, `start`, `list`, `remove`, and `repair` accept an optional
+workspace; `clean` accepts a workspace only with `--workspace`. The current
+directory is the default workspace. `remove --global` rejects a workspace.
 
 | Command | Effect |
 | --- | --- |
@@ -168,6 +169,7 @@ with `--workspace`. The current directory is the default workspace.
 | `repair --replace-stale [WORKSPACE]` | Prepare and verify the desired machine before deleting eligible stale machines. |
 | `list [WORKSPACE] [--all] [--json]` | Inspect managed machines and compare identities without lifecycle locks or application writes. |
 | `clean [--workspace [WORKSPACE]]` | Delete the selected generation or one workspace's managed machines. |
+| `remove [WORKSPACE] [--global] [--all] [--force] [--dry-run]` | Delete eligible older-policy machines, with independent scope, revision, running-state, and preview options. |
 | `purge [--force \| --force-all]` | Delete eligible stopped machines and unprotected superseded artifacts. |
 
 A completed build attempts conservative purge. A refusal or failure in that
@@ -302,6 +304,88 @@ virtualization and mutation capability preflight, takes no lifecycle locks,
 and does not create directories, rewrite caches, seed credentials, recover
 port journals, or mutate machines. The report describes one snapshot.
 SmolVM itself may maintain its own registry while answering inventory queries.
+
+### Remove managed machines
+
+`remove` deletes guest writable state without an interactive confirmation.
+By default, removal selects managed workspace machines whose policy revision
+is older than the executable's current revision (`5`), across profiles,
+bases, and configurations. Package version changes, different definitions,
+and different configurations alone do not make a machine stale. Revisions
+compare numerically, including leading zeros and values too large for native
+integers. Current and newer revisions remain protected unless `--all` is set.
+
+```text
+smolsandbox remove --dry-run
+smolsandbox remove
+smolsandbox remove /path/to/project --all --force
+smolsandbox remove --global --all --force --dry-run
+smolsandbox remove --smolvm /path/to/smolvm /path/to/project
+```
+
+Workspace scope uses the canonical invocation directory or explicit WORKSPACE,
+including symlink resolution. Git roots do not widen the scope; repository
+subdirectories and directories without Git metadata are valid workspaces.
+Only a valid full workspace path hash establishes association. Machines with
+missing or malformed path hashes are counted without assigning a workspace;
+workspace removal excludes those machines. Other workspaces and shared login
+and builder machines remain preserved in workspace scope.
+
+The three selection options compose independently:
+
+| Scope and revision options | Selected identities |
+| --- | --- |
+| No options | Associated workspace machines with older policy revisions |
+| `--all` | Associated workspace machines of every revision |
+| `--global` | Managed workspace and login machines with older policy revisions |
+| `--global --all` | Managed workspace, login, and revisionless builder machines |
+
+For each row, omission of `--force` deletes only stopped or created machines
+and reports eligible running machines as skipped. Adding `--force` stops
+selected running machines, verifies the same incarnation is stopped, and
+then deletes them. An unknown selected runtime state refuses the operation.
+`--all` never changes ownership, workspace scope, or permission to stop.
+Global scope includes only the selected runtime's visible user registry.
+Complete managed labels can establish ownership for custom names. Complete
+supported legacy names establish global ownership but cannot recover a path.
+Incomplete or contradictory in-scope metadata refuses removal even with force.
+
+`--dry-run` composes with every combination and reports planned `delete`,
+`stop-and-delete`, and `skip-running` actions. Preview queries inventory and
+runtime version without lifecycle locks, application directory creation,
+permission changes, port recovery, or cache updates. SmolVM may maintain its
+own registry while answering queries. A preview is one snapshot, so later
+execution can find a different inventory. Empty selection and bounded skips
+exit successfully; invalid arguments exit `2`, and operational failures exit
+nonzero.
+
+Removal needs no definition, artifact, generation cache, replacement, or guest
+boot. `--smolvm` and `SMOLVM_BIN` select the runtime. `--smolfile`,
+`--allow-host`, `--port`, `--replace-stale`, `--check`, `--workspace`,
+`--force-all`, and guest arguments are rejected. Mutation preflight checks only
+required inventory, deletion, and stop capabilities; virtualization, creation,
+packing, and guest execution are not prerequisites.
+
+Execution sorts the plan by full machine name, validates selected creation
+timestamps and safe state filenames, then acquires the application mutation
+lock and checks fresh inventory before mutations. Each target is revalidated
+immediately before stop or deletion. Changed identity, incarnation, reported
+ports, or relevant state refuses further processing. Planned running skips
+remain skipped; a planned stopped target starting does not authorize a new
+stop. Runtime queries and deletion are not an atomic transaction because
+external SmolVM clients do not honor application locks.
+
+After deletion succeeds, fresh inventory must confirm the name is absent
+before the configured `STATE_ROOT` port manifest and pending journal are
+removed. Failure preserves port state when deletion or absence verification
+fails. A local cleanup failure after confirmed deletion reports the partial
+result. Processing stops on any failure, reports completed and unprocessed
+targets, and never claims rollback or restarts stopped machines.
+
+Every cached base artifact, definition, generation and compatibility cache,
+host harness home, credential, and unrelated resource remains preserved.
+Missing lock directories may be created during execution. Existing startup
+recovery handles removed machines; `purge` remains responsible for artifacts.
 
 ### Exact-set TCP ports
 

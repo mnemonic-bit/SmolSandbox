@@ -272,3 +272,41 @@ Append the tested revision, native target, SmolVM version, profile, commands,
 observed results, and CI run URLs where available. Keep final acceptance
 pending until every required result is `passed`; source removal has no
 remaining action.
+
+## Feature 0013 removal verification: 2026-11-04
+
+Feature 0013 adds definition-independent machine removal in package `0.8.0`.
+The tested source is the uncommitted working tree based on revision
+`eee2aff09efdc81cde8593bf4f822feaf28b0a16`, using Rust `1.99.1` on native
+`x86_64-unknown-linux-gnu`. The final software checksum and per-criterion
+results are recorded in [Feature 0013 validation](feature-0013-validation.md).
+Machine policy revision remains `5`; templates and creation identity are
+unchanged. Earlier observations and their source revisions remain unchanged.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Formatting and both Clippy configurations | passed | All three required commands exited 0; `/tmp/feature-0013-verified-fmt.log`, `/tmp/feature-0013-verified-clippy.log`, and `/tmp/feature-0013-verified-clippy-adapter.log` |
+| Default-feature suite | passed | Exit 0: 61 library, 12 application, 13 CLI, 8 fixed-data, 9 listing, and 10 removal tests; `/tmp/feature-0013-verified-default.log` |
+| Adapter-feature suite | passed | Exit 0: 61 library, 64 application, 13 CLI, 8 fixed-data, 10 listing, and 24 removal tests; `/tmp/feature-0013-verified-adapter.log` |
+| Production release and offline help/version | passed | Release build exited 0 without `test-adapter`; version and removal help passed with empty `PATH` and missing SmolVM; `/tmp/feature-0013-verified-release.log` |
+| Baseline-independent validation | passed | Exit 0: isolated formatting, both Clippy configurations, both suites, production release, and nine compiled test executables per feature configuration with empty `PATH`; `/tmp/feature-0013-verified-independence.log` |
+| Independent removal safety review | passed | Separate CLI/review and integration agents checked ownership, revision selection, lock and inventory races, forced stopping, deletion absence, local port cleanup, preserved resources, and partial results; final regressions passed |
+| Native Windows, macOS ARM64, and Linux ARM64 execution | not_run | Record native CI results, tested revision, and run URLs; native Windows path behavior remains an open Feature 0013 acceptance item |
+| Real SmolVM removal and guest validation | not_run | No SmolVM executable or `/dev/kvm` is available here; all mutations used disposable test-double inventories |
+
+The implementation adds `remove`, `--all`, `--force`, `--global`, and
+`--dry-run` without changing clean, purge, repair, start, or listing policy.
+Mocked checks cover the complete scope/revision/force matrix, custom and
+legacy ownership, arbitrary decimal revisions, canonical directories,
+read-only previews, concurrent inventory changes, failed stops/deletes, and
+port-state preservation. Completed operations and unprocessed targets remain
+visible on partial failure. Artifacts, definitions, credentials, generation
+caches, and host harness state remain preserved.
+
+Final Feature 0010 cutover acceptance remains pending the native and real
+guest evidence listed in the previous audit. On compatible hosts, exercise
+removal only against explicitly disposable managed VMs. Record the native
+target, source revision, runtime version, exact flag combination, selected
+identities and incarnations, observed stop/delete behavior, and retained
+resources. Follow the existing real guest procedure for every profile and
+release target. Local mocked removal results do not establish those gates.

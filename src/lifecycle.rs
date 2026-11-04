@@ -16,7 +16,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const REVISION: &str = "5";
+pub(crate) const REVISION: &str = "5";
 const MEMORY: &str = "12288";
 const CPUS: &str = "4";
 
@@ -856,6 +856,9 @@ impl Drop for StopGuard<'_, '_> {
 }
 
 pub fn run(options: &Options) -> Result<i32> {
+    if options.command == Command::Remove {
+        return crate::removal::run(options);
+    }
     if options.command == Command::List {
         return list(options);
     }
@@ -1016,7 +1019,7 @@ pub fn run(options: &Options) -> Result<i32> {
             },
             false,
         ),
-        Command::CreateConfig | Command::List => unreachable!(),
+        Command::CreateConfig | Command::List | Command::Remove => unreachable!(),
     }
 }
 

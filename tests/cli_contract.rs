@@ -128,6 +128,7 @@ fn help_is_complete_and_does_not_require_tools_configuration_or_mutation() {
                 "build",
                 "start",
                 "list",
+                "remove",
                 "login",
                 "repair",
                 "clean",
@@ -196,6 +197,29 @@ fn help_is_complete_and_does_not_require_tools_configuration_or_mutation() {
                 "other harnesses use their own login workflow",
                 "--smolfile",
                 "--smolvm",
+            ],
+        ),
+        (
+            &["remove", "--help"],
+            &[
+                "machine policy revision is older",
+                "canonical current directory",
+                "repository subdirectory remains a separate workspace",
+                "--all",
+                "--force",
+                "--global",
+                "--dry-run",
+                "--smolvm",
+                "[WORKSPACE]",
+                "running machines are skipped",
+                "builders are eligible only with --global --all",
+                "compose independently",
+                "deletes guest writable state without a confirmation prompt",
+                "Base artifacts, definitions, generation caches",
+                "host harness state and credentials are preserved",
+                "without application writes or lifecycle locks",
+                "No definition, artifact, or guest boot is required",
+                "not an atomic transaction",
             ],
         ),
         (
@@ -307,6 +331,7 @@ fn builtin_help_accepts_global_verbose_at_every_position_without_tools_or_state(
         Some("build"),
         Some("start"),
         Some("list"),
+        Some("remove"),
         Some("login"),
         Some("repair"),
         Some("clean"),
@@ -505,6 +530,14 @@ fn verbose_is_global_idempotent_and_stops_at_the_guest_boundary() {
         vec!["repair", "--check", "workspace with spaces"],
         vec!["repair", "--replace-stale", "workspace with spaces"],
         vec!["list", "--all", "--json", "workspace with spaces"],
+        vec![
+            "remove",
+            "--all",
+            "--force",
+            "workspace with spaces",
+            "--dry-run",
+        ],
+        vec!["remove", "--global", "--all", "--force", "--dry-run"],
         vec!["clean"],
         vec!["clean", "--workspace", "workspace with spaces"],
         vec!["purge"],
@@ -528,6 +561,9 @@ fn verbose_is_global_idempotent_and_stops_at_the_guest_boundary() {
             assert_eq!(options.harness, original.harness);
             assert_eq!(options.all, original.all);
             assert_eq!(options.json, original.json);
+            assert_eq!(options.global, original.global);
+            assert_eq!(options.dry_run, original.dry_run);
+            assert_eq!(options.force, original.force);
             assert_eq!(options.check, original.check);
             assert_eq!(options.replace_stale, original.replace_stale);
         }
@@ -575,5 +611,79 @@ fn verbose_create_config_is_offline_and_preserves_template_bytes() {
             include_bytes!("../templates/codex.smlbx")
         );
         assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+    }
+}
+
+#[test]
+fn remove_scope_revision_running_and_preview_options_compose_independently() {
+    for global in [false, true] {
+        for all in [false, true] {
+            for force in [false, true] {
+                for dry_run in [false, true] {
+                    for workspace_first in [false, true] {
+                        let mut arguments = vec!["remove".to_owned()];
+                        if workspace_first && !global {
+                            arguments.push("workspace with spaces".into());
+                        }
+                        for (enabled, flag) in [
+                            (global, "--global"),
+                            (all, "--all"),
+                            (force, "--force"),
+                            (dry_run, "--dry-run"),
+                        ] {
+                            if enabled {
+                                arguments.push(flag.into());
+                            }
+                        }
+                        arguments.extend(["--smolvm".into(), "runtime with spaces".into()]);
+                        if !workspace_first && !global {
+                            arguments.push("workspace with spaces".into());
+                        }
+                        let options = parse(&arguments);
+                        assert_eq!(options.command, smolsandbox::cli::Command::Remove);
+                        assert_eq!(options.global, global);
+                        assert_eq!(options.all, all);
+                        assert_eq!(options.force, force);
+                        assert_eq!(options.dry_run, dry_run);
+                        assert_eq!(
+                            options.workspace,
+                            (!global).then(|| PathBuf::from("workspace with spaces"))
+                        );
+                        assert_eq!(options.smolvm, Some(PathBuf::from("runtime with spaces")));
+                        assert!(options.smolfile.is_none());
+                        assert!(options.harness_args.is_empty());
+                    }
+                }
+            }
+        }
+    }
+    let default = parse(&["remove".into()]);
+    assert_eq!(default.command, smolsandbox::cli::Command::Remove);
+    assert!(default.workspace.is_none());
+    assert!(default.smolvm.is_none());
+    assert!(!default.global && !default.all && !default.force && !default.dry_run);
+}
+
+#[test]
+fn remove_rejects_launch_cleanup_and_guest_arguments_before_runtime_access() {
+    let invocation = OfflineInvocation::new();
+    for arguments in [
+        vec!["remove", "--global", "workspace"],
+        vec!["remove", "workspace", "--global"],
+        vec!["remove", "one", "two"],
+        vec!["remove", "--", "guest"],
+        vec!["remove", "--", "--help"],
+        vec!["remove", "workspace", "--", "guest"],
+        vec!["remove", "--smolfile", "missing.smlbx"],
+        vec!["remove", "--allow-host", "example.com"],
+        vec!["remove", "--port", "3000"],
+        vec!["remove", "--replace-stale"],
+        vec!["remove", "--check"],
+        vec!["remove", "--workspace"],
+        vec!["remove", "--force-all"],
+        vec!["remove", "--json"],
+        vec!["remove", "--smolvm"],
+    ] {
+        invocation.usage_error(&arguments);
     }
 }

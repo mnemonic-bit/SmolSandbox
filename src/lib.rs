@@ -5,4 +5,5 @@ pub mod lifecycle;
 pub mod listing;
 pub mod platform;
 pub mod ports;
+pub mod removal;
 pub mod smolvm;

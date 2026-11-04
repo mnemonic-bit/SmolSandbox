@@ -130,6 +130,31 @@ Legacy workspace names cannot establish a path association; use `--all` to
 see those rows. Listing takes no lifecycle locks and writes no application
 state. Assessments do not authorize deletion or guarantee a successful start.
 
+Remove older-policy workspace machines for the canonical current directory:
+
+```text
+smolsandbox remove --dry-run
+smolsandbox remove
+smolsandbox remove /path/to/project --all --force
+smolsandbox remove --global --all --force --dry-run
+```
+
+`remove` deletes guest writable state without a confirmation prompt. Stale
+means a policy revision older than the executable's current revision; a
+different base or configuration alone is not stale. `--all` includes current
+and newer revisions, `--force` permits stopping selected running machines,
+and `--global` includes all managed workspaces and shared machines visible
+to the selected runtime. These options are independent. Builders have no
+revision and require `--global --all`. Without `--force`, eligible running
+machines are skipped. A repository subdirectory is its own workspace;
+unassociated legacy workspaces require global scope.
+
+`--dry-run` previews the selection without application writes or locks.
+Removal needs no definition, base artifact, or generation cache. Artifacts,
+definitions, generation caches, host credentials, and persistent harness state
+survive removal. See the [removal rules](RUST-APPLICATION.md#remove-managed-machines)
+for validation, concurrency, and partial-failure behavior.
+
 Inspect stale machines before authorizing replacement:
 
 ```text
@@ -145,7 +170,7 @@ options when repairing a workspace with additional hosts.
 The cleanup commands delete managed machines and can discard their guest disk
 state. `clean --workspace` targets one workspace across generations; `clean`
 targets the selected generation. `purge` removes eligible superseded resources
-and refuses when a current custom configuration exists. The force policies
+and refuses when a current custom configuration exists. Purge force policies
 expand eligibility while preserving running machines and protected artifacts.
 Definitions and persistent harness state survive these commands. Review the
 [cleanup and purge rules](RUST-APPLICATION.md#cleanup-and-purge) before use.

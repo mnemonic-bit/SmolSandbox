@@ -42,7 +42,7 @@ impl LocalState {
         matches!(self, Self::Valid(_))
     }
 }
-fn valid_name(name: &str) -> bool {
+pub(crate) fn valid_name(name: &str) -> bool {
     let mut chars = name.chars();
     chars.next().is_some_and(|c| c.is_ascii_alphanumeric())
         && chars.all(|c| c.is_ascii_alphanumeric() || "_.-".contains(c))

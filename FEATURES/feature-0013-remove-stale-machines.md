@@ -2,10 +2,16 @@
 
 ## Status
 
-Proposed
+Implemented
 
-This specification defines implementation work. Adding this document does not
-implement `smolsandbox remove` or authorize execution of a removal command.
+The Rust command, independent removal tests, CLI help, and operating guidance
+are implemented in package `0.8.0`. All seven required Rust checks passed on
+native Linux x86-64. The machine policy revision remains `5`.
+
+Native Windows, Linux ARM64, macOS ARM64, and real SmolVM removal validation
+remain pending. See [Feature 0013 validation](feature-0013-validation.md) for
+the tested source, acceptance results, and remaining evidence. Implementation
+and mocked validation do not authorize deletion of real machines.
 
 ## Summary
 
