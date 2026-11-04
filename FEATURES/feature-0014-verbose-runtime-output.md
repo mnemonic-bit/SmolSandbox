@@ -2,10 +2,11 @@
 
 ## Status
 
-Proposed
+In progress
 
-This specification defines implementation work. Adding this document does not
-change runtime output or implement `--verbose`.
+The runtime and CLI implementation is available. Local validation and pending
+native and real SmolVM checks are tracked in
+[Feature 0014 validation](feature-0014-validation.md).
 
 ## Summary
 
@@ -247,10 +248,11 @@ the guest while `start --verbose` configures smolsandbox output.
 
 ## Versioning and validation evidence
 
-This specification-only change leaves `Cargo.toml` and `Cargo.lock` unchanged.
-Implementation adds a feature and requires a MINOR version bump from the
-implementation baseline in both files, following `AGENTS.md`. No machine
-policy revision bump is required because creation policy does not change.
+The original specification-only change left `Cargo.toml` and `Cargo.lock`
+unchanged. Implementation adds a feature and requires a MINOR version bump
+from the implementation baseline in both files, following `AGENTS.md`. No
+machine policy revision bump is required because creation policy does not
+change.
 
 During implementation, create `FEATURES/feature-0014-validation.md` with the
 tested source revision, native target, commands, exit codes, and `passed`,

@@ -173,6 +173,38 @@ A completed build attempts conservative purge. A refusal or failure in that
 post-build purge is reported as a warning and does not change a successful
 build into a failure.
 
+All commands accept the Boolean global option `--verbose` before the
+subcommand or among application arguments, before or after WORKSPACE.
+Repeating the flag has the same effect as specifying it once. No environment
+variable or persistent setting enables verbosity.
+
+By default, routine SmolVM management output and internal noninteractive
+guest-command output are suppressed on success and failure. Application
+results, selection information, warnings, and errors remain visible. Failures
+identify the operation and explain how to enable runtime diagnostics.
+With `--verbose`, management stdout and stderr stream live to application
+stderr. Version, inventory, and capability query stdout remains internal;
+verbose mode exposes query stderr. `list --json` writes the same single JSON
+object to stdout in either mode, with no partial JSON on inventory failure.
+
+```text
+smolsandbox build /path/to/project
+smolsandbox --verbose build /path/to/project
+smolsandbox build --verbose /path/to/project
+smolsandbox start /path/to/project --verbose
+smolsandbox list --all --json --verbose
+smolsandbox start /path/to/project -- --verbose
+```
+
+Interactive shell, harness, and login sessions inherit stdin, stdout, and
+stderr in both modes. Prompts, authentication instructions, and terminal
+control remain visible. Preparations before the session and cleanup after
+the session follow the management output policy. Runtime connection messages
+from the attached interactive process remain visible with the guest output.
+`start --verbose` configures application output; `start -- --verbose` passes
+the flag unchanged to the guest harness. Application flags before the first
+standalone `--` are never forwarded to the guest.
+
 Application help and version require neither a definition nor SmolVM.
 Arguments after the first standalone `--` on `start` belong to the guest
 harness and retain their argument boundaries:

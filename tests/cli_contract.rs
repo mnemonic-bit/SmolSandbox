@@ -127,6 +127,7 @@ fn help_is_complete_and_does_not_require_tools_configuration_or_mutation() {
                 "create-config",
                 "build",
                 "start",
+                "list",
                 "login",
                 "repair",
                 "clean",
@@ -171,6 +172,17 @@ fn help_is_complete_and_does_not_require_tools_configuration_or_mutation() {
                 "Ports bind to host loopback by default",
                 "Pass arguments unchanged",
                 "Use -- --help to request help from the selected harness",
+                "--smolfile",
+                "--smolvm",
+            ],
+        ),
+        (
+            &["list", "--help"],
+            &[
+                "List managed machines",
+                "--all",
+                "--json",
+                "--allow-host",
                 "--smolfile",
                 "--smolvm",
             ],
@@ -228,23 +240,29 @@ fn help_is_complete_and_does_not_require_tools_configuration_or_mutation() {
         ),
     ];
     for (arguments, expected) in cases {
-        let output = invocation.run(arguments);
-        assert!(output.status.success(), "{arguments:?}: {output:?}");
-        assert!(output.stderr.is_empty(), "{arguments:?}: {output:?}");
-        let stdout = String::from_utf8(output.stdout).unwrap();
-        assert_usage_identity(
-            &stdout,
-            arguments.first().copied().filter(|arg| *arg != "--help"),
-        );
-        let normalized = stdout.split_whitespace().collect::<Vec<_>>().join(" ");
-        for text in expected
-            .iter()
-            .chain(["Usage:", "Options:", "--help"].iter())
-        {
-            assert!(
-                normalized.contains(text),
-                "{arguments:?}: missing {text}: {stdout}"
+        for verbose in [false, true] {
+            let mut actual = arguments.to_vec();
+            if verbose {
+                actual.insert(0, "--verbose");
+            }
+            let output = invocation.run(&actual);
+            assert!(output.status.success(), "{arguments:?}: {output:?}");
+            assert!(output.stderr.is_empty(), "{arguments:?}: {output:?}");
+            let stdout = String::from_utf8(output.stdout).unwrap();
+            assert_usage_identity(
+                &stdout,
+                arguments.first().copied().filter(|arg| *arg != "--help"),
             );
+            let normalized = stdout.split_whitespace().collect::<Vec<_>>().join(" ");
+            for text in expected
+                .iter()
+                .chain(["Usage:", "Options:", "--help", "--verbose"].iter())
+            {
+                assert!(
+                    normalized.contains(text),
+                    "{arguments:?}: missing {text}: {stdout}"
+                );
+            }
         }
     }
 }
@@ -266,8 +284,14 @@ fn usage_errors_exit_two_on_stderr_before_any_lifecycle_work() {
         vec!["purge", "--force", "--force-all"],
         vec!["create-config"],
     ] {
-        let stderr = invocation.usage_error(&arguments);
-        assert_usage_identity(&stderr, None);
+        for verbose in [false, true] {
+            let mut actual = arguments.clone();
+            if verbose {
+                actual.insert(0, "--verbose");
+            }
+            let stderr = invocation.usage_error(&actual);
+            assert_usage_identity(&stderr, None);
+        }
     }
     invocation.usage_error(&["create-config", "--harness", "unknown"]);
     invocation.usage_error(&["create-config", "--harness", "claude", "--smolfile"]);
@@ -275,16 +299,74 @@ fn usage_errors_exit_two_on_stderr_before_any_lifecycle_work() {
 }
 
 #[test]
+fn builtin_help_accepts_global_verbose_at_every_position_without_tools_or_state() {
+    let invocation = OfflineInvocation::new();
+    for path in [
+        None,
+        Some("create-config"),
+        Some("build"),
+        Some("start"),
+        Some("list"),
+        Some("login"),
+        Some("repair"),
+        Some("clean"),
+        Some("purge"),
+        Some("help"),
+    ] {
+        let mut arguments = vec!["help"];
+        arguments.extend(path);
+        let baseline = invocation.run(&arguments);
+        assert!(baseline.status.success(), "{arguments:?}: {baseline:?}");
+        assert!(baseline.stderr.is_empty(), "{arguments:?}: {baseline:?}");
+        assert_usage_identity(&String::from_utf8_lossy(&baseline.stdout), path);
+        for index in 0..=arguments.len() {
+            for repeated in [false, true] {
+                let mut verbose = arguments.clone();
+                verbose.insert(index, "--verbose");
+                if repeated {
+                    verbose.insert(0, "--verbose");
+                    verbose.push("--verbose");
+                }
+                let output = invocation.run(&verbose);
+                assert!(output.status.success(), "{verbose:?}: {output:?}");
+                assert!(output.stderr.is_empty(), "{verbose:?}: {output:?}");
+                assert_eq!(output.stdout, baseline.stdout, "{verbose:?}");
+            }
+        }
+    }
+    for arguments in [
+        vec!["help", "unknown"],
+        vec!["help", "start", "unknown"],
+        vec!["help", "help", "start"],
+    ] {
+        invocation.usage_error(&arguments);
+        for index in 0..=arguments.len() {
+            let mut verbose = arguments.clone();
+            verbose.insert(index, "--verbose");
+            verbose.insert(0, "--verbose");
+            verbose.push("--verbose");
+            let error = invocation.usage_error(&verbose);
+            assert!(
+                error.contains("unrecognized subcommand"),
+                "{verbose:?}: {error}"
+            );
+        }
+    }
+}
+
+#[test]
 fn version_reports_manifest_identity_without_tools_configuration_or_mutation() {
     let invocation = OfflineInvocation::new();
     for flag in ["--version", "-V"] {
-        let output = invocation.run(&[flag]);
-        assert_eq!(output.status.code(), Some(0), "{output:?}");
-        assert!(output.stderr.is_empty(), "{output:?}");
-        assert_eq!(
-            String::from_utf8(output.stdout).unwrap(),
-            format!("smolsandbox {}\n", env!("CARGO_PKG_VERSION")),
-        );
+        for arguments in [vec![flag], vec!["--verbose", flag], vec![flag, "--verbose"]] {
+            let output = invocation.run(&arguments);
+            assert_eq!(output.status.code(), Some(0), "{output:?}");
+            assert!(output.stderr.is_empty(), "{output:?}");
+            assert_eq!(
+                String::from_utf8(output.stdout).unwrap(),
+                format!("smolsandbox {}\n", env!("CARGO_PKG_VERSION")),
+            );
+        }
     }
 }
 
@@ -409,4 +491,89 @@ fn repeated_options_and_argument_boundaries_preserve_exact_values() {
         "a.example".into(),
     ]);
     assert_eq!(repair.allow_hosts, ["z.example", "a.example"]);
+}
+
+#[test]
+fn verbose_is_global_idempotent_and_stops_at_the_guest_boundary() {
+    for arguments in [
+        vec!["create-config", "--harness", "codex"],
+        vec!["build"],
+        vec!["build", "workspace with spaces"],
+        vec!["start"],
+        vec!["start", "workspace with spaces"],
+        vec!["login"],
+        vec!["repair", "--check", "workspace with spaces"],
+        vec!["repair", "--replace-stale", "workspace with spaces"],
+        vec!["list", "--all", "--json", "workspace with spaces"],
+        vec!["clean"],
+        vec!["clean", "--workspace", "workspace with spaces"],
+        vec!["purge"],
+    ] {
+        let base: Vec<String> = arguments.iter().map(|arg| (*arg).to_owned()).collect();
+        assert!(!parse(&base).verbose);
+        for index in 0..=base.len() {
+            // An option value cannot be separated from the option that consumes it.
+            if index > 0 && arguments[index - 1] == "--harness" {
+                continue;
+            }
+            let mut flags = base.clone();
+            flags.insert(index, "--verbose".into());
+            flags.insert(0, "--verbose".into());
+            flags.push("--verbose".into());
+            let options = parse(&flags);
+            let original = parse(&base);
+            assert!(options.verbose, "{flags:?}");
+            assert_eq!(options.command, original.command);
+            assert_eq!(options.workspace, original.workspace);
+            assert_eq!(options.harness, original.harness);
+            assert_eq!(options.all, original.all);
+            assert_eq!(options.json, original.json);
+            assert_eq!(options.check, original.check);
+            assert_eq!(options.replace_stale, original.replace_stale);
+        }
+    }
+    for application_verbose in [false, true] {
+        let mut args = vec!["start", "workspace", "--", "--verbose", "--help", "", "a b"];
+        if application_verbose {
+            args.insert(0, "--verbose");
+        }
+        let options = parse(&args.into_iter().map(str::to_owned).collect::<Vec<_>>());
+        assert_eq!(options.verbose, application_verbose);
+        assert_eq!(options.harness_args, ["--verbose", "--help", "", "a b"]);
+    }
+    let invocation = OfflineInvocation::new();
+    invocation.usage_error(&["start", "-v"]);
+    invocation.usage_error(&["start", "--quiet"]);
+    invocation.usage_error(&["start", "--verbose=true"]);
+}
+
+#[test]
+fn verbose_create_config_is_offline_and_preserves_template_bytes() {
+    for verbose in [false, true] {
+        let root = tempfile::tempdir().unwrap();
+        let definition = root.path().join("codex.smlbx");
+        let mut command = Command::new(env!("CARGO_BIN_EXE_smolsandbox"));
+        command
+            .env_clear()
+            .env("PATH", "")
+            .env("SMOLVM_BIN", root.path().join("missing"))
+            .arg("create-config")
+            .args(["--harness", "codex", "--smolfile"])
+            .arg(&definition);
+        #[cfg(windows)]
+        if let Some(system_root) = std::env::var_os("SystemRoot") {
+            command.env("SystemRoot", system_root);
+        }
+        if verbose {
+            command.arg("--verbose");
+        }
+        let output = command.output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert!(output.stderr.is_empty(), "{output:?}");
+        assert_eq!(
+            fs::read(definition).unwrap(),
+            include_bytes!("../templates/codex.smlbx")
+        );
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+    }
 }

@@ -9,6 +9,10 @@ use std::{
 };
 use tempfile::TempDir;
 
+#[cfg(feature = "test-adapter")]
+#[path = "support/verbose.rs"]
+mod verbose;
+
 struct Fixture {
     root: TempDir,
     home: PathBuf,
@@ -870,29 +874,37 @@ mod lifecycle {
 
     #[test]
     fn guest_status_and_cleanup_failure_precedence() {
-        let f = Fixture::new();
-        f.configure("codex");
-        assert_ok(&f.run(&["start"]));
-        let output = f
-            .command()
-            .env("SMOLVM_TEST_EXEC_STATUS", "23")
-            .env("SMOLVM_TEST_STOP_FAIL", "1")
-            .arg("start")
-            .output()
-            .unwrap();
-        assert_eq!(output.status.code(), Some(23));
-        let mut inv = f.inventory();
-        for m in &mut inv {
-            m["state"] = json!("stopped");
+        for verbose in [false, true] {
+            let f = Fixture::new();
+            f.configure("codex");
+            assert_ok(&f.run(&["start"]));
+            let mut command = f.command();
+            if verbose {
+                command.arg("--verbose");
+            }
+            let output = command
+                .env("SMOLVM_TEST_EXEC_STATUS", "23")
+                .env("SMOLVM_TEST_STOP_FAIL", "1")
+                .arg("start")
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(23));
+            let mut inv = f.inventory();
+            for m in &mut inv {
+                m["state"] = json!("stopped");
+            }
+            f.set_inventory(&inv);
+            let mut command = f.command();
+            if verbose {
+                command.arg("--verbose");
+            }
+            let output = command
+                .env("SMOLVM_TEST_STOP_FAIL", "1")
+                .arg("start")
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(1));
         }
-        f.set_inventory(&inv);
-        let output = f
-            .command()
-            .env("SMOLVM_TEST_STOP_FAIL", "1")
-            .arg("start")
-            .output()
-            .unwrap();
-        assert_eq!(output.status.code(), Some(1));
     }
 
     #[test]
@@ -1046,14 +1058,21 @@ mod lifecycle {
         unsafe extern "C" {
             fn kill(pid: i32, signal: i32) -> i32;
         }
-        for stage in ["START", "SEED", "EXEC"] {
+        for (stage, verbose) in ["START", "SEED", "EXEC"]
+            .into_iter()
+            .flat_map(|stage| [false, true].map(|verbose| (stage, verbose)))
+        {
             let f = Fixture::new();
             f.configure("codex");
             assert_ok(&f.run(&["start"]));
             f.clear_log();
             let ready = f.root.path().join("ready");
-            let child = f
-                .command()
+            let mut command = f.command();
+            command.env("SMOLVM_TEST_OUTPUT", "1");
+            if verbose {
+                command.arg("--verbose");
+            }
+            let child = command
                 .env(format!("SMOLVM_TEST_{stage}_SLEEP_MS"), "10000")
                 .env(format!("SMOLVM_TEST_{stage}_READY"), &ready)
                 .arg("start")

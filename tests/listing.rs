@@ -677,3 +677,102 @@ fn listing_help_and_usage_are_offline_and_reject_mutation_options() {
     assert!(!f.root.join("calls.log").exists());
     assert!(!f.home.join(".smolsandbox").exists());
 }
+
+#[test]
+fn verbose_queries_preserve_json_identity_calls_and_read_only_state() {
+    let f = ListingFixture::new();
+    f.inventory(&[f.workspace_row(&f.selected_name())]);
+    let before = snapshot(&f.home);
+    let mut reports = Vec::new();
+    for verbose in [false, true] {
+        let mut command = f.list();
+        command.env("SMOLVM_TEST_OUTPUT", "1").arg("--json");
+        if verbose {
+            command.arg("--verbose");
+        }
+        let output = success(command.output().unwrap());
+        let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(report["reference"]["base_id"], f.base());
+        assert_eq!(report["reference"]["workspace_sha256"], f.hash(&[]));
+        let errors = String::from_utf8_lossy(&output.stderr);
+        for query in ["version", "inventory"] {
+            assert_eq!(errors.contains(&format!("query-{query}-stderr")), verbose);
+        }
+        assert!(!errors.contains(VERSION));
+        assert!(!errors.contains(&f.selected_name()));
+        assert!(!errors.contains("runtime-"));
+        assert_eq!(snapshot(&f.home), before);
+        reports.push(report);
+    }
+    assert_eq!(reports[0], reports[1]);
+    assert_eq!(
+        fs::read_to_string(f.root.join("calls.log")).unwrap(),
+        "--version\nmachine ls --json\n--version\nmachine ls --json\n"
+    );
+}
+
+#[test]
+fn verbose_query_failures_keep_json_empty_and_default_logs_suppressed() {
+    for verbose in [false, true] {
+        for malformed in [false, true] {
+            let f = ListingFixture::new();
+            let sequence = f.root.join("sequence.jsonl");
+            fs::write(&sequence, "{secret-raw-invalid-inventory\n").unwrap();
+            let mut command = f.list();
+            command.env("SMOLVM_TEST_OUTPUT", "1").arg("--json");
+            if verbose {
+                command.arg("--verbose");
+            }
+            if malformed {
+                command.env("SMOLVM_TEST_INVENTORY_SEQUENCE_FILE", sequence);
+            } else {
+                command.env("SMOLVM_TEST_INVENTORY_FAIL", "1");
+            }
+            let output = command.output().unwrap();
+            assert!(!output.status.success());
+            assert!(output.stdout.is_empty());
+            let errors = String::from_utf8_lossy(&output.stderr);
+            assert!(errors.contains("inventory"));
+            assert!(errors.contains("--verbose"));
+            assert_eq!(errors.contains("query-inventory-stderr"), verbose);
+            assert!(!errors.contains("secret-raw-invalid-inventory"));
+            assert_eq!(
+                errors.contains("simulated inventory failure"),
+                verbose && !malformed
+            );
+            if !malformed {
+                assert!(errors.contains("70"));
+            }
+        }
+    }
+}
+
+#[test]
+fn selected_runtime_spawn_failures_report_context_without_partial_json() {
+    for verbose in [false, true] {
+        let f = ListingFixture::new();
+        let executable = f.root.join("invalid-runtime.exe");
+        fs::write(&executable, "invalid executable fixture\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&executable, fs::Permissions::from_mode(0o644)).unwrap();
+        }
+        let before = snapshot(&f.home);
+        let mut command = f.list();
+        command.arg("--json").arg("--smolvm").arg(&executable);
+        if verbose {
+            command.arg("--verbose");
+        }
+        let output = command.output().unwrap();
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
+        let errors = String::from_utf8_lossy(&output.stderr);
+        assert!(errors.contains("SmolVM version query failed"), "{errors}");
+        assert!(errors.contains("--verbose"), "{errors}");
+        assert!(errors.contains("os error"), "{errors}");
+        assert!(!errors.contains("invalid executable fixture"));
+        assert!(!f.root.join("calls.log").exists());
+        assert_eq!(snapshot(&f.home), before);
+    }
+}

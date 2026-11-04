@@ -1,7 +1,5 @@
-use clap::Parser;
-
 fn main() {
-    let options = smolsandbox::cli::Cli::parse().into_options();
+    let options = smolsandbox::cli::Cli::parse_application().into_options();
     if let Err(error) = options.validate() {
         eprintln!("ERROR: {error}");
         std::process::exit(2);

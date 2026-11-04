@@ -76,6 +76,55 @@ fn gate(stage: &str) {
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
 }
+fn runtime_output(stage: &str) {
+    if enabled("SMOLVM_TEST_OUTPUT") {
+        println!("runtime-{stage}-stdout");
+        eprintln!("runtime-{stage}-stderr");
+        std::io::stdout().flush().unwrap();
+        std::io::stderr().flush().unwrap();
+    }
+    if var("SMOLVM_TEST_LARGE_OUTPUT_STAGE") == stage {
+        let stdout = std::thread::spawn(|| {
+            let mut stream = std::io::stdout().lock();
+            for _ in 0..256 {
+                stream.write_all(&[b'O'; 4096]).unwrap();
+            }
+            stream.write_all(b"\nlarge-stdout-finished\n").unwrap();
+            stream.flush().unwrap();
+        });
+        let stderr = std::thread::spawn(|| {
+            let mut stream = std::io::stderr().lock();
+            for _ in 0..256 {
+                stream.write_all(&[b'E'; 4096]).unwrap();
+            }
+            stream.write_all(b"\nlarge-stderr-finished\n").unwrap();
+            stream.flush().unwrap();
+        });
+        stdout.join().unwrap();
+        stderr.join().unwrap();
+    }
+    if var("SMOLVM_TEST_OUTPUT_GATE_STAGE") == stage {
+        gate("OUTPUT");
+    }
+}
+#[cfg(target_os = "linux")]
+fn terminal_dimensions() {
+    #[repr(C)]
+    #[derive(Default)]
+    struct Dimensions {
+        rows: u16,
+        columns: u16,
+        x_pixels: u16,
+        y_pixels: u16,
+    }
+    unsafe extern "C" {
+        fn ioctl(fd: i32, request: std::os::raw::c_ulong, dimensions: *mut Dimensions) -> i32;
+    }
+    let mut dimensions = Dimensions::default();
+    if unsafe { ioctl(0, 0x5413, &mut dimensions) } == 0 {
+        println!("guest-size:{}x{}", dimensions.rows, dimensions.columns);
+    }
+}
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     if let Some(log) = env::var_os("SMOLVM_TEST_LOG") {
@@ -109,6 +158,12 @@ fn main() {
         file.write_all(&record).unwrap();
     }
     if args == ["--version"] {
+        if enabled("SMOLVM_TEST_OUTPUT") {
+            eprintln!("query-version-stderr");
+        }
+        if enabled("SMOLVM_TEST_VERSION_FAIL") {
+            fail(69, "simulated version failure");
+        }
         gate("VERSION");
         println!(
             "{}",
@@ -117,6 +172,12 @@ fn main() {
         return;
     }
     if args.iter().any(|s| s == "--help") && !args.iter().any(|s| s == "--") {
+        if enabled("SMOLVM_TEST_OUTPUT") {
+            eprintln!("query-help-stderr");
+        }
+        if enabled("SMOLVM_TEST_HELP_FAIL") {
+            fail(68, "simulated capability failure");
+        }
         if args.get(1).map(String::as_str) == Some("update")
             && enabled("SMOLVM_TEST_INCOMPATIBLE_UPDATE")
         {
@@ -127,6 +188,9 @@ fn main() {
         return;
     }
     if args.get(..3) == Some(&["machine".into(), "ls".into(), "--json".into()]) {
+        if enabled("SMOLVM_TEST_OUTPUT") {
+            eprintln!("query-inventory-stderr");
+        }
         let sequence = var("SMOLVM_TEST_INVENTORY_SEQUENCE_FILE");
         let call = if !sequence.is_empty() {
             let count = env::var("SMOLVM_TEST_INVENTORY_COUNT_FILE")
@@ -182,6 +246,7 @@ fn main() {
     if args.first().map(String::as_str) == Some("pack")
         && args.get(1).map(String::as_str) == Some("create")
     {
+        runtime_output("pack");
         if enabled("SMOLVM_TEST_PACK_FAIL") {
             fail(74, "simulated pack failure");
         }
@@ -202,6 +267,14 @@ fn main() {
     }
     let operation = args.get(1).map(String::as_str).unwrap_or("");
     let name = option(&args, "--name").unwrap_or_default();
+    let interactive = operation == "exec" && args.iter().any(|arg| arg == "-it");
+    if !interactive {
+        runtime_output(if operation == "exec" {
+            "seed"
+        } else {
+            operation
+        });
+    }
     if operation == "update" {
         gate("UPDATE");
     }
@@ -235,6 +308,30 @@ fn main() {
                 fail(1, "simulated seed failure");
             }
             return;
+        }
+        if enabled("SMOLVM_TEST_OUTPUT") {
+            println!("guest-stdout");
+            eprintln!("guest-stderr");
+            std::io::stdout().flush().unwrap();
+        }
+        if enabled("SMOLVM_TEST_STDIN_ROUNDTRIP") {
+            use std::io::{BufRead, IsTerminal};
+            println!(
+                "guest-terminals: stdin={} stdout={} stderr={}",
+                std::io::stdin().is_terminal(),
+                std::io::stdout().is_terminal(),
+                std::io::stderr().is_terminal()
+            );
+            #[cfg(target_os = "linux")]
+            terminal_dimensions();
+            println!("guest-prompt>\x1b[32mready\x1b[0m");
+            std::io::stdout().flush().unwrap();
+            let mut line = String::new();
+            std::io::stdin().lock().read_line(&mut line).unwrap();
+            #[cfg(target_os = "linux")]
+            terminal_dimensions();
+            print!("guest-received:{line}");
+            std::io::stdout().flush().unwrap();
         }
         if let Ok(ms) = var("SMOLVM_TEST_EXEC_SLEEP_MS").parse::<u64>() {
             if let Some(path) = env::var_os("SMOLVM_TEST_EXEC_READY") {

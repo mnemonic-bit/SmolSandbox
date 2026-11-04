@@ -17,6 +17,7 @@ pub enum Command {
 #[derive(Debug, Default)]
 pub struct Options {
     pub command: Command,
+    pub verbose: bool,
     pub workspace: Option<PathBuf>,
     pub smolfile: Option<String>,
     pub smolvm: Option<PathBuf>,
@@ -56,6 +57,9 @@ impl Options {
     about = "Run a coding-agent harness in a persistent SmolVM sandbox"
 )]
 pub struct Cli {
+    /// Stream runtime diagnostics to stderr while operations run. Routine management output is suppressed by default; application errors and interactive guest I/O remain visible. Use start -- --verbose to pass the flag to the guest instead.
+    #[arg(long, global = true, overrides_with = "verbose")]
+    verbose: bool,
     #[command(subcommand)]
     command: ParsedCommand,
 }
@@ -186,8 +190,43 @@ fn parse_port(raw: &str) -> Result<String, String> {
 }
 
 impl Cli {
+    pub fn parse_application() -> Self {
+        let mut arguments: Vec<OsString> = std::env::args_os().collect();
+        let command = arguments
+            .iter()
+            .enumerate()
+            .skip(1)
+            .find(|(_, argument)| *argument != "--verbose");
+        if let Some((help_index, argument)) = command {
+            if argument == "help" {
+                // Clap treats every token after built-in help as a command path.
+                // Move only this global flag before help, preserving Clap's path validation.
+                let tail = arguments.split_off(help_index);
+                let mut before_boundary = true;
+                let mut verbose = false;
+                for argument in tail {
+                    if argument == "--" {
+                        before_boundary = false;
+                    }
+                    if before_boundary && argument == "--verbose" {
+                        verbose = true;
+                    } else {
+                        arguments.push(argument);
+                    }
+                }
+                if verbose {
+                    arguments.insert(1, "--verbose".into());
+                }
+            }
+        }
+        Self::parse_from(arguments)
+    }
+
     pub fn into_options(self) -> Options {
-        let mut result = Options::default();
+        let mut result = Options {
+            verbose: self.verbose,
+            ..Options::default()
+        };
         let selection = match self.command {
             ParsedCommand::CreateConfig { harness, file } => {
                 result.command = Command::CreateConfig;

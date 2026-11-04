@@ -90,6 +90,27 @@ smolsandbox --version
 smolsandbox start /path/to/project -- --help
 ```
 
+Routine SmolVM management and provisioning output is suppressed by default.
+Application results, warnings, and errors remain visible. Add `--verbose`
+before the command or among its application arguments to stream runtime
+stdout and stderr live to application stderr:
+
+```text
+smolsandbox build /path/to/project
+smolsandbox --verbose build /path/to/project
+smolsandbox start /path/to/project --verbose
+smolsandbox list --all --json --verbose
+```
+
+Interactive shell, harness, and login sessions always inherit terminal input
+and output, including prompts and authentication instructions. Preparations
+and cleanup follow the management output policy. Query stdout remains
+internal, so `list --json` keeps its single JSON object on stdout in both
+modes. Failures include application diagnostics even without `--verbose`.
+`start --verbose` configures smolsandbox output; `start -- --verbose` passes
+`--verbose` unchanged to the guest harness. Repeating the application flag
+has the same effect as specifying it once.
+
 ## Inspect and clean up
 
 List machines associated with the current directory, or inspect every managed

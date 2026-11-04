@@ -137,3 +137,31 @@ application state, and inspection without virtualization preflight. Those
 mocked observations do not establish guest provisioning, authentication,
 terminal behavior, or final cutover completion. Earlier observations and
 source revisions above remain unchanged.
+
+## Feature 0014 local validation update: 2026-11-04
+
+Feature 0014 adds global `--verbose` output control in package `0.7.0`.
+The tested source is the uncommitted implementation working tree based on
+`28087885c2b84077c62ee92c5560a2cab1b68997`, running natively on
+`x86_64-unknown-linux-gnu` with Rust `1.99.1`. That revision alone does not
+contain the implementation. The software checksum and acceptance results
+are recorded in [Feature 0014 validation](feature-0014-validation.md).
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Formatting and both Clippy configurations | passed | All three required commands exited 0 |
+| Default-feature regression suite | passed | `cargo test --locked --all-targets` exited 0: 60 library, 12 application, 11 CLI contract, 8 fixed-data, and 9 listing tests |
+| Adapter-feature regression suite | passed | `cargo test --locked --features test-adapter --all-targets` exited 0: 60 library, 64 application, 11 CLI contract, 8 fixed-data, and 10 listing tests |
+| Production release build | passed | `cargo build --locked --release --bin smolsandbox` exited 0 without `test-adapter` |
+| Baseline-independent validation | passed | `cargo run --locked --example check_baseline_independence` exited 0; isolated checks and eight compiled test executables per feature configuration passed with empty `PATH`; `/tmp/feature-0014-baseline-independence.log` |
+| Native Linux mocked PTY | passed | Four default/verbose and guest-exit/Ctrl-C cases observed terminal handles, input round-trip, ANSI bytes, resize, statuses 17/130, and owned-machine stop; `/tmp/feature-0014-pty.log` |
+| New native Windows, macOS ARM64, and Linux ARM64 execution | not_run | No new native CI run was observed; run the native matrix for the implemented revision and retain its URL |
+| Real SmolVM shell/harness, login, and authentication | not_run | This host has no `smolvm` executable or `/dev/kvm`; run both output modes for every profile and release target, including Windows console behavior |
+| Physical baseline removal | not_run | `src-old/` remains present; isolated validation does not establish physical removal |
+
+Management and internal seeding output now default to suppressed streams;
+verbose management output goes live to stderr. Query stdout remains internal,
+and interactive sessions keep inherited standard handles. The mocked stream
+and PTY observations do not establish real guest boot, rendering, raw mode,
+authentication, or final cutover completion. Earlier observations and source
+revisions above remain unchanged.

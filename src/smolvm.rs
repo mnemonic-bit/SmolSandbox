@@ -7,7 +7,7 @@ use std::{
     env,
     ffi::{OsStr, OsString},
     fs,
-    io::Read,
+    io::{self, Read, Write},
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Output, Stdio},
     sync::{
@@ -26,104 +26,138 @@ static SIGNAL_HANDLER: OnceLock<std::result::Result<(), String>> = OnceLock::new
 pub struct Smolvm {
     pub path: PathBuf,
     pub version: String,
+    verbose: bool,
 }
 impl Smolvm {
-    pub fn discover(explicit: Option<&Path>) -> Result<Self> {
+    pub fn discover(explicit: Option<&Path>, verbose: bool) -> Result<Self> {
         let selected = if let Some(path) = explicit {
             path.to_owned()
         } else if let Some(path) = env::var_os("SMOLVM_BIN").filter(|value| !value.is_empty()) {
             PathBuf::from(path)
         } else {
-            find_on_path(OsStr::new("smolvm")).context("SmolVM is not installed or is not on PATH; install SmolVM separately or select --smolvm <path>")?
+            find_on_path(OsStr::new("smolvm")).with_context(|| format!("SmolVM discovery failed: SmolVM is not installed or is not on PATH; install SmolVM separately or select --smolvm <path>. {RUNTIME_GUIDANCE}"))?
         };
         let path = fs::canonicalize(&selected).with_context(|| {
             format!(
-                "cannot resolve selected SmolVM executable {}",
+                "SmolVM discovery failed: cannot resolve selected SmolVM executable {}. {RUNTIME_GUIDANCE}",
                 selected.display()
             )
         })?;
         if !path.is_file() {
             bail!(
-                "selected SmolVM executable is not a file: {}",
+                "SmolVM discovery failed: selected SmolVM executable is not a file: {}. {RUNTIME_GUIDANCE}",
                 path.display()
             );
         }
-        let version_output = Command::new(&path)
-            .arg("--version")
-            .output()
-            .with_context(|| format!("cannot execute selected SmolVM {}", path.display()))?;
+        let mut runtime = Self {
+            path,
+            version: String::new(),
+            verbose,
+        };
+        let mut command = Command::new(&runtime.path);
+        command.arg("--version").stdin(Stdio::null());
+        let version_output = runtime.capture_command(command, "SmolVM version query")?;
         if !version_output.status.success() {
             bail!(
-                "selected SmolVM --version failed with status {}",
+                "selected SmolVM --version failed with exit status {}. {RUNTIME_GUIDANCE}",
                 exit_code(version_output.status)
             );
         }
         let version = std::str::from_utf8(&version_output.stdout)
-            .context("SmolVM version output is not UTF-8")?
+            .with_context(|| format!("SmolVM version output is not UTF-8. {RUNTIME_GUIDANCE}"))?
             .trim_end_matches(['\r', '\n'])
             .to_owned();
         if version.trim().is_empty() || !version.to_ascii_lowercase().contains("smolvm") {
             bail!(
-                "selected executable does not identify itself as SmolVM: {}",
-                path.display()
+                "selected executable does not identify itself as SmolVM: {}. {RUNTIME_GUIDANCE}",
+                runtime.path.display()
             );
         }
-        Ok(Self { path, version })
+        runtime.version = version;
+        Ok(runtime)
     }
     pub fn capture(&self, args: &[OsString]) -> Result<Output> {
+        let mut command = Command::new(&self.path);
+        command.args(args);
+        self.capture_command(command, &operation_context(args))
+    }
+
+    fn capture_command(&self, mut command: Command, operation: &str) -> Result<Output> {
         install_signal_handler()?;
-        let mut child = Command::new(&self.path)
-            .args(args)
+        let context = || format!("{operation} failed. {RUNTIME_GUIDANCE}");
+        let mut child = command
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .with_context(|| format!("cannot run SmolVM {}", self.path.display()))?;
-        let mut stdout = child
-            .stdout
-            .take()
-            .context("cannot capture SmolVM stdout")?;
-        let mut stderr = child
-            .stderr
-            .take()
-            .context("cannot capture SmolVM stderr")?;
+            .with_context(context)?;
+        let mut stdout = child.stdout.take().expect("piped SmolVM stdout");
+        let stderr = child.stderr.take().expect("piped SmolVM stderr");
+        let verbose = self.verbose;
         let stdout = thread::spawn(move || {
             let mut bytes = Vec::new();
             stdout.read_to_end(&mut bytes).map(|_| bytes)
         });
-        let stderr = thread::spawn(move || {
-            let mut bytes = Vec::new();
-            stderr.read_to_end(&mut bytes).map(|_| bytes)
-        });
-        let status = wait_child(&mut child)?;
+        let stderr = thread::spawn(move || capture_stderr(stderr, verbose));
+        let status = wait_child(&mut child);
+        if status.is_err() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        // Join both readers before returning, including on cancellation or a read failure.
+        let stdout = stdout.join();
+        let stderr = stderr.join();
+        let status = status.with_context(context)?;
+        let stdout = stdout
+            .map_err(|_| anyhow::anyhow!("SmolVM stdout reader failed"))
+            .with_context(context)?
+            .with_context(context)?;
+        let stderr = stderr
+            .map_err(|_| anyhow::anyhow!("SmolVM stderr reader failed"))
+            .with_context(context)?
+            .with_context(context)?;
         Ok(Output {
             status,
-            stdout: stdout
-                .join()
-                .map_err(|_| anyhow::anyhow!("SmolVM stdout reader failed"))??,
-            stderr: stderr
-                .join()
-                .map_err(|_| anyhow::anyhow!("SmolVM stderr reader failed"))??,
+            stdout,
+            stderr,
         })
     }
+
     pub fn run(&self, args: &[OsString]) -> Result<i32> {
         install_signal_handler()?;
-        let mut child = Command::new(&self.path)
-            .args(args)
-            .spawn()
-            .with_context(|| format!("cannot run SmolVM {}", self.path.display()))?;
-        let status = wait_child(&mut child)?;
-        Ok(exit_code(status))
+        let operation = operation_context(args);
+        let context = || format!("{operation} failed. {RUNTIME_GUIDANCE}");
+        let mut command = Command::new(&self.path);
+        command.args(args);
+        if self.verbose {
+            command
+                .stdout(duplicate_stderr().with_context(context)?)
+                .stderr(Stdio::inherit());
+        } else {
+            command.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+        let mut child = command.spawn().with_context(context)?;
+        let status = wait_child(&mut child);
+        if status.is_err() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        let status = exit_code(status.with_context(context)?);
+        if status != 0 {
+            bail!("{operation} failed with exit status {status}. {RUNTIME_GUIDANCE}");
+        }
+        Ok(status)
     }
     pub fn inventory(&self) -> Result<Inventory> {
         let output = self.capture(&strings(&["machine", "ls", "--json"]))?;
         if !output.status.success() {
             bail!(
-                "SmolVM inventory failed with status {}; no mutation is authorized",
+                "SmolVM inventory failed with exit status {}; no mutation is authorized. {RUNTIME_GUIDANCE}",
                 exit_code(output.status)
             );
         }
-        parse_inventory(&output.stdout)
-            .context("invalid SmolVM inventory; no mutation is authorized")
+        parse_inventory(&output.stdout).with_context(|| {
+            format!("invalid SmolVM inventory; no mutation is authorized. {RUNTIME_GUIDANCE}")
+        })
     }
     pub fn preflight(&self) -> Result<()> {
         for (command, required) in [
@@ -159,13 +193,24 @@ impl Smolvm {
         ] {
             let output = self.capture(&strings(&command))?;
             if !output.status.success() {
-                bail!("incompatible SmolVM: {} failed", command.join(" "));
+                bail!(
+                    "incompatible SmolVM: {} failed with exit status {}. {RUNTIME_GUIDANCE}",
+                    command.join(" "),
+                    exit_code(output.status)
+                );
             }
-            let mut help =
-                String::from_utf8(output.stdout).context("SmolVM help output is not UTF-8")?;
-            help.push_str(
-                std::str::from_utf8(&output.stderr).context("SmolVM help output is not UTF-8")?,
-            );
+            let mut help = String::from_utf8(output.stdout).with_context(|| {
+                format!(
+                    "SmolVM {} capability help output is not UTF-8. {RUNTIME_GUIDANCE}",
+                    command[..command.len() - 1].join(" ")
+                )
+            })?;
+            help.push_str(std::str::from_utf8(&output.stderr).with_context(|| {
+                format!(
+                    "SmolVM {} capability help output is not UTF-8. {RUNTIME_GUIDANCE}",
+                    command[..command.len() - 1].join(" ")
+                )
+            })?);
             let flags: Vec<&str> = help
                 .split_whitespace()
                 .map(|token| {
@@ -181,7 +226,7 @@ impl Smolvm {
                     || (flag == "-it" && flags.contains(&"-i") && flags.contains(&"-t"));
                 if !present {
                     bail!(
-                        "incompatible SmolVM: {} must support {flag}",
+                        "incompatible SmolVM: {} must support {flag}. {RUNTIME_GUIDANCE}",
                         command[..command.len() - 1].join(" ")
                     );
                 }
@@ -221,6 +266,80 @@ impl Smolvm {
         Ok(exit_code(wait_child(&mut child)?))
     }
 }
+const RUNTIME_GUIDANCE: &str = "Use --verbose to display runtime output.";
+
+fn operation_context(args: &[OsString]) -> String {
+    let mut operation = if args.first().is_some_and(|arg| arg == "--version") {
+        "SmolVM version query".to_owned()
+    } else {
+        let command = args
+            .first()
+            .map(|arg| arg.to_string_lossy())
+            .unwrap_or_default();
+        let action = args
+            .get(1)
+            .map(|arg| arg.to_string_lossy())
+            .unwrap_or_default();
+        format!("SmolVM {command} {action}")
+    };
+    if args.iter().any(|arg| arg == "--help") {
+        operation.push_str(" capability inspection");
+    }
+    if let Some(name) = args
+        .windows(2)
+        .find_map(|pair| (pair[0] == "--name" || pair[0] == "--from-vm").then_some(&pair[1]))
+    {
+        operation.push_str(" for ");
+        operation.push_str(&name.to_string_lossy());
+    }
+    operation
+}
+
+fn capture_stderr(mut source: impl Read, verbose: bool) -> io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    let mut buffer = [0; 8192];
+    let mut write_error = None;
+    loop {
+        let count = match source.read(&mut buffer) {
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            result => result?,
+        };
+        if count == 0 {
+            break;
+        }
+        bytes.extend_from_slice(&buffer[..count]);
+        if verbose && write_error.is_none() {
+            let mut destination = io::stderr().lock();
+            if let Err(error) = destination
+                .write_all(&buffer[..count])
+                .and_then(|()| destination.flush())
+            {
+                write_error = Some(error);
+            }
+        }
+    }
+    match write_error {
+        Some(error) => Err(error),
+        None => Ok(bytes),
+    }
+}
+
+fn duplicate_stderr() -> io::Result<Stdio> {
+    #[cfg(unix)]
+    {
+        use std::os::fd::AsFd;
+        io::stderr().as_fd().try_clone_to_owned().map(Stdio::from)
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsHandle;
+        io::stderr()
+            .as_handle()
+            .try_clone_to_owned()
+            .map(Stdio::from)
+    }
+}
+
 fn install_signal_handler() -> Result<()> {
     let handler = SIGNAL_HANDLER.get_or_init(|| {
         ctrlc::set_handler(|| {

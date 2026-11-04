@@ -144,11 +144,7 @@ impl<'a> Lifecycle<'a> {
     }
 
     fn command(&self, values: Vec<OsString>) -> Result<()> {
-        let status = self.smolvm.run(&values)?;
-        if status != 0 {
-            bail!("SmolVM operation failed with exit status {status}");
-        }
-        Ok(())
+        self.smolvm.run(&values).map(|_| ())
     }
 
     fn machine(&self, operation: &str, name: &str) -> Result<()> {
@@ -168,9 +164,10 @@ impl<'a> Lifecycle<'a> {
         })?;
         let output = self.smolvm.capture(&args(&["--version"]))?;
         if !output.status.success() {
-            bail!("could not refresh SmolVM version");
+            bail!("could not refresh SmolVM version: exit status {}. Use --verbose to display runtime output.", crate::smolvm::exit_code(output.status));
         }
-        let version = std::str::from_utf8(&output.stdout).context("SmolVM version is not UTF-8")?;
+        let version = std::str::from_utf8(&output.stdout)
+            .context("SmolVM version is not UTF-8. Use --verbose to display runtime output.")?;
         if base_id(version, &bytes) != self.identity.base_id {
             bail!("the sandbox definition or SmolVM version changed; retry the command");
         }
@@ -217,7 +214,12 @@ impl<'a> Lifecycle<'a> {
             );
             self.command(values)?;
         }
-        let _ = self.machine("stop", &self.builder);
+        if let Err(error) = self.machine("stop", &self.builder) {
+            eprintln!(
+                "WARNING: could not stop builder {}: {error:#}",
+                self.builder
+            );
+        }
         self.machine("start", &self.builder)?;
         self.machine("stop", &self.builder)?;
         let staging = tempfile::Builder::new()
@@ -343,7 +345,12 @@ impl<'a> Lifecycle<'a> {
             if !regular_nonempty(&artifact)? {
                 continue;
             }
-            let _ = self.machine("stop", &machine.name);
+            if let Err(error) = self.machine("stop", &machine.name) {
+                eprintln!(
+                    "WARNING: could not stop builder {} before deletion: {error:#}",
+                    machine.name
+                );
+            }
             self.machine("delete", &machine.name)?;
             ports::remove(&self.config.state_root, &machine.name)?;
         }
@@ -675,7 +682,9 @@ impl<'a> Lifecycle<'a> {
         let mut removed = 0;
         for machine in &selected {
             println!("Deleting VM: {machine}");
-            let _ = self.machine("stop", machine);
+            if let Err(error) = self.machine("stop", machine) {
+                eprintln!("WARNING: could not stop machine {machine} before deletion: {error:#}");
+            }
             self.machine("delete", machine).with_context(|| format!("cleanup stopped after {removed} deletion(s); later machines and artifacts were preserved"))?;
             removed += 1;
             ports::remove(&self.config.state_root, machine)?;
@@ -872,7 +881,7 @@ pub fn run(options: &Options) -> Result<i32> {
             config.definition.profile.authentication_hint()
         );
     }
-    let smolvm = Smolvm::discover(options.smolvm.as_deref())?;
+    let smolvm = Smolvm::discover(options.smolvm.as_deref(), options.verbose)?;
     let lifecycle = Lifecycle::new(&config, &smolvm, options)?;
     if options.command == Command::Repair && options.check {
         lifecycle.reconcile(options, &[])?;
@@ -1013,7 +1022,7 @@ pub fn run(options: &Options) -> Result<i32> {
 
 fn list(options: &Options) -> Result<i32> {
     let (workspace, config) = Config::resolve_for_listing(options)?;
-    let smolvm = Smolvm::discover(options.smolvm.as_deref())?;
+    let smolvm = Smolvm::discover(options.smolvm.as_deref(), options.verbose)?;
     let mut reference = crate::listing::Reference {
         definition: None,
         base_id: None,
