@@ -110,3 +110,30 @@ gates. Keep Feature 0010's final completion pending until AC-8 has passing
 evidence. Preserve Feature 0004's earlier user-directed status and historical
 validation rather than treating that status as proof that the remaining
 cutover gates have passed.
+
+## Feature 0012 local validation update: 2026-10-25
+
+Feature 0012 adds read-only machine inventory reporting in package `0.6.0`.
+The tested source was the uncommitted implementation working tree based on
+`e092975222c645a129de7460707b18d884e205cc`, running natively on
+`x86_64-unknown-linux-gnu` with Rust `1.99.1`. The baseline commit alone does
+not contain the implementation. The exact changed-software checksum and
+acceptance results are recorded in
+[Feature 0012 validation](feature-0012-validation.md).
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Formatting and both Clippy configurations | passed | All three required commands exited 0 |
+| Default-feature regression suite | passed | `cargo test --locked --all-targets` exited 0: 60 library, 12 application, 8 CLI contract, 8 fixed-data, and 6 listing tests |
+| Adapter-feature regression suite | passed | `cargo test --locked --features test-adapter --all-targets` exited 0: 60 library, 57 application, 8 CLI contract, 8 fixed-data, and 7 listing tests |
+| Production release build | passed | `cargo build --locked --release --bin smolsandbox` exited 0 without `test-adapter` |
+| Baseline-independent validation | passed | `cargo run --locked --example check_baseline_independence` exited 0; isolated checks and eight compiled test executables per feature configuration passed with empty `PATH`; local log `/tmp/feature-0012-baseline-independence.log` |
+| New native Windows, macOS ARM64, and Linux ARM64 execution | not_run | No new CI run was observed; run the native matrix for the implemented revision and retain its URL |
+| Real SmolVM inventory and guest validation | not_run | No `smolvm` executable or `/dev/kvm` is available on this host; run the existing real guest procedure on compatible native hosts |
+| Physical baseline removal | not_run | `src-old/` remains present; isolated validation does not establish physical removal |
+
+The listing tests verify version/inventory-only runtime calls, unchanged
+application state, and inspection without virtualization preflight. Those
+mocked observations do not establish guest provisioning, authentication,
+terminal behavior, or final cutover completion. Earlier observations and
+source revisions above remain unchanged.

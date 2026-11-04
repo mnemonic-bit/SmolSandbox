@@ -2,6 +2,7 @@ pub mod cli;
 pub mod config;
 pub mod domain;
 pub mod lifecycle;
+pub mod listing;
 pub mod platform;
 pub mod ports;
 pub mod smolvm;

@@ -248,17 +248,38 @@ pub struct Config {
 }
 impl Config {
     pub fn resolve(options: &Options) -> Result<Self> {
+        Self::resolve_inner(options, false)?
+            .1
+            .context("selected definition is unavailable")
+    }
+
+    pub fn resolve_for_listing(options: &Options) -> Result<(PathBuf, Option<Self>)> {
+        let resolved = Self::resolve_inner(options, true)?;
+        if resolved.1.is_none() && !options.allow_hosts.is_empty() {
+            bail!("--allow-host requires a reference definition; select an existing definition with --smolfile");
+        }
+        Ok(resolved)
+    }
+
+    fn resolve_inner(
+        options: &Options,
+        allow_missing_default: bool,
+    ) -> Result<(PathBuf, Option<Self>)> {
         let cwd = env::current_dir().context("cannot read invocation directory")?;
         let workspace =
             platform::canonical_workspace(options.workspace.as_deref().unwrap_or(&cwd))?;
         let home = application_home()?;
-        let definition_path = select_definition(
+        let definition_path = find_definition(
             &cwd,
             &workspace,
             &home,
             options.smolfile.as_deref(),
             env::var_os("BASE_SMOLFILE").as_deref(),
+            allow_missing_default,
         )?;
+        let Some(definition_path) = definition_path else {
+            return Ok((workspace, None));
+        };
         let definition = Definition::read(definition_path)?;
         let artifacts_dir = component_path("ARTIFACTS_DIR", home.join("artifacts"), &cwd);
         let state_root = component_path("STATE_ROOT", home.join("state"), &cwd);
@@ -268,15 +289,18 @@ impl Config {
         } else {
             home.join("harness-home").join(definition.profile.id())
         };
-        Ok(Self {
-            home,
-            artifacts_dir,
-            state_root,
-            locks_dir,
-            harness_home,
-            definition,
-            workspace,
-        })
+        Ok((
+            workspace.clone(),
+            Some(Self {
+                home,
+                artifacts_dir,
+                state_root,
+                locks_dir,
+                harness_home,
+                definition,
+                workspace,
+            }),
+        ))
     }
 }
 fn component_path(name: &str, default: PathBuf, cwd: &Path) -> PathBuf {
@@ -318,6 +342,18 @@ pub fn select_definition(
     flag: Option<&str>,
     base: Option<&std::ffi::OsStr>,
 ) -> Result<PathBuf> {
+    find_definition(cwd, workspace, home, flag, base, false)?
+        .context("selected definition is unavailable")
+}
+
+fn find_definition(
+    cwd: &Path,
+    workspace: &Path,
+    home: &Path,
+    flag: Option<&str>,
+    base: Option<&std::ffi::OsStr>,
+    allow_missing_default: bool,
+) -> Result<Option<PathBuf>> {
     let mut candidates = Vec::new();
     if let Some(value) = flag {
         if value.is_empty() {
@@ -353,7 +389,7 @@ pub fn select_definition(
     }
     for candidate in &candidates {
         match fs::symlink_metadata(candidate) {
-            Ok(_) => return Ok(candidate.clone()),
+            Ok(_) => return Ok(Some(candidate.clone())),
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => {
                 return Err(error).with_context(|| {
@@ -361,6 +397,9 @@ pub fn select_definition(
                 })
             }
         }
+    }
+    if allow_missing_default && flag.is_none() && base.is_none_or(|value| value.is_empty()) {
+        return Ok(None);
     }
     bail!("Smolfile not found; searched: {}. Run smolsandbox create-config --harness codex, or select an existing file with --smolfile",candidates.iter().map(|p|p.display().to_string()).collect::<Vec<_>>().join(", "))
 }

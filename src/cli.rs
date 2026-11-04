@@ -7,6 +7,7 @@ pub enum Command {
     #[default]
     Build,
     Start,
+    List,
     Login,
     Repair,
     Clean,
@@ -29,6 +30,8 @@ pub struct Options {
     pub workspace_only: bool,
     pub harness: Option<String>,
     pub file: Option<PathBuf>,
+    pub all: bool,
+    pub json: bool,
 }
 
 impl Options {
@@ -98,6 +101,25 @@ enum ParsedCommand {
         /// Pass arguments unchanged to the guest harness after --. Use -- --help to request help from the selected harness.
         #[arg(last = true, allow_hyphen_values = true)]
         harness_args: Vec<OsString>,
+    },
+    /// List workspace machines across profiles and generations without changing application state or taking lifecycle locks.
+    #[command(
+        long_about = "List managed machines associated with the canonical workspace (the current directory by default), across profiles, generations, policy revisions, and configurations. Use --all to include other workspaces and shared builder/login machines. WORKSPACE still selects the comparison context with --all. Legacy workspace names cannot establish a path association; unassociated candidates are counted and appear only with --all. Assessments compare identity with this invocation, separately from runtime state; they do not authorize deletion or guarantee a successful start. This command takes one inventory snapshot without lifecycle locks, virtualization preflight, or application writes. SmolVM may maintain its own registry while answering queries."
+    )]
+    List {
+        #[command(flatten)]
+        selection: Selection,
+        /// Include all managed machines, including shared machines and unassociated legacy workspaces.
+        #[arg(long)]
+        all: bool,
+        /// Write one schema-versioned JSON report.
+        #[arg(long)]
+        json: bool,
+        /// Extend the reference launch allowlist. Repeat the same additions used by start.
+        #[arg(long = "allow-host", value_parser = parse_host)]
+        allow_hosts: Vec<String>,
+        /// Select the reference workspace. Defaults to the invocation directory, including with --all.
+        workspace: Option<PathBuf>,
     },
     /// Authenticate using the selected harness's supported login workflow. Codex uses device authentication; other harnesses use their own login workflow.
     Login {
@@ -197,6 +219,20 @@ impl Cli {
             }
             ParsedCommand::Login { selection } => {
                 result.command = Command::Login;
+                Some(selection)
+            }
+            ParsedCommand::List {
+                selection,
+                workspace,
+                allow_hosts,
+                all,
+                json,
+            } => {
+                result.command = Command::List;
+                result.workspace = workspace;
+                result.allow_hosts = allow_hosts;
+                result.all = all;
+                result.json = json;
                 Some(selection)
             }
             ParsedCommand::Repair {

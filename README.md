@@ -92,6 +92,23 @@ smolsandbox start /path/to/project -- --help
 
 ## Inspect and clean up
 
+List machines associated with the current directory, or inspect every managed
+machine including shared builders and login machines:
+
+```text
+smolsandbox list
+smolsandbox list /path/to/project
+smolsandbox list --all
+smolsandbox list --all --json
+```
+
+Listing compares each machine's identity with the current invocation and
+shows runtime state separately. Repeat the selected definition and any
+`--allow-host` additions used by `start` to compare that configuration.
+Legacy workspace names cannot establish a path association; use `--all` to
+see those rows. Listing takes no lifecycle locks and writes no application
+state. Assessments do not authorize deletion or guarantee a successful start.
+
 Inspect stale machines before authorizing replacement:
 
 ```text

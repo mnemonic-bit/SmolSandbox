@@ -165,6 +165,7 @@ with `--workspace`. The current directory is the default workspace.
 | `login` | Run the selected profile's authentication workflow in its prepared login machine. |
 | `repair --check [WORKSPACE]` | Inspect workspace reconciliation without writing state or taking lifecycle locks. |
 | `repair --replace-stale [WORKSPACE]` | Prepare and verify the desired machine before deleting eligible stale machines. |
+| `list [WORKSPACE] [--all] [--json]` | Inspect managed machines and compare identities without lifecycle locks or application writes. |
 | `clean [--workspace [WORKSPACE]]` | Delete the selected generation or one workspace's managed machines. |
 | `purge [--force \| --force-all]` | Delete eligible stopped machines and unprotected superseded artifacts. |
 
@@ -212,6 +213,62 @@ configuration. A host already in the definition does not make a configuration
 custom; an additional host beyond the definition does. Changing immutable
 options selects a different workspace machine. Ports are mutable and excluded
 from immutable identity.
+
+### List machines and compare selection
+
+List all workspace generations, profiles, revisions, and configurations
+associated with the canonical current directory or an explicit workspace:
+
+```text
+smolsandbox list
+smolsandbox list /path/to/project
+smolsandbox list --all
+smolsandbox list --all --json
+smolsandbox list --smolfile ./codex.smlbx --allow-host packages.example.com /path/to/project
+```
+
+`--all` adds other workspaces, shared builders and login machines, and
+unassociated legacy rows. An explicit workspace still selects the comparison
+context with `--all`. A repository subdirectory remains a separate workspace.
+The workspace path hash establishes association across generations; a legacy
+name or configuration hash cannot recover a path. Scoped output counts
+workspace candidates with missing or malformed path hashes without claiming
+that those candidates belong to the reference workspace.
+
+The reference uses the same selected definition, runtime version, artifact
+directory, harness home, immutable options, and machine-name override as
+`start`. Repeat the same `--allow-host` additions to compare a custom
+configuration. `list` rejects `--port`, mutation flags, and guest arguments.
+The raw runtime state remains separate from the identity assessment:
+`selected`, `different-policy`, `different-base`, `different-configuration`,
+`other-workspace`, `shared`, `unassessed`, or `unknown`. Reasons describe all
+known differences relative to the invocation. An unfamiliar runtime state
+remains visible with an explanation that lifecycle compatibility is unknown.
+Assessments neither authorize deletion nor guarantee artifact availability,
+port reconciliation, guest boot, or authentication.
+
+When automatic lookup finds no default definition, listing still succeeds
+and reports unavailable reference fields. Explicit missing definitions,
+including `BASE_SMOLFILE`, and invalid or unreadable selected definitions
+remain errors. `--allow-host` requires an available definition. Listing never
+falls back past an invalid nearer definition.
+
+Human output prints the reference and full machine identities. `--json`
+writes one object with schema `version: 1`, `scope`, canonical `workspace`,
+`reference`, `unassociated_workspace_count`, `warnings`, and sorted `machines`.
+The reference contains `definition`, `base_id`, `revision`,
+`workspace_sha256`, and `desired_machine`; unavailable values are null.
+Each row contains `name`, raw `state`, `kind`, `base_id`, `revision`,
+`workspace_path_sha256`, `workspace_sha256`, `configuration`, `source`,
+`assessment`, and `reasons`. Sources are `labels`, `legacy-name`, or `unknown`.
+Malformed inventory is fatal and produces no partial JSON; contradictory
+per-machine metadata remains visible as `unknown`.
+
+Listing calls only SmolVM's version and inventory interfaces. It skips
+virtualization and mutation capability preflight, takes no lifecycle locks,
+and does not create directories, rewrite caches, seed credentials, recover
+port journals, or mutate machines. The report describes one snapshot.
+SmolVM itself may maintain its own registry while answering inventory queries.
 
 ### Exact-set TCP ports
 

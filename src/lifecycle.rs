@@ -847,6 +847,9 @@ impl Drop for StopGuard<'_, '_> {
 }
 
 pub fn run(options: &Options) -> Result<i32> {
+    if options.command == Command::List {
+        return list(options);
+    }
     if options.command == Command::CreateConfig {
         let harness = options
             .harness
@@ -1004,8 +1007,30 @@ pub fn run(options: &Options) -> Result<i32> {
             },
             false,
         ),
-        Command::CreateConfig => unreachable!(),
+        Command::CreateConfig | Command::List => unreachable!(),
     }
+}
+
+fn list(options: &Options) -> Result<i32> {
+    let (workspace, config) = Config::resolve_for_listing(options)?;
+    let smolvm = Smolvm::discover(options.smolvm.as_deref())?;
+    let mut reference = crate::listing::Reference {
+        definition: None,
+        base_id: None,
+        revision: REVISION.into(),
+        workspace_sha256: None,
+        desired_machine: None,
+    };
+    if let Some(config) = &config {
+        let lifecycle = Lifecycle::new(config, &smolvm, options)?;
+        reference.definition = Some(config.definition.path.clone());
+        reference.base_id = Some(lifecycle.identity.base_id);
+        reference.workspace_sha256 = Some(lifecycle.identity.workspace_hash);
+        reference.desired_machine = Some(lifecycle.identity.desired_name);
+    }
+    let inventory = smolvm.inventory()?;
+    crate::listing::report(&inventory, &workspace, reference, options.all).print(options.json)?;
+    Ok(0)
 }
 
 #[cfg(test)]
