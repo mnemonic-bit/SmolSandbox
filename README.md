@@ -1,5 +1,8 @@
 # smolsandbox
 
+[![Version](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmnemonic-bit%2FAI-Sandbox%2Fdevelop%2FCargo.toml&query=%24.package.version&label=version&prefix=v&color=blue)](https://github.com/mnemonic-bit/AI-Sandbox/blob/develop/Cargo.toml)
+[![Build and tests (develop)](https://github.com/mnemonic-bit/AI-Sandbox/actions/workflows/rust.yml/badge.svg?branch=develop&event=push)](https://github.com/mnemonic-bit/AI-Sandbox/actions/workflows/rust.yml?query=branch%3Adevelop+event%3Apush)
+
 Run Claude, Codex, OpenCode, or Hermes Agent in a persistent SmolVM sandbox.
 The Rust executable embeds the four configuration templates. Workspace files
 are mounted into the guest, while each harness keeps its own persistent state.
