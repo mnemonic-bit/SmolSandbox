@@ -222,7 +222,10 @@ fn named_configuration_uses_invocation_directory_without_changing_default_or_per
         let destination = f.workspace.join("named.smlbx");
         let bytes = fs::read(&destination).unwrap();
         let text = std::str::from_utf8(&bytes).unwrap();
-        assert!(text.starts_with(&format!("# codex-sandbox-harness: {harness}\n")));
+        assert_eq!(
+            text.lines().next().unwrap(),
+            format!("# codex-sandbox-harness: {harness}")
+        );
         toml::from_str::<toml::Value>(text).unwrap();
         assert!(!f.home.join(".smolsandbox").exists());
         assert!(!f
@@ -266,9 +269,14 @@ fn named_configuration_accepts_absolute_paths_and_creates_parent_directories() {
             .output()
             .unwrap(),
     );
-    assert!(fs::read_to_string(destination)
-        .unwrap()
-        .starts_with("# codex-sandbox-harness: claude\n"));
+    assert_eq!(
+        fs::read_to_string(destination)
+            .unwrap()
+            .lines()
+            .next()
+            .unwrap(),
+        "# codex-sandbox-harness: claude"
+    );
     assert_eq!(fs::read(f.definition()).unwrap(), default);
     assert_eq!(fs::read_dir(&f.workspace).unwrap().count(), 0);
     assert!(f.log().is_empty());

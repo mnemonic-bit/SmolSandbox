@@ -310,3 +310,37 @@ target, source revision, runtime version, exact flag combination, selected
 identities and incarnations, observed stop/delete behavior, and retained
 resources. Follow the existing real guest procedure for every profile and
 release target. Local mocked removal results do not establish those gates.
+
+## Windows configuration-header regression verification: 2026-11-07
+
+The tested source is the uncommitted working tree based on revision
+`4edabfda24dfd22f115a482805d158693603c334`, package `0.8.1`, using Rust
+`1.99.1` on native `x86_64-unknown-linux-gnu`. Earlier observations and their
+source revisions remain unchanged.
+
+The user reported two Windows Actions failures in the named-configuration
+tests. On the source baseline, `cargo test --locked --test application named_configuration_`
+passed with LF templates. Rebuilding with all four templates temporarily
+converted to CRLF reproduced both reported assertions twice, each time with
+exit 101. The assertions required an LF newline after the harness marker,
+although configuration creation preserves embedded template bytes. The
+corrected assertions compare the first line through `str::lines()`. The same
+command then passed with LF templates and with CRLF templates, each with
+three passing tests and exit 0. Original template bytes were restored after
+each experiment.
+
+| Check | Result | Command or evidence |
+| --- | --- | --- |
+| Formatting | passed | `cargo fmt --all -- --check`, exit 0; `/tmp/windows-header-fmt.log` |
+| Default-feature lint | passed | `cargo clippy --locked --all-targets -- -D warnings`, exit 0; `/tmp/windows-header-clippy.log` |
+| Adapter lint | passed | `cargo clippy --locked --features test-adapter --all-targets -- -D warnings`, exit 0; `/tmp/windows-header-clippy-adapter.log` |
+| Default-feature suite | passed | `cargo test --locked --all-targets`, exit 0: 61 library, 12 application, 13 CLI, 8 fixed-data, 9 listing, and 10 removal tests; `/tmp/windows-header-default.log` |
+| Adapter suite | passed | `cargo test --locked --features test-adapter --all-targets`, exit 0: 61 library, 64 application, 13 CLI, 8 fixed-data, 10 listing, and 24 removal tests; `/tmp/windows-header-adapter.log` |
+| Production release | passed | `cargo build --locked --release --bin smolsandbox`, exit 0 without `test-adapter`; `/tmp/windows-header-release.log` |
+| Baseline-independent validation | passed | `cargo run --locked --example check_baseline_independence`, exit 0; isolated checks and compiled tests with empty `PATH` in both feature modes; `/tmp/windows-header-independence.log` |
+| Native Windows execution after the fix | not_run | Rerun Windows Actions on the corrected source and record the revision and run URL |
+| Native macOS ARM64, Linux ARM64, and real guest checks after the fix | not_run | Record native CI and real SmolVM results on the required hosts |
+
+Final Feature 0010 cutover acceptance remains pending the native and real
+guest evidence recorded above. Local CRLF reproduction does not establish a
+passing native Windows Actions run.
