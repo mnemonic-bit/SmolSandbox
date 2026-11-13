@@ -2265,6 +2265,37 @@ mod lifecycle {
     }
 
     #[test]
+    fn failed_fresh_builder_never_publishes_an_artifact_or_generation_cache() {
+        for failure in ["SMOLVM_TEST_CREATE_FAIL_AFTER", "SMOLVM_TEST_START_FAIL"] {
+            let f = Fixture::new();
+            f.configure("codex");
+            let definition = fs::read(f.definition()).unwrap();
+            let output = f.command().env(failure, "1").arg("build").output().unwrap();
+            assert!(!output.status.success(), "{failure}");
+            assert!(f.log().contains("machine create --name codex-builder-"));
+            assert!(!f.log().contains("pack create"), "{failure}");
+            let application_home = f.home.join(".smolsandbox");
+            assert_eq!(
+                fs::read_dir(application_home.join("artifacts"))
+                    .unwrap()
+                    .count(),
+                0
+            );
+            for cache in ["base-id", "machine-revision", "generation.json"] {
+                assert!(
+                    !application_home.join("state").join(cache).exists(),
+                    "{failure}: {cache}"
+                );
+            }
+            assert_eq!(fs::read(f.definition()).unwrap(), definition);
+            assert!(f
+                .inventory()
+                .iter()
+                .all(|machine| machine["labels"]["codex-sandbox.kind"] == "builder"));
+        }
+    }
+
+    #[test]
     fn builders_are_packed_before_workspace_creation_and_removed_when_artifacts_exist() {
         let f = Fixture::new();
         f.configure("codex");

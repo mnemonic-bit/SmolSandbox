@@ -454,6 +454,50 @@ mod tests {
         }
     }
     #[test]
+    fn every_template_bounds_ruff_downloads_and_preserves_python_pins() {
+        for profile in [
+            Profile::Codex,
+            Profile::Claude,
+            Profile::OpenCode,
+            Profile::Hermes,
+        ] {
+            let document: toml::Value = toml::from_str(profile.template()).unwrap();
+            let commands: Vec<_> = document["dev"]["init"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|command| command.as_str().unwrap())
+                .collect();
+            for command in [
+                "pipx install uv==0.12.17",
+                "pipx install pytest==9.1.1",
+                "pipx install debugpy==1.8.22",
+                "PIP_DEFAULT_TIMEOUT=120 PIP_RETRIES=10 timeout --verbose --kill-after=10s 300s pipx install ruff==0.16.8",
+            ] {
+                assert!(commands.contains(&command), "{profile:?}: missing {command}");
+            }
+            assert_eq!(
+                commands
+                    .iter()
+                    .filter(|command| command.contains("pipx install ruff"))
+                    .count(),
+                1,
+                "{profile:?}: duplicate Ruff installation"
+            );
+            let hosts = document["network"]["allow_hosts"].as_array().unwrap();
+            for host in ["pypi.org", "files.pythonhosted.org"] {
+                assert!(hosts.iter().any(|value| value.as_str() == Some(host)));
+            }
+            let packages = commands
+                .iter()
+                .find(|command| command.contains("apt-get install"))
+                .unwrap();
+            assert!(packages
+                .split_whitespace()
+                .any(|package| package == "coreutils"));
+        }
+    }
+    #[test]
     fn nearest_file_is_selected_even_when_invalid() {
         let temp = tempfile::tempdir().unwrap();
         let repo = temp.path().join("repo");
