@@ -387,3 +387,100 @@ CI run URLs, and downloaded release artifacts on all four targets. Preserve
 the earlier authentication, terminal, cleanup, removal, replacement, and
 relocated-executable cutover gates. Local mocked and container results do
 not establish those remaining gates.
+
+## Bug 0003 merged provisioning test audit: 2026-11-13
+
+Feature 0010 cutover status remains `In progress`. The user reported that
+all GitHub builds failed after pushing Feature 0016. The supplied excerpt
+shows two provisioning-template assertions failing, with 64 library tests
+passing and Cargo exit 101. The Actions run URL and per-job logs were not
+supplied or inspected. Earlier observations above retain their original
+source revisions and results.
+
+Investigation used fetched merge
+`e0c5ea6ad89a3402c6840a7129da7186051527a4`, application `0.9.0`, in a
+disposable source copy on Linux x86-64 with Rust/Cargo `1.100.0`.
+The workspace remains at `15b6c5444f8817da63737fc29f942b1d47ec17e5`.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Affected merge library suite | failed | `cargo test --locked --lib`, exit 101: 64 passed, 2 failed; messages and source lines match the supplied excerpt |
+| Focused reproduction | failed | `cargo test --locked --lib config::tests:: -- --nocapture`, exit 101: 9 passed, 2 failed |
+| Corrected expectations in disposable copy | passed | Four expected strings changed; production code and templates unchanged; default library suite: 66 passed, exit 0; adapter library suite: 65 passed, exit 0 |
+| Original local Ruff fixture | failed | `python3 tests/provisioning/ruff_download.py healthy codex`, exit 1: template requests `0.17.5`, fixture offers only `0.16.8` |
+| Corrected fixture in disposable copy | passed | Same healthy command, exit 0, after updating fixture version fields to `0.17.5`; historical baseline command unchanged |
+| Full Rust checks for an implemented fix | not_run | This change records a bug report; diagnostic edits were confined to the disposable copy and restored |
+| Native matrix and real SmolVM checks after correction | not_run | Record final source revision, native CI run URLs, release artifacts, and the existing guest procedures after a software fix |
+
+[Bug 0003](../BUGS/bug-0003-merged-provisioning-test-expectations.md)
+records the incompatible expectations, merge parents, reproduction commands,
+related fixture mismatch, and resolution criteria. The merged library
+failure blocks CI acceptance. Diagnostic passing runs do not resolve the
+bug or establish passing native or real guest behavior.
+
+## Bug 0003 implementation audit: 2026-11-13
+
+Feature 0010 cutover status remains `In progress`. Bug 0003 has a local
+software correction in application `0.9.1`; native CI acceptance remains
+pending. Earlier observations above retain their original revisions and
+results.
+
+Validation used the uncommitted working tree based on
+`15b6c5444f8817da63737fc29f942b1d47ec17e5`, with the relevant software
+changes restored from affected merge
+`e0c5ea6ad89a3402c6840a7129da7186051527a4` before correction. The host
+was Linux x86-64 with Rust/Cargo `1.100.0` and Python `3.11.2`.
+The manifest versions both select `0.9.1`.
+
+The tested software snapshot SHA-256 is
+`6f6e1190311b019f616bcfd8e10ca0d7c28b0bed8e3c317156116a3036f24f35`.
+The digest concatenates each relative path, NUL, file bytes, and NUL in
+lexical path order for `Cargo.lock`, `Cargo.toml`, `src/config.rs`, the four
+`templates/*.smlbx` files, `tests/application.rs`, and
+`tests/provisioning/ruff_download.py`. Documentation is outside this digest.
+
+| Command or check | Result | Evidence |
+| --- | --- | --- |
+| `cargo fmt --all -- --check` | passed | Exit 0 |
+| `cargo clippy --locked --all-targets -- -D warnings` | passed | Exit 0 |
+| `cargo clippy --locked --features test-adapter --all-targets -- -D warnings` | passed | Exit 0 |
+| `cargo test --locked --all-targets` | passed | Exit 0; 118 tests, including 66 library tests |
+| `cargo test --locked --features test-adapter --all-targets` | passed | Exit 0; 185 tests, including 65 library tests |
+| `cargo build --locked --release --bin smolsandbox` | passed | Exit 0; executable reports `smolsandbox 0.9.1`; build excludes `test-adapter` |
+| `cargo run --locked --example check_baseline_independence` | passed | Exit 0; isolated source checks passed; nine compiled test executables per feature configuration passed with empty `PATH` |
+| Corrected provisioning assertions under template mutations | passed | All 92 mutations detected across four profiles; pristine harness passed before and after; focused Cargo suite passed all 11 tests |
+| Independent agent implementation review | passed | No actionable findings in the corrected expectations, templates, fixture, or version entries |
+| Four native CI jobs and retained release artifacts | not_run | The correction remains local; record the published revision, Actions URLs, and artifact retention after CI execution |
+| Real SmolVM provisioning and guest checks | not_run | The local fixture is a Python package, not Ruff; existing native and real guest procedures remain pending |
+
+The separate download probe used real pipx and a local package index.
+Every row below passed for Codex, Claude, OpenCode, and Hermes: 32 supported
+combinations in total. Every combination requested the matching wheel
+payload. Successful installs verified fixture CLI output; failed installs
+left no fixture application available. Status values are the installation
+command's exit status; each successful probe returned exit 0.
+
+| Mode | Case | Installation status | Observed installation duration |
+| --- | --- | --- | --- |
+| Template, Ruff `0.17.5` | `healthy` | 0 | 3.6–4.1 seconds |
+| Template, Ruff `0.17.5` | `recover` | 0 | 20.6–20.8 seconds |
+| Template, Ruff `0.17.5` | `persistent` | 1 | 123.4–124.6 seconds |
+| Template, Ruff `0.17.5` | `deadline` | 124 | 8.0 seconds with only the wall-clock deadline shortened |
+| Template, Ruff `0.17.5` | `full-deadline` | 124 | 300.0–300.2 seconds with the unmodified timeout policy |
+| Baseline, Ruff `0.16.8` | `healthy` | 0 | 1.1–1.4 seconds |
+| Baseline, Ruff `0.16.8` | `recover` | 1 | 16.5–17.0 seconds; expected historical `ReadTimeoutError` |
+| Baseline, Ruff `0.16.8` | `persistent` | 1 | 16.4–16.7 seconds |
+
+Commands used `python3 tests/provisioning/ruff_download.py CASE PROFILE`
+for the five template cases and added `--baseline` for the three supported
+baseline cases. Baseline recovery now passes the comparison probe when the
+original read-timeout failure occurs. Earlier recorded baseline failures
+retain their historical interpretation. Baseline deadline combinations are
+unsupported and were verified to return CLI exit 2.
+
+Session logs are in `/tmp/bug0003-rust-checks-xutw73tm/1.log` through
+`7.log` and `/tmp/bug0003-ruff-matrix-8ps0zpq0/`; these temporary paths are
+not durable CI artifacts. [Bug 0003](../BUGS/bug-0003-merged-provisioning-test-expectations.md#implementation-and-validation-2026-11-13)
+records the correction and acceptance results. AC-01 through AC-04 passed
+locally. AC-05 remains `not_run`; bug resolution and final Feature 0010
+cutover acceptance remain pending the required native evidence.
