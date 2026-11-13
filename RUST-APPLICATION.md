@@ -123,30 +123,53 @@ a separate destination with `create-config --harness <profile> --smolfile
 file. Existing edits and harness state are preserved. Changing definition
 bytes selects a new base generation on the next lifecycle operation.
 
-All four templates in version `0.8.2` give the Ruff installation a 120-second
-pip socket timeout and 10 connection retries. GNU `timeout` limits that
-installation to 300 seconds, sends `TERM`, and sends `KILL` after another
-10 seconds if pipx has not exited. Signals apply to the monitored process
-group. The limit applies to the Ruff installation, including pipx setup,
-rather than the complete sandbox build.
-Connection retries do not guarantee resumption of an interrupted wheel.
-The Ruff version pin and hostname allowlist are unchanged.
+For the Feature 0016 Codex update, generate a separate file and compare it
+with the definition currently selected for the workspace:
 
-For an existing definition, replace its Ruff installation entry with:
-
-```toml
-"PIP_DEFAULT_TIMEOUT=120 PIP_RETRIES=10 timeout --verbose --kill-after=10s 300s pipx install ruff==0.16.8",
+```text
+smolsandbox create-config --harness codex --smolfile ./codex-0.169.0.smlbx
+git diff --no-index ./codex-current.smlbx ./codex-0.169.0.smlbx
+smolsandbox build --smolfile ./codex-0.169.0.smlbx /path/to/project
+smolsandbox login --smolfile ./codex-0.169.0.smlbx
+smolsandbox start --smolfile ./codex-0.169.0.smlbx /path/to/project
 ```
 
-Run `smolsandbox build --smolfile <definition>` with the edited definition.
-The changed definition selects a new base generation. If a workspace from
-the previous generation exists, use the reconciliation and replacement
-procedure below before starting the replacement workspace. Alternatively,
-generate and compare a separate updated definition using the template
-adoption procedure above. The executable never rewrites an existing file.
-Use `--verbose` on a failed build to display runtime output; pipx reports
-the requested package and the guest pip error-log path. A socket timeout
-includes the failing host; the overall deadline reports the signal sent.
+Replace `./codex-current.smlbx` with the existing selected definition.
+`git diff --no-index` exits 1 when the files differ. Review the differences
+before running the lifecycle commands, or carry the desired changes into
+your existing definition and explicitly select that file. Reusing unchanged
+definition bytes retains the previous tool pins and runtime selection.
+Keep the persistent harness home: missing-files-only seeding preserves
+existing credentials, settings, skills, and sessions. Upstream Codex may
+migrate its own state; compatibility of migrated state with older Codex
+releases requires separate validation.
+
+### Guest toolchain migration
+
+Feature 0016 templates select Debian trixie, Node channel 26, and .NET SDK
+channel 10.0. Fresh provisioning resolves the available channel patches.
+The shared global EF tool is `dotnet-ef` 10.0.15, intended for EF 10 projects.
+Install any additional .NET runtime through an explicitly edited user
+definition. Select another EF major through that definition or a
+project-local tool manifest, with the tool's required runtime installed.
+The templates install no additional .NET 8 runtime. Validate restore, build,
+migrations, and diagnostics against each project's runtime after adopting a
+definition.
+
+The Codex template selects Codex 0.169.0, skills CLI 1.8.1, and
+codebase-memory-mcp v0.12.1. Upstream MCP release guidance calls for a
+one-time rebuild of existing project indexes after the update. Reindex the
+project before checking MCP queries, while retaining the persistent Codex
+home and MCP registration.
+
+The shared tools move to Vitest 5.1.0, npm Playwright 1.65.0, Python
+Playwright 1.65.1, uv 0.13.8, pytest 9.2.0, and Ruff 0.17.5. Install and
+launch Chromium separately through both Playwright bindings; their package
+versions do not establish equal browser revisions. uv and Ruff cross minor
+version boundaries. Check dependency resolution, lint results, and formatting
+on representative project files before adopting their changed behavior.
+The [Feature 0016 validation record](FEATURES/feature-0016-validation.md)
+tracks observed checks and outstanding native and guest evidence.
 
 ### Harness profiles and authentication
 

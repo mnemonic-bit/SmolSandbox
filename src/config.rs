@@ -447,6 +447,8 @@ mod tests {
             assert_eq!(definition.profile, profile);
             if profile != Profile::Codex {
                 assert!(!profile.template().contains("@openai/codex"));
+                assert!(!profile.template().contains("codebase-memory-mcp"));
+                assert!(!profile.template().contains("skills@"));
                 assert!(!profile.launch().contains(&OsString::from("--no-daemon")));
             }
         }
@@ -592,102 +594,146 @@ mod tests {
         assert!(definition.allow_hosts.is_empty());
     }
     #[test]
+    fn all_templates_preserve_shared_provisioning_tools_pins_and_verification() {
+        for profile in [
+            Profile::Codex,
+            Profile::Claude,
+            Profile::OpenCode,
+            Profile::Hermes,
+        ] {
+            let document: toml::Value = toml::from_str(profile.template()).unwrap();
+            assert_eq!(document["image"].as_str(), Some("debian:trixie-slim"));
+            let commands: Vec<_> = document["dev"]["init"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|command| command.as_str().unwrap())
+                .collect();
+            let package_command = commands
+                .iter()
+                .find(|command| {
+                    command.contains("apt-get install -y --no-install-recommends")
+                        && command.contains("podman")
+                })
+                .unwrap();
+            let packages: Vec<_> = package_command.split_whitespace().collect();
+            for package in [
+                "bash",
+                "ca-certificates",
+                "coreutils",
+                "curl",
+                "git",
+                "grep",
+                "gzip",
+                "mawk",
+                "tar",
+                "openssh-client",
+                "build-essential",
+                "pkg-config",
+                "ripgrep",
+                "unzip",
+                "jq",
+                "sqlite3",
+                "httpie",
+                "pipx",
+                "python3",
+                "python3-pip",
+                "python3-venv",
+                "tzdata",
+                "libgssapi-krb5-2",
+                "libicu76",
+                "libssl3t64",
+                "zlib1g",
+                "podman",
+                "podman-docker",
+                "podman-compose",
+                "buildah",
+            ] {
+                assert!(packages.contains(&package), "missing package: {package}");
+            }
+            for command in [
+                "dotnet tool install -g dotnet-ef --version 10.0.15",
+                "dotnet tool install -g dotnet-dump --version 10.0.750501",
+                "dotnet tool install -g dotnet-trace --version 10.0.750501",
+                "dotnet tool install -g dotnet-counters --version 10.0.750501",
+                "pipx install uv==0.13.8",
+                "pipx install pytest==9.2.0",
+                "pipx install debugpy==1.8.22",
+                "pipx install ruff==0.17.5",
+                "npm install -g tsx@4.23.15 vitest@5.1.0",
+                "npm install -g playwright@1.65.0 @playwright/test@1.65.0",
+                "DEBIAN_FRONTEND=noninteractive playwright install --with-deps chromium",
+                "python3 -m pip install --break-system-packages playwright==1.65.1",
+                "python3 -m playwright install chromium",
+                "rustc --version && cargo --version && cargo fmt --version && cargo clippy --version",
+                "touch /etc/containers/nodocker",
+                "docker compose version",
+                "docker run --rm docker.io/library/alpine echo nested-podman-via-docker-ok",
+            ] {
+                assert!(commands.contains(&command), "missing init command: {command}");
+            }
+            for installer in [
+                "https://sh.rustup.rs -o /tmp/rustup-init.sh",
+                "--default-toolchain stable --profile minimal --component rustfmt --component clippy",
+                "https://dot.net/v1/dotnet-install.sh",
+                "--channel 10.0 --install-dir /usr/share/dotnet --no-path",
+                "https://deb.nodesource.com/setup_26.x",
+            ] {
+                assert!(
+                    commands.iter().any(|command| command.contains(installer)),
+                    "missing installer option: {installer}"
+                );
+            }
+            let docker = commands
+                .iter()
+                .find(|command| command.contains("> /usr/local/bin/docker"))
+                .unwrap();
+            for fragment in [
+                "if [ \"$1\" = compose ]",
+                "shift",
+                "exec /usr/bin/podman-compose \"$@\"",
+                "exec /usr/bin/docker \"$@\"",
+                "chmod 0755 /usr/local/bin/docker",
+                "ln -sf /usr/bin/podman-compose /usr/local/bin/docker-compose",
+            ] {
+                assert!(
+                    docker.contains(fragment),
+                    "missing Docker compatibility fragment: {fragment}"
+                );
+            }
+            let storage = commands
+                .iter()
+                .find(|command| command.contains("> /etc/containers/storage.conf"))
+                .unwrap();
+            assert!(storage.contains("[storage]\\ndriver = \"overlay\"\\ngraphroot = \"/storage/containers/storage\"\\nrunroot = \"/run/containers/storage\"\\n"));
+        }
+    }
+    #[test]
     fn codex_template_preserves_provisioning_tools_pins_and_verification() {
         let document: toml::Value = toml::from_str(Profile::Codex.template()).unwrap();
-        assert_eq!(document["image"].as_str(), Some("debian:bookworm-slim"));
         let commands: Vec<_> = document["dev"]["init"]
             .as_array()
             .unwrap()
             .iter()
             .map(|command| command.as_str().unwrap())
             .collect();
-        let package_command = commands
-            .iter()
-            .find(|command| {
-                command.contains("apt-get install -y --no-install-recommends")
-                    && command.contains("podman")
-            })
-            .unwrap();
-        let packages: Vec<_> = package_command.split_whitespace().collect();
-        for package in [
-            "bash",
-            "ca-certificates",
-            "coreutils",
-            "curl",
-            "git",
-            "grep",
-            "gzip",
-            "mawk",
-            "tar",
-            "openssh-client",
-            "build-essential",
-            "pkg-config",
-            "ripgrep",
-            "unzip",
-            "jq",
-            "sqlite3",
-            "httpie",
-            "pipx",
-            "python3",
-            "python3-pip",
-            "python3-venv",
-            "tzdata",
-            "libgssapi-krb5-2",
-            "libicu72",
-            "libssl3",
-            "zlib1g",
-            "podman",
-            "podman-docker",
-            "podman-compose",
-            "buildah",
-        ] {
-            assert!(packages.contains(&package), "missing package: {package}");
-        }
         for command in [
-            "npm install -g @openai/codex@0.164.0",
-            "npx -y skills@1.7.0 add mattpocock/skills --skill=grill-me --skill=grilling --agent codex --global --yes",
-            "dotnet tool install -g dotnet-ef --version 8.0.31",
-            "dotnet tool install -g dotnet-dump --version 8.0.547301",
-            "dotnet tool install -g dotnet-trace --version 8.0.547301",
-            "dotnet tool install -g dotnet-counters --version 8.0.547301",
-            "pipx install uv==0.12.17",
-            "pipx install pytest==9.1.1",
-            "pipx install debugpy==1.8.22",
-            "PIP_DEFAULT_TIMEOUT=120 PIP_RETRIES=10 timeout --verbose --kill-after=10s 300s pipx install ruff==0.16.8",
-            "npm install -g tsx@4.23.15 vitest@5.0.1",
-            "npm install -g playwright@1.63.0 @playwright/test@1.63.0",
-            "DEBIAN_FRONTEND=noninteractive playwright install --with-deps chromium",
-            "python3 -m pip install --break-system-packages playwright==1.63.0",
-            "python3 -m playwright install chromium",
-            "rustc --version && cargo --version && cargo fmt --version && cargo clippy --version",
-            "touch /etc/containers/nodocker",
-            "docker compose version",
-            "docker run --rm docker.io/library/alpine echo nested-podman-via-docker-ok",
+            "npm install -g @openai/codex@0.169.0",
+            "npx -y skills@1.8.1 add mattpocock/skills --skill=grill-me --skill=grilling --agent codex --global --yes",
+            "mkdir -p /root/.codex/skills && cp -aL /root/.agents/skills/grill-me /root/.agents/skills/grilling /root/.codex/skills/",
             "/root/.local/bin/codebase-memory-mcp --version",
             "ln -sf /root/.local/bin/codebase-memory-mcp /usr/local/bin/",
         ] {
             assert!(commands.contains(&command), "missing init command: {command}");
-        }
-        for installer in [
-            "https://sh.rustup.rs -o /tmp/rustup-init.sh",
-            "--default-toolchain stable --profile minimal --component rustfmt --component clippy",
-            "https://dot.net/v1/dotnet-install.sh",
-            "--channel 8.0 --install-dir /usr/share/dotnet --no-path",
-            "https://deb.nodesource.com/setup_22.x",
-        ] {
-            assert!(
-                commands.iter().any(|command| command.contains(installer)),
-                "missing installer option: {installer}"
-            );
         }
         assert!(!commands
             .iter()
             .any(|command| command.contains("codebase-memory-mcp/main/scripts/setup.sh")));
         let cbm = commands
             .iter()
-            .find(|command| command.contains("codebase-memory-mcp/v0.11.0/install.sh"))
+            .find(|command| command.contains("codebase-memory-mcp/v0.12.1/install.sh"))
             .unwrap();
-        assert!(cbm.contains("CBM_DOWNLOAD_URL=https://github.com/DeusData/codebase-memory-mcp/releases/download/v0.11.0"));
+        assert!(cbm.contains("CBM_DOWNLOAD_URL=https://github.com/DeusData/codebase-memory-mcp/releases/download/v0.12.1"));
         assert!(cbm.ends_with("bash -s -- --clients=codex"));
         let codex_index = commands
             .iter()
@@ -695,28 +741,16 @@ mod tests {
             .unwrap();
         let cbm_index = commands.iter().position(|command| command == cbm).unwrap();
         assert!(codex_index < cbm_index);
-        let docker = commands
+        let skills_index = commands
             .iter()
-            .find(|command| command.contains("> /usr/local/bin/docker"))
+            .position(|command| command.starts_with("npx -y skills@1.8.1 "))
             .unwrap();
-        for fragment in [
-            "if [ \"$1\" = compose ]",
-            "shift",
-            "exec /usr/bin/podman-compose \"$@\"",
-            "exec /usr/bin/docker \"$@\"",
-            "chmod 0755 /usr/local/bin/docker",
-            "ln -sf /usr/bin/podman-compose /usr/local/bin/docker-compose",
-        ] {
-            assert!(
-                docker.contains(fragment),
-                "missing Docker compatibility fragment: {fragment}"
-            );
-        }
-        let storage = commands
+        let skills_copy_index = commands
             .iter()
-            .find(|command| command.contains("> /etc/containers/storage.conf"))
+            .position(|command| command.contains("cp -aL /root/.agents/skills/grill-me"))
             .unwrap();
-        assert!(storage.contains("[storage]\\ndriver = \"overlay\"\\ngraphroot = \"/storage/containers/storage\"\\nrunroot = \"/run/containers/storage\"\\n"));
+        assert!(skills_index < skills_copy_index);
+        assert!(skills_copy_index < commands.len() - 1);
         assert!(commands.last().unwrap().contains(
             "mkdir -p /workspace/myrepo /opt/codex-home && cp -a /root/.codex/. /opt/codex-home/"
         ));
@@ -841,6 +875,87 @@ mod tests {
         assert_eq!(
             select_definition(cwd, cwd, &home, Some(r".\custom.smlbx"), None).unwrap(),
             cwd.join(r".\custom.smlbx")
+        );
+    }
+}
+
+#[cfg(test)]
+mod dependency_compatibility_tests {
+    use super::*;
+
+    #[test]
+    fn toml_1_0_definitions_preserve_pre_upgrade_values_and_bytes() {
+        let body = r#"image = 'debian:bookworm-slim'
+cpus = 4
+memory = 8_192
+storage = 20
+net = true
+workdir = "/workspace/myrepo"
+
+[network]
+allow_hosts = [
+    "api.openai.com", # Retained user configuration.
+    'registry.npmjs.org',
+]
+
+[dev]
+init = [
+    'npm install -g @openai/codex@0.164.0',
+    "printf 'configured\\n'",
+    """printf '%s' \
+        'retained settings'""",
+]
+
+[secrets.api_key]
+from_env = 'OPENAI_API_KEY'
+"#;
+        for profile in [
+            Profile::Codex,
+            Profile::Claude,
+            Profile::OpenCode,
+            Profile::Hermes,
+        ] {
+            let bytes = format!("# codex-sandbox-harness: {}\n{body}", profile.id()).into_bytes();
+            let definition = Definition::parse("retained.smlbx".into(), bytes.clone()).unwrap();
+            assert_eq!(definition.profile, profile);
+            assert_eq!(definition.bytes, bytes);
+            assert_eq!(
+                definition.allow_hosts,
+                ["api.openai.com", "registry.npmjs.org"]
+            );
+            let document: toml::Value =
+                toml::from_str(std::str::from_utf8(&definition.bytes).unwrap()).unwrap();
+            assert_eq!(document["memory"].as_integer(), Some(8192));
+            assert_eq!(
+                document["dev"]["init"][0].as_str(),
+                Some("npm install -g @openai/codex@0.164.0")
+            );
+            assert_eq!(
+                document["dev"]["init"][1].as_str(),
+                Some("printf 'configured\\n'")
+            );
+            assert_eq!(
+                document["dev"]["init"][2].as_str(),
+                Some("printf '%s' 'retained settings'")
+            );
+            assert_eq!(
+                document["secrets"]["api_key"]["from_env"].as_str(),
+                Some("OPENAI_API_KEY")
+            );
+        }
+    }
+
+    #[cfg(not(feature = "test-adapter"))]
+    #[test]
+    fn native_application_home_remains_under_user_profile() {
+        #[cfg(unix)]
+        let native_home = env::var_os("HOME");
+        #[cfg(windows)]
+        let native_home = env::var_os("USERPROFILE");
+        let native_home = PathBuf::from(native_home.expect("native runner has a user home"));
+        assert_eq!(
+            application_home().unwrap(),
+            native_home.join(".smolsandbox")
         );
     }
 }

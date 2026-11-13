@@ -1,17 +1,17 @@
 # codex-sandbox-harness: codex
 # Smolfile — Dev tools base image for smolvm (smol-machines/smolvm)
-# One declarative microVM: Debian 12 slim + Node 22 + Python 3 + Rust + .NET 8 SDK,
+# One declarative microVM: Debian 13 slim + Node 26 + Python 3 + Rust + .NET 10 SDK,
 # OpenAI Codex CLI, Matt Pocock's grill-me/grilling skills,
 # DeusData's codebase-memory-mcp, Podman + Buildah for nested containers,
 # and Playwright + per-stack dev/debug tooling for live web-app testing.
 #
-# This is the build input for build-sandbox.sh. It intentionally has no host
+# smolsandbox embeds this build input. The definition has no host
 # volumes: the resulting artifact is self-contained, and each derived machine
 # gets its own mounts and network policy at `smolvm machine create --from`.
 #
 # Timezone: Europe/Berlin — see the preseed lines at the top of `init`.
 
-image = "debian:bookworm-slim"
+image = "debian:trixie-slim"
 cpus = 4
 memory = 8192            # MiB; elastic via virtio balloon. For installation this
                          # is a good starting point
@@ -66,7 +66,7 @@ allow_hosts = [
   "objects.githubusercontent.com", # GitHub release binaries (older redirect layout)
   "codeload.github.com",           # repo tarballs (provisioning)
   "deb.debian.org",                # Debian apt + security updates (provisioning)
-  "deb.nodesource.com",            # Node 22 (provisioning)
+  "deb.nodesource.com",            # Node 26 (provisioning)
   # "playwright.azureedge.net",    # legacy Playwright CDN, older versions
   # "quay.io",                     # add if you pull from Quay
 ]
@@ -85,11 +85,11 @@ init = [
   "printf 'tzdata tzdata/Areas select Europe\\ntzdata tzdata/Zones/Europe select Berlin\\n' | debconf-set-selections",
 
   # Toolchains: Python 3, git, ripgrep, Podman + Buildah, Docker-compatible
-  # command aliases, and extras. .NET 8 is installed below.
+  # command aliases, and extras. .NET 10 is installed below.
   # DEBIAN_FRONTEND=noninteractive suppresses ALL debconf dialogs (tzdata,
   # keyboard-configuration, console-setup, ...), not just tzdata.
   "DEBIAN_FRONTEND=noninteractive apt-get update",
-  "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bash ca-certificates coreutils curl git grep gzip mawk tar openssh-client build-essential pkg-config ripgrep unzip jq sqlite3 httpie pipx python3 python3-pip python3-venv tzdata libgssapi-krb5-2 libicu72 libssl3 zlib1g podman podman-docker podman-compose buildah",
+  "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bash ca-certificates coreutils curl git grep gzip mawk tar openssh-client build-essential pkg-config ripgrep unzip jq sqlite3 httpie pipx python3 python3-pip python3-venv tzdata libgssapi-krb5-2 libicu76 libssl3t64 zlib1g podman podman-docker podman-compose buildah",
 
   # Rust: use rustup for a current stable toolchain on both x64 and Arm64.
   # Expose its proxies on PATH even for non-login machine exec commands.
@@ -100,9 +100,9 @@ init = [
   # for tools that parse its output; this suppresses Podman's emulation banner.
   "touch /etc/containers/nodocker",
 
-  # Debian 12 ships Podman 4.3, which predates `podman compose`. Dispatch the
-  # Docker Compose spellings to podman-compose while preserving podman-docker
-  # for every other Docker CLI command.
+  # Dispatch Docker Compose spellings directly to podman-compose so the
+  # selected provider remains explicit. Preserve podman-docker for every
+  # other Docker CLI command.
   "printf '#!/bin/sh\\nif [ \"$1\" = compose ]; then\\n  shift\\n  exec /usr/bin/podman-compose \"$@\"\\nfi\\nexec /usr/bin/docker \"$@\"\\n' > /usr/local/bin/docker && chmod 0755 /usr/local/bin/docker && ln -sf /usr/bin/podman-compose /usr/local/bin/docker-compose",
 
   # Belt and suspenders: pin the timezone files explicitly and re-apply tzdata
@@ -110,9 +110,9 @@ init = [
   # the base image before the preseed ran)
   "ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime && printf 'Europe/Berlin\\n' > /etc/timezone && dpkg-reconfigure -f noninteractive tzdata",
 
-  # Microsoft's Debian feed publishes .NET 8 for x64 only. The official
-  # installer auto-detects x64/Arm64 so the SmolVM stays host-portable.
-  "curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && bash /tmp/dotnet-install.sh --channel 8.0 --install-dir /usr/share/dotnet --no-path && ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet && rm -f /tmp/dotnet-install.sh",
+  # The official .NET 10 installer auto-detects x64/Arm64 so provisioning
+  # uses the selected SDK channel on both guest architectures.
+  "curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && bash /tmp/dotnet-install.sh --channel 10.0 --install-dir /usr/share/dotnet --no-path && ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet && rm -f /tmp/dotnet-install.sh",
 
   # --- Git: the virtiofs-mounted /workspace/myrepo carries HOST UIDs, which
   # differ from the guest's root — git >= 2.35.2 then refuses to operate
@@ -137,13 +137,13 @@ init = [
   # options. (This was the "runroot must be set" bug.)
   "mkdir -p /storage/containers && printf '[storage]\\ndriver = \"overlay\"\\ngraphroot = \"/storage/containers/storage\"\\nrunroot = \"/run/containers/storage\"\\n' > /etc/containers/storage.conf",
 
-  # Node 22 from NodeSource (Debian's own nodejs is too old for Codex CLI);
+  # Node 26 from NodeSource satisfies the selected npm tools' engine ranges;
   # the setup script runs apt itself, so the env var must be exported into it
-  "curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/node-setup.sh && DEBIAN_FRONTEND=noninteractive bash /tmp/node-setup.sh && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nodejs",
+  "curl -fsSL https://deb.nodesource.com/setup_26.x -o /tmp/node-setup.sh && DEBIAN_FRONTEND=noninteractive bash /tmp/node-setup.sh && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nodejs",
 
   # OpenAI Codex CLI (installed BEFORE codebase-memory-mcp so its `install`
   # subcommand can detect the Codex CLI and register itself with it)
-  "npm install -g @openai/codex@0.164.0",
+  "npm install -g @openai/codex@0.169.0",
 
   # Sol with high reasoning is the machine default; the footer exposes token,
   # context, and rate-limit headroom. Full permissions are appropriate inside
@@ -152,16 +152,18 @@ init = [
   # first use.
   "mkdir -p /root/.codex && printf 'model = \"gpt-5.6-sol\"\\nmodel_reasoning_effort = \"high\"\\nmodel_context_window = 1000000\\nmodel_auto_compact_token_limit = 900000\\nsandbox_mode = \"danger-full-access\"\\napproval_policy = \"never\"\\n\\n[tui]\\nstatus_line = [\\n  \"model-with-reasoning\",\\n  \"current-dir\",\\n  \"context-remaining\",\\n  \"used-tokens\",\\n  \"five-hour-limit\",\\n  \"weekly-limit\",\\n]\\nstatus_line_use_colors = true\\n\\n[projects.\"/workspace/myrepo\"]\\ntrust_level = \"trusted\"\\n' > /root/.codex/config.toml",
 
-  # Matt Pocock's grill-me + grilling skills — global install for Codex
-  # (lands in /root/.codex/skills), non-interactive
-  "npx -y skills@1.7.0 add mattpocock/skills --skill=grill-me --skill=grilling --agent codex --global --yes",
+  # Matt Pocock's grill-me + grilling skills — noninteractive global install.
+  # skills 1.8.1 uses /root/.agents/skills for Codex. Copy the selected files
+  # into the prepared Codex home so the persistent-home snapshot contains
+  # the skills without symlinks to a separate, unmounted home directory.
+  "npx -y skills@1.8.1 add mattpocock/skills --skill=grill-me --skill=grilling --agent codex --global --yes",
+  "mkdir -p /root/.codex/skills && cp -aL /root/.agents/skills/grill-me /root/.agents/skills/grilling /root/.codex/skills/",
 
   # DeusData codebase-memory-mcp. The maintained installer selects the fully
-  # static Linux "-portable" artifact; the legacy scripts/setup.sh selected a
-  # binary requiring glibc 2.38 and GLIBCXX_3.4.32, which Debian 12 lacks.
+  # static Linux "-portable" artifact for both x64 and Arm64.
   # Pin both installer and release, verify the upstream checksum, and configure
   # only the already-installed Codex client without an interactive prompt.
-  "curl -fsSL https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/v0.11.0/install.sh | CBM_DOWNLOAD_URL=https://github.com/DeusData/codebase-memory-mcp/releases/download/v0.11.0 bash -s -- --clients=codex",
+  "curl -fsSL https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/v0.12.1/install.sh | CBM_DOWNLOAD_URL=https://github.com/DeusData/codebase-memory-mcp/releases/download/v0.12.1 bash -s -- --clients=codex",
   # Keep an explicit runtime smoke test at the provisioning boundary. The
   # installer already runs this check before and after activating the binary.
   "/root/.local/bin/codebase-memory-mcp --version",
@@ -173,24 +175,24 @@ init = [
   # --- .NET web-dev tooling (dotnet watch / dotnet run ship with the SDK) ---
   # dotnet-ef: EF Core migrations for the CLI; dotnet-dump/-trace/-counters:
   # post-mortem and live diagnostics without a Visual Studio attach
-  "dotnet tool install -g dotnet-ef --version 8.0.31",
-  "dotnet tool install -g dotnet-dump --version 8.0.547301",
-  "dotnet tool install -g dotnet-trace --version 8.0.547301",
-  "dotnet tool install -g dotnet-counters --version 8.0.547301",
+  "dotnet tool install -g dotnet-ef --version 10.0.15",
+  "dotnet tool install -g dotnet-dump --version 10.0.750501",
+  "dotnet tool install -g dotnet-trace --version 10.0.750501",
+  "dotnet tool install -g dotnet-counters --version 10.0.750501",
   "ln -sf /root/.dotnet/tools/* /usr/local/bin/",
 
   # --- Python tooling: uv (fast venv/deps), pytest, debugpy (DAP debugger),
   # ruff (lint/format) — installed as isolated CLI apps via pipx
-  "pipx install uv==0.12.17",
-  "pipx install pytest==9.1.1",
+  "pipx install uv==0.13.8",
+  "pipx install pytest==9.2.0",
   "pipx install debugpy==1.8.22",
   # Allow a stalled Ruff download to recover, but bound the complete install.
-  "PIP_DEFAULT_TIMEOUT=120 PIP_RETRIES=10 timeout --verbose --kill-after=10s 300s pipx install ruff==0.16.8",
+  "PIP_DEFAULT_TIMEOUT=120 PIP_RETRIES=10 timeout --verbose --kill-after=10s 300s pipx install ruff==0.17.5",
   "ln -sf /root/.local/bin/* /usr/local/bin/",
 
   # --- Node helpers: tsx (run/watch TS directly), vitest; node --inspect
-  # and node --watch are built into Node 22
-  "npm install -g tsx@4.23.15 vitest@5.0.1",
+  # and node --watch are built into Node 26
+  "npm install -g tsx@4.23.15 vitest@5.1.0",
 
   # --- Playwright: npm stack + Chromium with all OS dependencies ---
   # --with-deps runs apt-get internally, so DEBIAN_FRONTEND is exported too.
@@ -199,12 +201,12 @@ init = [
   # playwright.download.prss.microsoft.com and falls back to cdn.playwright.dev.
   # Browsers land in /root/.cache/ms-playwright, versioned per package, so
   # the Python binding below coexists there with its own build.
-  "npm install -g playwright@1.63.0 @playwright/test@1.63.0",
+  "npm install -g playwright@1.65.0 @playwright/test@1.65.0",
   "DEBIAN_FRONTEND=noninteractive playwright install --with-deps chromium",
 
   # --- Playwright: Python binding (same browser cache, invoked as a module
   # to avoid clashing with the npm CLI binary) ---
-  "python3 -m pip install --break-system-packages playwright==1.63.0",
+  "python3 -m pip install --break-system-packages playwright==1.65.1",
   "python3 -m playwright install chromium",
 
   # Smoke test: pull and run a tiny container through podman-docker's Docker
