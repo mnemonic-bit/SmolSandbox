@@ -344,3 +344,102 @@ each experiment.
 Final Feature 0010 cutover acceptance remains pending the native and real
 guest evidence recorded above. Local CRLF reproduction does not establish a
 passing native Windows Actions run.
+
+## Windows configuration-header bug report follow-up: 2026-11-11
+
+[Bug 0001](../BUGS/bug-0001-windows-configuration-header-crlf.md) records the
+reported assertions, cause, existing fix, reproduction, and remaining Windows
+verification. Current revision `583d5db794c77f91f5187495a3f34b4df525e3e9`
+already includes fix `7a8f67a`; package version remains `0.8.1` for this
+documentation-only report. Earlier observations remain unchanged.
+
+The user clarified that the supplied failure came from an earlier commit.
+The later pipeline encountered other issues whose output was not supplied.
+Bug 0001 records the header assertion defect as resolved; the historical log
+does not establish a recurrence on the corrected source.
+
+New local execution used Rust `1.99.1` on `x86_64-unknown-linux-gnu`.
+The command was `cargo test --locked --test application named_configuration_ -- --nocapture`;
+adapter runs added `--features test-adapter`.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Current revision with LF templates, both feature configurations | passed | Three focused tests per configuration; exit 0 |
+| Isolated `4edabfd` baseline with LF templates | passed | Fresh target directory; three focused tests; exit 0 |
+| Isolated baseline with all four templates converted to CRLF | failed | Both reported assertions reproduced twice; exit 101 |
+| Isolated baseline with only the Claude header newline changed to CRLF | failed | Both reported assertions reproduced; exit 101 |
+| Corrected test file with all four templates CRLF, both feature configurations | passed | Three focused tests per configuration; exit 0 |
+| Corrected test file with only the Claude header newline CRLF | passed | Three focused tests; exit 0; separate CLI creation preserved the CRLF header |
+| Native Windows CI after the fix | not_run | Original run URL and tested SHA were not supplied; record a corrected Windows run and its revision |
+| Other native targets and real guest checks | not_run | This report adds local assertion evidence only; outstanding cutover gates remain pending |
+
+Full lint, release, and baseline-independence checks were not rerun for this
+documentation-only follow-up. The earlier verification record retains those
+results and their source revisions.
+
+## Bug 0002 Ruff download recovery: 2026-11-13
+
+[Bug 0002](../BUGS/bug-0002-ruff-download-read-timeout.md) now has a
+working-tree fix based on revision
+`583d5db794c77f91f5187495a3f34b4df525e3e9`. The application version changes
+from `0.8.1` to `0.8.2`. Earlier observations and their source revisions
+remain unchanged.
+
+All four templates now use a 120-second pip socket timeout, 10 connection
+retries, and GNU timeout's 300-second installation deadline with a 10-second
+termination grace for Ruff. The package pins and hostname policy are
+unchanged. Existing definitions remain user-owned; adoption instructions
+are in [Template adoption](../RUST-APPLICATION.md#template-adoption).
+
+Controlled checks used Linux, Python `3.11.2`, Debian pipx `1.1.0`, and
+pip `23.0.1`. The retained command is
+`python3 tests/provisioning/ruff_download.py <case> <profile>`.
+The check parses the selected template and runs its Ruff command through
+real pipx against a local HTTP index. The synthetic wheel exercises package
+download and installation; it does not execute real Ruff, contact PyPI, or
+establish real guest behavior. The effective controlled pip settings come
+from the template's environment assignments, with inherited pip variables
+removed and pip configuration disabled.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Original command with an 18-second payload stall | failed | Original throwaway loop failed twice at 15.5 seconds; retained `recover codex --baseline` failed at 15.6 seconds with pip `ReadTimeoutError` and exit 1 |
+| Original command without the payload stall | passed | `healthy codex --baseline`; installed the fixture in 0.7 seconds; exit 0 |
+| Revised command with the same stall, all four profiles | passed | `recover codex`, `recover claude`, `recover opencode`, and `recover hermes`; installed and ran the fixture in 18.8, 19.0, 19.1, and 19.1 seconds respectively; exit 0 |
+| Payload that never resumes | passed | `persistent codex`; pipx exited 1 after 120.6 seconds and exposed no installed fixture app; check exited 0 |
+| Accelerated overall deadline | passed | `deadline codex`; only the outer deadline and grace changed to 8 and 2 seconds; timeout exited 124 after 8.0 seconds; no installed fixture app; check exited 0 |
+| Unmodified production overall deadline | passed | `full-deadline codex`; server sent a byte every 30 seconds to keep socket reads active; timeout exited 124 after 300.0 seconds; no installed fixture app; check exited 0 |
+| All-profile Rust provisioning policy regression | passed | `every_template_bounds_ruff_downloads_and_preserves_python_pins` first failed against the old templates with exit 101, then passed against the revised templates |
+| Failed builder artifact and cache safety | passed | `failed_fresh_builder_never_publishes_an_artifact_or_generation_cache` simulated creation and startup failures; no pack operation, artifact, or generation cache; selected definition preserved |
+
+Rust checks used Rust `1.99.1` on the local Linux host. Every command below
+exited 0 from the repository root.
+
+| Command | Result | Evidence |
+| --- | --- | --- |
+| `cargo fmt --all -- --check` | passed | Formatting accepted |
+| `cargo clippy --locked --all-targets -- -D warnings` | passed | No warnings |
+| `cargo clippy --locked --features test-adapter --all-targets -- -D warnings` | passed | No warnings |
+| `cargo test --locked --all-targets` | passed | 114 tests passed |
+| `cargo test --locked --features test-adapter --all-targets` | passed | 182 tests passed |
+| `cargo build --locked --release --bin smolsandbox` | passed | Default-feature release binary reports `smolsandbox 0.8.2` |
+| `cargo run --locked --example check_baseline_independence` | passed | Isolated source checks passed; nine compiled test executables per feature configuration passed with empty `PATH` |
+| `ruff check --target-version py311 tests/provisioning/ruff_download.py` | passed | Retained Python check accepted |
+| `ruff format --check tests/provisioning/ruff_download.py` | passed | Retained Python check formatting accepted |
+| `git diff --check` | passed | No whitespace errors |
+
+Bug 0002 AC-2 has controlled pipx download-path recovery evidence. AC-3 has
+controlled failure-bound evidence and separate mocked artifact-safety
+evidence. AC-4 has all-profile template checks, adoption documentation,
+and the required Rust regression results.
+
+| Outstanding check | Result | Next evidence |
+| --- | --- | --- |
+| Bug 0002 AC-1 on the affected machine | not_run | Record selected definition, effective pip settings, Ruff installation outcome, and complete build outcome |
+| Real SmolVM build and failure propagation | not_run | SmolVM is unavailable locally; record native guest provisioning and verify that a failed download publishes no successful base artifact |
+| Other native release targets | not_run | Record native CI results and source revision for this fix |
+| Other real guest cutover gates | not_run | Existing authentication, terminal, lifecycle, and profile gates remain pending |
+
+The controlled fixture and local Rust checks do not establish passing real
+SmolVM checks. Final Feature 0010 cutover acceptance remains pending the
+native and real guest evidence above.

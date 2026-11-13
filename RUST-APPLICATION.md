@@ -123,6 +123,31 @@ a separate destination with `create-config --harness <profile> --smolfile
 file. Existing edits and harness state are preserved. Changing definition
 bytes selects a new base generation on the next lifecycle operation.
 
+All four templates in version `0.8.2` give the Ruff installation a 120-second
+pip socket timeout and 10 connection retries. GNU `timeout` limits that
+installation to 300 seconds, sends `TERM`, and sends `KILL` after another
+10 seconds if pipx has not exited. Signals apply to the monitored process
+group. The limit applies to the Ruff installation, including pipx setup,
+rather than the complete sandbox build.
+Connection retries do not guarantee resumption of an interrupted wheel.
+The Ruff version pin and hostname allowlist are unchanged.
+
+For an existing definition, replace its Ruff installation entry with:
+
+```toml
+"PIP_DEFAULT_TIMEOUT=120 PIP_RETRIES=10 timeout --verbose --kill-after=10s 300s pipx install ruff==0.16.8",
+```
+
+Run `smolsandbox build --smolfile <definition>` with the edited definition.
+The changed definition selects a new base generation. If a workspace from
+the previous generation exists, use the reconciliation and replacement
+procedure below before starting the replacement workspace. Alternatively,
+generate and compare a separate updated definition using the template
+adoption procedure above. The executable never rewrites an existing file.
+Use `--verbose` on a failed build to display runtime output; pipx reports
+the requested package and the guest pip error-log path. A socket timeout
+includes the failing host; the overall deadline reports the signal sent.
+
 ### Harness profiles and authentication
 
 The application uses these profile-specific commands and mounts:
