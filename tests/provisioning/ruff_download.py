@@ -2,11 +2,15 @@
 
 Run explicitly on Linux with Python 3.11+, pipx, python3-venv, and GNU timeout.
 The Rust suite does not invoke this check. The fixture is not a Ruff binary.
+Baseline mode supports healthy, recover, and persistent cases. Baseline recover
+passes when the original bare command fails on the 18-second payload stall.
+Deadline cases require the template's GNU timeout wrapper.
 """
 
 import argparse
 import io
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -18,30 +22,31 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from zipfile import ZipFile
 
-WHEEL_NAME = "ruff-0.16.8-py3-none-any.whl"
 
-
-def fixture_wheel():
+def fixture_wheel(version):
     archive = io.BytesIO()
+    metadata = f"ruff-{version}.dist-info"
     with ZipFile(archive, "w") as wheel:
-        wheel.writestr("ruff.py", 'def main(): print("fixture ruff 0.16.8")\n')
+        wheel.writestr("ruff.py", f'def main(): print("fixture ruff {version}")\n')
         wheel.writestr(
-            "ruff-0.16.8.dist-info/METADATA",
-            "Metadata-Version: 2.1\nName: ruff\nVersion: 0.16.8\n",
+            f"{metadata}/METADATA",
+            f"Metadata-Version: 2.1\nName: ruff\nVersion: {version}\n",
         )
         wheel.writestr(
-            "ruff-0.16.8.dist-info/WHEEL",
+            f"{metadata}/WHEEL",
             "Wheel-Version: 1.0\nGenerator: fixture\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
         )
         wheel.writestr(
-            "ruff-0.16.8.dist-info/entry_points.txt",
+            f"{metadata}/entry_points.txt",
             "[console_scripts]\nruff = ruff:main\n",
         )
-        wheel.writestr("ruff-0.16.8.dist-info/RECORD", "")
+        wheel.writestr(f"{metadata}/RECORD", "")
     return archive.getvalue()
 
 
 def check(case, profile, baseline):
+    if baseline and case in ("deadline", "full-deadline"):
+        raise ValueError("baseline mode has no GNU timeout deadline")
     templates = Path(__file__).resolve().parents[2] / "templates"
     with (templates / f"{profile}.smlbx").open("rb") as source:
         command = next(
@@ -56,7 +61,11 @@ def check(case, profile, baseline):
         assert "--kill-after=10s 300s" in command
         command = command.replace("--kill-after=10s 300s", "--kill-after=2s 8s")
 
-    payload = fixture_wheel()
+    version = re.search(r"\bpipx install ruff==(\d+\.\d+\.\d+)(?:\s|$)", command)
+    assert version is not None, "Ruff command does not select a fixture version"
+    version = version.group(1)
+    wheel_name = f"ruff-{version}-py3-none-any.whl"
+    payload = fixture_wheel(version)
     requests = []
     stopped = threading.Event()
 
@@ -67,8 +76,8 @@ def check(case, profile, baseline):
         def do_GET(self):
             requests.append(self.path)
             if self.path == "/simple/ruff/":
-                body = f'<a href="/packages/{WHEEL_NAME}">{WHEEL_NAME}</a>'.encode()
-            elif self.path == f"/packages/{WHEEL_NAME}":
+                body = f'<a href="/packages/{wheel_name}">{wheel_name}</a>'.encode()
+            elif self.path == f"/packages/{wheel_name}":
                 body = payload
             else:
                 self.send_error(404)
@@ -149,16 +158,24 @@ def check(case, profile, baseline):
                 stopped.set()
                 server.shutdown()
 
-        print(f"{profile} {case}: status={process.returncode}, elapsed={elapsed:.1f}s")
+        mode = "baseline" if baseline else "template"
+        print(
+            f"{profile} {case} {mode}: status={process.returncode}, elapsed={elapsed:.1f}s"
+        )
         print(f"Command: {command}\nRequests: {requests}\n{output}", flush=True)
-        assert f"/packages/{WHEEL_NAME}" in requests, (
+        assert f"/packages/{wheel_name}" in requests, (
             "pipx did not request the wheel payload"
         )
-        if case in ("healthy", "recover"):
+        if case == "healthy" or (case == "recover" and not baseline):
             assert process.returncode == 0, (
                 "Ruff installation aborted on a recoverable payload stall"
             )
-            subprocess.run([str(root / "bin/ruff")], check=True)
+            result = subprocess.run(
+                [str(root / "bin/ruff")], check=True, capture_output=True, text=True
+            )
+            assert result.stdout.strip() == f"fixture ruff {version}", (
+                "installed fixture reports a different Ruff version"
+            )
         else:
             assert process.returncode != 0, "persistent failure unexpectedly succeeded"
             assert not (root / "bin/ruff").exists(), (
@@ -167,11 +184,15 @@ def check(case, profile, baseline):
             assert elapsed < (15 if case == "deadline" else 315), (
                 "installation exceeded its failure bound"
             )
+            if case == "recover" and baseline:
+                assert "ReadTimeoutError" in output, (
+                    "baseline did not reproduce the payload read timeout"
+                )
             if case in ("deadline", "full-deadline"):
                 assert process.returncode in (124, 137), (
                     "installation did not reach GNU timeout"
                 )
-        print(f"passed: {profile} {case}", flush=True)
+        print(f"passed: {profile} {case} {mode}", flush=True)
 
 
 if __name__ == "__main__":
@@ -182,7 +203,14 @@ if __name__ == "__main__":
     )
     parser.add_argument("profile", choices=["codex", "claude", "opencode", "hermes"])
     parser.add_argument(
-        "--baseline", action="store_true", help="use the original bare Ruff command"
+        "--baseline",
+        action="store_true",
+        help=(
+            "use original Ruff 0.16.8 command; recovery expects a read timeout; "
+            "deadline cases are unsupported"
+        ),
     )
     arguments = parser.parse_args()
+    if arguments.baseline and arguments.case in ("deadline", "full-deadline"):
+        parser.error("--baseline supports healthy, recover, and persistent cases")
     check(arguments.case, arguments.profile, arguments.baseline)

@@ -469,10 +469,10 @@ mod tests {
                 .map(|command| command.as_str().unwrap())
                 .collect();
             for command in [
-                "pipx install uv==0.12.17",
-                "pipx install pytest==9.1.1",
+                "pipx install uv==0.13.8",
+                "pipx install pytest==9.2.0",
                 "pipx install debugpy==1.8.22",
-                "PIP_DEFAULT_TIMEOUT=120 PIP_RETRIES=10 timeout --verbose --kill-after=10s 300s pipx install ruff==0.16.8",
+                "PIP_DEFAULT_TIMEOUT=120 PIP_RETRIES=10 timeout --verbose --kill-after=10s 300s pipx install ruff==0.17.5",
             ] {
                 assert!(commands.contains(&command), "{profile:?}: missing {command}");
             }
@@ -659,7 +659,7 @@ mod tests {
                 "pipx install uv==0.13.8",
                 "pipx install pytest==9.2.0",
                 "pipx install debugpy==1.8.22",
-                "pipx install ruff==0.17.5",
+                "PIP_DEFAULT_TIMEOUT=120 PIP_RETRIES=10 timeout --verbose --kill-after=10s 300s pipx install ruff==0.17.5",
                 "npm install -g tsx@4.23.15 vitest@5.1.0",
                 "npm install -g playwright@1.65.0 @playwright/test@1.65.0",
                 "DEBIAN_FRONTEND=noninteractive playwright install --with-deps chromium",
