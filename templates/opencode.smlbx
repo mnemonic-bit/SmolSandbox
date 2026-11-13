@@ -1,6 +1,6 @@
 # codex-sandbox-harness: opencode
 # Development tools and the selected harness run inside the guest.
-image = "debian:bookworm-slim"
+image = "debian:trixie-slim"
 cpus = 4
 memory = 8192
 storage = 20
@@ -53,32 +53,32 @@ allow_hosts = [
 init = [
   "printf 'tzdata tzdata/Areas select Europe\\ntzdata tzdata/Zones/Europe select Berlin\\n' | debconf-set-selections",
   "DEBIAN_FRONTEND=noninteractive apt-get update",
-  "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bash ca-certificates coreutils curl git grep gzip mawk tar openssh-client build-essential pkg-config ripgrep unzip jq sqlite3 httpie pipx python3 python3-pip python3-venv tzdata libgssapi-krb5-2 libicu72 libssl3 zlib1g podman podman-docker podman-compose buildah",
+  "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bash ca-certificates coreutils curl git grep gzip mawk tar openssh-client build-essential pkg-config ripgrep unzip jq sqlite3 httpie pipx python3 python3-pip python3-venv tzdata libgssapi-krb5-2 libicu76 libssl3t64 zlib1g podman podman-docker podman-compose buildah",
   "curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs -o /tmp/rustup-init.sh && sh /tmp/rustup-init.sh -y --no-modify-path --default-toolchain stable --profile minimal --component rustfmt --component clippy && ln -sf /root/.cargo/bin/* /usr/local/bin/ && rm -f /tmp/rustup-init.sh",
   "rustc --version && cargo --version && cargo fmt --version && cargo clippy --version",
   "touch /etc/containers/nodocker",
   "printf '#!/bin/sh\\nif [ \"$1\" = compose ]; then\\n  shift\\n  exec /usr/bin/podman-compose \"$@\"\\nfi\\nexec /usr/bin/docker \"$@\"\\n' > /usr/local/bin/docker && chmod 0755 /usr/local/bin/docker && ln -sf /usr/bin/podman-compose /usr/local/bin/docker-compose",
   "ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime && printf 'Europe/Berlin\\n' > /etc/timezone && dpkg-reconfigure -f noninteractive tzdata",
-  "curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && bash /tmp/dotnet-install.sh --channel 8.0 --install-dir /usr/share/dotnet --no-path && ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet && rm -f /tmp/dotnet-install.sh",
+  "curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && bash /tmp/dotnet-install.sh --channel 10.0 --install-dir /usr/share/dotnet --no-path && ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet && rm -f /tmp/dotnet-install.sh",
   "git config --global --add safe.directory /workspace/myrepo",
   "git config --global --add safe.directory '*'",
   "git config --global init.defaultBranch main",
   "mkdir -p /storage/containers && printf '[storage]\\ndriver = \"overlay\"\\ngraphroot = \"/storage/containers/storage\"\\nrunroot = \"/run/containers/storage\"\\n' > /etc/containers/storage.conf",
-  "curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/node-setup.sh && DEBIAN_FRONTEND=noninteractive bash /tmp/node-setup.sh && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nodejs",
-  "dotnet tool install -g dotnet-ef --version 8.0.31",
-  "dotnet tool install -g dotnet-dump --version 8.0.547301",
-  "dotnet tool install -g dotnet-trace --version 8.0.547301",
-  "dotnet tool install -g dotnet-counters --version 8.0.547301",
+  "curl -fsSL https://deb.nodesource.com/setup_26.x -o /tmp/node-setup.sh && DEBIAN_FRONTEND=noninteractive bash /tmp/node-setup.sh && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nodejs",
+  "dotnet tool install -g dotnet-ef --version 10.0.15",
+  "dotnet tool install -g dotnet-dump --version 10.0.750501",
+  "dotnet tool install -g dotnet-trace --version 10.0.750501",
+  "dotnet tool install -g dotnet-counters --version 10.0.750501",
   "ln -sf /root/.dotnet/tools/* /usr/local/bin/",
-  "pipx install uv==0.12.17",
-  "pipx install pytest==9.1.1",
+  "pipx install uv==0.13.8",
+  "pipx install pytest==9.2.0",
   "pipx install debugpy==1.8.22",
-  "pipx install ruff==0.16.8",
+  "pipx install ruff==0.17.5",
   "ln -sf /root/.local/bin/* /usr/local/bin/",
-  "npm install -g tsx@4.23.15 vitest@5.0.1",
-  "npm install -g playwright@1.63.0 @playwright/test@1.63.0",
+  "npm install -g tsx@4.23.15 vitest@5.1.0",
+  "npm install -g playwright@1.65.0 @playwright/test@1.65.0",
   "DEBIAN_FRONTEND=noninteractive playwright install --with-deps chromium",
-  "python3 -m pip install --break-system-packages playwright==1.63.0",
+  "python3 -m pip install --break-system-packages playwright==1.65.1",
   "python3 -m playwright install chromium",
   "docker compose version",
   "docker run --rm docker.io/library/alpine echo nested-podman-via-docker-ok",

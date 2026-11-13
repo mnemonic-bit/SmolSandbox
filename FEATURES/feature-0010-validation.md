@@ -344,3 +344,46 @@ each experiment.
 Final Feature 0010 cutover acceptance remains pending the native and real
 guest evidence recorded above. Local CRLF reproduction does not establish a
 passing native Windows Actions run.
+
+
+## Feature 0016 version-update verification: 2026-11-13
+
+Feature 0010 cutover status remains `In progress`. Feature 0016 updates
+application `0.9.0`, all four provisioning templates, three Rust
+dependencies, and both CI action tags. The tested source is the uncommitted
+working tree based on `583d5db794c77f91f5187495a3f34b4df525e3e9`, with
+software diff SHA-256
+`a8b3c4831facfaff5de14d1476789e6f65c6c96f7b6fdaf21ff41d80c35e08fa`.
+Rust/Cargo `1.100.0` ran on native `x86_64-unknown-linux-gnu`. Earlier
+observations and their source revisions remain unchanged.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Formatting and both Clippy configurations | passed | All three required commands exited 0; `/tmp/feature-0016/verified-fmt.log`, `verified-clippy.log`, and `verified-clippy-adapter.log` |
+| Default-feature suite | passed | Exit 0: 65 library, 12 application, 13 CLI, 8 fixed-data, 9 listing, and 10 removal tests; `/tmp/feature-0016/verified-test.log` |
+| Adapter-feature suite | passed | Exit 0: 64 library, 64 application, 13 CLI, 8 fixed-data, 10 listing, and 24 removal tests; `/tmp/feature-0016/verified-test-adapter.log` |
+| Production release and offline generation | passed | Release build excludes `test-adapter`; all four generated definitions match embedded bytes, repeated creation preserves existing files, and help/version pass with empty `PATH` and missing SmolVM; `verified-release.log` and `verified-offline-config.log` |
+| Baseline-independent validation | passed | Exit 0; isolated formatting, both Clippy/test configurations, production build, and nine compiled test executables per feature mode with empty `PATH`; `/tmp/feature-0016/verified-independence.log` |
+| Fixed compatibility fixtures | passed | Old/new dependency runs preserve fixed SHA-256/base identities and retained TOML 1.0 definitions; local native home test preserves `.smolsandbox` under the user home; policy revision remains `5` |
+| Additional Linux x64 container observations | inconclusive | Runtime, Codex help/version, skills snapshot, MCP query, EF migration, diagnostics, development tools, and both Playwright Chromium launches passed as detailed in Feature 0016 validation; nested Docker fails on the container's overlay-backed storage |
+| Other native targets and selected Actions execution | not_run | Linux ARM64, macOS ARM64, and Windows x64 native execution plus all four action/artifact runs remain required |
+| Real SmolVM guest checks | not_run | No `smolvm` or `/dev/kvm` is available; all eight profile/guest-architecture combinations remain required |
+
+The [Feature 0016 validation record](feature-0016-validation.md) contains
+selected versions, compatibility adjustments, exact commands, initial
+failures and corrected probes, final check results, and AC-01 through AC-12.
+Its status remains `In progress` until mandatory guest and native evidence
+passes. The executable preserves user-owned definitions; adopting new
+runtime/tool pins requires generating or editing and explicitly selecting a
+definition. The skills CLI path change is handled in the prepared Codex
+home; persistent seeding retains its missing-files-only policy.
+
+On compatible native hosts, run the existing real guest procedure for all
+four profiles and both Linux guest architectures. Record Codex device
+authentication and interactive launch, retained credentials/settings, MCP
+queries, nested containers, EF/diagnostic/browser/tool checks, and actual
+runtime versions. Record native Windows path behavior, runner versions,
+CI run URLs, and downloaded release artifacts on all four targets. Preserve
+the earlier authentication, terminal, cleanup, removal, replacement, and
+relocated-executable cutover gates. Local mocked and container results do
+not establish those remaining gates.

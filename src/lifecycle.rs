@@ -1051,6 +1051,11 @@ mod tests {
 
     #[test]
     fn selected_bytes_and_version_define_base_identity() {
+        assert_eq!(base_id("smolvm 1", b"definition"), "671b6967f7c2");
+        assert_eq!(
+            base_id("smolvm 1\r\n", b"edited definition"),
+            "f502705715c2"
+        );
         assert_eq!(
             base_id("smolvm 1\n", b"definition"),
             base_id("smolvm 1", b"definition")

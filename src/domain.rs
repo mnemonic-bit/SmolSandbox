@@ -16,7 +16,12 @@ pub const MANAGED_KEYS: [&str; 6] = [
     "codex-sandbox.configuration",
 ];
 pub fn hash_bytes(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    use std::fmt::Write;
+    let mut hex = String::with_capacity(64);
+    for byte in Sha256::digest(bytes) {
+        write!(hex, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    hex
 }
 pub fn hash_set(values: &[String]) -> String {
     let mut values = values.to_vec();
@@ -637,6 +642,47 @@ mod tests {
         assert_eq!(
             hash_set(&["b".into(), "a".into(), "a".into()]),
             hash_bytes(b"[\"a\",\"b\"]")
+        );
+    }
+    #[test]
+    fn persisted_hashes_match_pre_upgrade_fixtures() {
+        for (bytes, expected) in [
+            (
+                b"".as_slice(),
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            ),
+            (
+                b"abc".as_slice(),
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            ),
+            (
+                b"/workspace/myrepo".as_slice(),
+                "f633fbbea9bf4c2d7a6ab142ecde026223f9df3db906522efa8c0c29f3e3588c",
+            ),
+            (
+                br"C:\Users\Example\project".as_slice(),
+                "e4d34c482b74221740f915f478e9c85d29e2d7d8f8fcd1a240eeef239b25768a",
+            ),
+            (
+                &[0, 1, 127, 128, 255],
+                "0150a92bb1212cd00516b65fde0704614760000963874fcbb11eaa734ee87809",
+            ),
+        ] {
+            assert_eq!(hash_bytes(bytes), expected);
+        }
+        let immutable = [
+            "--from=/home/example/.smolsandbox/artifacts/codex-devtools-0123456789ab.smolmachine",
+            "--mem=12288",
+            "--cpus=4",
+            "--volume=/home/example/.smolsandbox/codex-home:/root/.codex",
+            "--volume=/workspace/myrepo:/workspace/myrepo",
+            "--allow-host=registry.npmjs.org",
+            "--allow-host=api.openai.com",
+        ]
+        .map(str::to_owned);
+        assert_eq!(
+            hash_set(&immutable),
+            "250340614fbd7a971c189012869487cd6d7634f40cd3f3ede8ba0b740ed3713d"
         );
     }
     #[test]

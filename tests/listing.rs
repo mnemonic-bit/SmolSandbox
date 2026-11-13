@@ -152,7 +152,10 @@ fn native_path(path: &Path) -> PathBuf {
 }
 
 fn digest(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn success(output: Output) -> Output {

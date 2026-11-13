@@ -136,7 +136,10 @@ fn native_path(path: &Path) -> PathBuf {
     canonical
 }
 fn digest(value: &str) -> String {
-    format!("{:x}", Sha256::digest(value.as_bytes()))
+    Sha256::digest(value.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 fn assert_ok(out: &Output) {
     assert!(

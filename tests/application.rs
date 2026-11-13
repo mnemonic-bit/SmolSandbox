@@ -1111,7 +1111,12 @@ mod lifecycle {
     #[test]
     fn startup_has_independent_names_labels_order_arguments_and_exit_status() {
         use sha2::{Digest, Sha256};
-        let digest = |bytes: &[u8]| format!("{:x}", Sha256::digest(bytes));
+        let digest = |bytes: &[u8]| {
+            Sha256::digest(bytes)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        };
         let f = Fixture::new();
         f.configure("codex");
         let workspace = f

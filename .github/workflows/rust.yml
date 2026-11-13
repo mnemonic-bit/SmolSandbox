@@ -24,7 +24,7 @@ jobs:
             target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -37,7 +37,7 @@ jobs:
       - run: cargo build --locked --release --bin smolsandbox --target ${{ matrix.target }}
       - name: Validate without retained baseline or host script tools
         run: cargo run --locked --example check_baseline_independence --target ${{ matrix.target }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: smolsandbox-${{ matrix.target }}
           path: |
