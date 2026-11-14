@@ -110,7 +110,7 @@ fn load(path: &Path, pending: bool, machine: &Machine, hash: &str) -> Result<Loc
         .is_some_and(|version| version > 1)
     {
         bail!(
-            "unsupported port state format version in {}; upgrade smolsandbox before retrying",
+            "unsupported port state format version in {}; upgrade smolsbx before retrying",
             path.display()
         );
     }

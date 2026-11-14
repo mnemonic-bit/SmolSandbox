@@ -30,7 +30,7 @@ impl Fixture {
         }
     }
     fn command(&self) -> Command {
-        let mut c = Command::new(env!("CARGO_BIN_EXE_smolsandbox"));
+        let mut c = Command::new(env!("CARGO_BIN_EXE_smolsbx"));
         c.current_dir(&self.workspace)
             .env("HOME", &self.home)
             .env("USERPROFILE", &self.home)

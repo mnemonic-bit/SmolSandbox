@@ -2,7 +2,12 @@
 
 ## Status
 
-In progress
+Implemented
+
+Marked completed on 2026-11-13 at the user's request. See the
+[completion decision](feature-0014-validation.md#completion-decision-2026-11-13).
+The status change records the user's decision. Previous validation results
+and pending native and real SmolVM checks remain recorded separately.
 
 The runtime and CLI implementation is available. Local validation and pending
 native and real SmolVM checks are tracked in

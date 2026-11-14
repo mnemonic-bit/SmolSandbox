@@ -1,7 +1,8 @@
 # smolsandbox: operation and validation
 
 This is the authoritative operating reference for the Rust `smolsandbox`
-application. Start with the [README first-use sequence](README.md#first-use).
+application, invoked with `smolsbx`. Start with the
+[README first-use sequence](README.md#first-use).
 The application supports Claude, Codex, OpenCode, and Hermes Agent through
 complete user-owned Smolfile definitions and a separately installed SmolVM.
 
@@ -18,10 +19,10 @@ for Features 0004 and 0009 remain recorded in their validation records.
 Build the application from this checkout with a Rust toolchain:
 
 ```text
-cargo build --locked --release --bin smolsandbox
+cargo build --locked --release --bin smolsbx
 ```
 
-Copy `target/release/smolsandbox` (Windows: `smolsandbox.exe`) to a directory
+Copy `target/release/smolsbx` (Windows: `smolsbx.exe`) to a directory
 on `PATH`. The executable embeds every configuration template at compile
 time. Running the copied executable needs no checkout, adjacent resources,
 host Bash/Python, host harness installation, or Rust toolchain. Guest
@@ -50,12 +51,37 @@ real guest compatibility. Recorded native mocked results and real guest
 procedures have separate evidence requirements under
 [validation and cutover gates](#validation-and-cutover-gates).
 
+### Command migration
+
+Version `0.10.0` renames the command from `smolsandbox` to `smolsbx` and the
+Windows executable from `smolsandbox.exe` to `smolsbx.exe`. Update scripts
+and shell aliases to invoke `smolsbx`; subcommands and options keep their
+existing syntax. This breaking change provides no compatibility binary,
+wrapper, symlink, or second Cargo target named `smolsandbox`. Previously
+installed executables remain the user's responsibility; `smolsbx` neither
+finds nor removes those files.
+
+To install from this checkout instead of copying the release executable:
+
+```text
+cargo install --locked --path . --bin smolsbx
+```
+
+The Cargo package and library crate remain `smolsandbox`. User and repository
+`.smolsandbox` directories retain their names, including definitions,
+credentials, artifacts, caches, locks, and persistent harness homes. Keep
+using existing definitions and authentication state. The rename alone does
+not regenerate definitions, require authentication again, or recreate managed
+machines. Machine identity, policy revision, metadata, and template bytes
+remain unchanged. Existing installed commands can share those retained paths;
+the application does not migrate files to `.smolsbx`.
+
 ## Configuration and profiles
 
 Generate one complete definition without network access or SmolVM:
 
 ```text
-smolsandbox create-config --harness codex
+smolsbx create-config --harness codex
 ```
 
 The command accepts exactly `claude`, `codex`, `opencode`, and `hermes`.
@@ -71,10 +97,10 @@ and existing directory permissions are preserved for a custom destination.
 Configuration creation ignores `BASE_SMOLFILE` and repository discovery.
 
 ```text
-smolsandbox create-config --harness claude --smolfile claude.smlbx
-smolsandbox build --smolfile ./claude.smlbx /path/to/project
-smolsandbox login --smolfile ./claude.smlbx
-smolsandbox start --smolfile ./claude.smlbx /path/to/project
+smolsbx create-config --harness claude --smolfile claude.smlbx
+smolsbx build --smolfile ./claude.smlbx /path/to/project
+smolsbx login --smolfile ./claude.smlbx
+smolsbx start --smolfile ./claude.smlbx /path/to/project
 ```
 
 Inspect and edit the generated file. Preserve its single
@@ -106,8 +132,8 @@ lookup. `BASE_SMOLFILE` always has explicit-path semantics, even for a bare
 filename. The executable's directory is not a search path.
 
 ```text
-smolsandbox start --smolfile claude.smlbx /path/to/project
-smolsandbox build --smolfile ./configs/custom.smlbx /path/to/project
+smolsbx start --smolfile claude.smlbx /path/to/project
+smolsbx build --smolfile ./configs/custom.smlbx /path/to/project
 ```
 
 In the first example, `claude.smlbx` must already exist in the repository or
@@ -127,11 +153,11 @@ For the Feature 0016 Codex update, generate a separate file and compare it
 with the definition currently selected for the workspace:
 
 ```text
-smolsandbox create-config --harness codex --smolfile ./codex-0.169.0.smlbx
+smolsbx create-config --harness codex --smolfile ./codex-0.169.0.smlbx
 git diff --no-index ./codex-current.smlbx ./codex-0.169.0.smlbx
-smolsandbox build --smolfile ./codex-0.169.0.smlbx /path/to/project
-smolsandbox login --smolfile ./codex-0.169.0.smlbx
-smolsandbox start --smolfile ./codex-0.169.0.smlbx /path/to/project
+smolsbx build --smolfile ./codex-0.169.0.smlbx /path/to/project
+smolsbx login --smolfile ./codex-0.169.0.smlbx
+smolsbx start --smolfile ./codex-0.169.0.smlbx /path/to/project
 ```
 
 Replace `./codex-current.smlbx` with the existing selected definition.
@@ -182,7 +208,7 @@ The application uses these profile-specific commands and mounts:
 | OpenCode | `opencode` | `opencode auth login` | `/root/.local/share/opencode` |
 | Hermes Agent | `hermes` | `hermes setup` | `/root/.hermes` |
 
-Run `smolsandbox login` after `build` to execute the selected authentication
+Run `smolsbx login` after `build` to execute the selected authentication
 command. Login requires an existing current-generation login machine and
 never creates a missing one. Use the same `--smolfile` selection as the build.
 Only the selected harness's persistent home is mounted. Initial seeding copies
@@ -239,12 +265,12 @@ verbose mode exposes query stderr. `list --json` writes the same single JSON
 object to stdout in either mode, with no partial JSON on inventory failure.
 
 ```text
-smolsandbox build /path/to/project
-smolsandbox --verbose build /path/to/project
-smolsandbox build --verbose /path/to/project
-smolsandbox start /path/to/project --verbose
-smolsandbox list --all --json --verbose
-smolsandbox start /path/to/project -- --verbose
+smolsbx build /path/to/project
+smolsbx --verbose build /path/to/project
+smolsbx build --verbose /path/to/project
+smolsbx start /path/to/project --verbose
+smolsbx list --all --json --verbose
+smolsbx start /path/to/project -- --verbose
 ```
 
 Interactive shell, harness, and login sessions inherit stdin, stdout, and
@@ -261,10 +287,10 @@ Arguments after the first standalone `--` on `start` belong to the guest
 harness and retain their argument boundaries:
 
 ```text
-smolsandbox --help
-smolsandbox --version
-smolsandbox start --help
-smolsandbox start /path/to/project -- --help
+smolsbx --help
+smolsbx --version
+smolsbx start --help
+smolsbx start /path/to/project -- --help
 ```
 
 The third command displays application options; the fourth launches the guest
@@ -287,8 +313,8 @@ before or after the workspace, before the standalone `--`. A host is nonempty,
 contains no line breaks, and does not begin with `-`.
 
 ```text
-smolsandbox start --allow-host packages.example.com /path/to/project --allow-host downloads.example.com
-smolsandbox repair --check --allow-host packages.example.com --allow-host downloads.example.com /path/to/project
+smolsbx start --allow-host packages.example.com /path/to/project --allow-host downloads.example.com
+smolsbx repair --check --allow-host packages.example.com --allow-host downloads.example.com /path/to/project
 ```
 
 Repeat the same additions when inspecting or replacing that workspace
@@ -303,11 +329,11 @@ List all workspace generations, profiles, revisions, and configurations
 associated with the canonical current directory or an explicit workspace:
 
 ```text
-smolsandbox list
-smolsandbox list /path/to/project
-smolsandbox list --all
-smolsandbox list --all --json
-smolsandbox list --smolfile ./codex.smlbx --allow-host packages.example.com /path/to/project
+smolsbx list
+smolsbx list /path/to/project
+smolsbx list --all
+smolsbx list --all --json
+smolsbx list --smolfile ./codex.smlbx --allow-host packages.example.com /path/to/project
 ```
 
 `--all` adds other workspaces, shared builders and login machines, and
@@ -364,11 +390,11 @@ compare numerically, including leading zeros and values too large for native
 integers. Current and newer revisions remain protected unless `--all` is set.
 
 ```text
-smolsandbox remove --dry-run
-smolsandbox remove
-smolsandbox remove /path/to/project --all --force
-smolsandbox remove --global --all --force --dry-run
-smolsandbox remove --smolvm /path/to/smolvm /path/to/project
+smolsbx remove --dry-run
+smolsbx remove
+smolsbx remove /path/to/project --all --force
+smolsbx remove --global --all --force --dry-run
+smolsbx remove --smolvm /path/to/smolvm /path/to/project
 ```
 
 Workspace scope uses the canonical invocation directory or explicit WORKSPACE,
@@ -440,7 +466,7 @@ recovery handles removed machines; `purge` remains responsible for artifacts.
 Repeat `--port` on `start` to publish the same guest and host TCP port numbers:
 
 ```text
-smolsandbox start --port 3000 /path/to/project --port 5173 --port 9229
+smolsbx start --port 3000 /path/to/project --port 5173 --port 9229
 ```
 
 Ports are ASCII decimal integers from 1 through 65535. Duplicates and leading
@@ -470,9 +496,9 @@ than creating or deleting machines.
 Inspect candidates and then explicitly authorize replacement:
 
 ```text
-smolsandbox repair --check /path/to/project
-smolsandbox repair --replace-stale /path/to/project
-smolsandbox repair --replace-stale --force /path/to/project
+smolsbx repair --check /path/to/project
+smolsbx repair --replace-stale /path/to/project
+smolsbx repair --replace-stale --force /path/to/project
 ```
 
 `repair --check` is read-only and lock-free. Replacement prepares the current
@@ -507,11 +533,11 @@ Cleanup deletes managed guest disk state. Select the definition and scope
 before invoking a cleanup command:
 
 ```text
-smolsandbox clean --workspace /path/to/project
-smolsandbox clean
-smolsandbox purge
-smolsandbox purge --force
-smolsandbox purge --force-all
+smolsbx clean --workspace /path/to/project
+smolsbx clean
+smolsbx purge
+smolsbx purge --force
+smolsbx purge --force-all
 ```
 
 `clean --workspace` stops and deletes positively owned workspace machines for
@@ -638,7 +664,7 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo clippy --locked --features test-adapter --all-targets -- -D warnings
 cargo test --locked --all-targets
 cargo test --locked --features test-adapter --all-targets
-cargo build --locked --release --bin smolsandbox
+cargo build --locked --release --bin smolsbx
 cargo run --locked --example check_baseline_independence
 ```
 

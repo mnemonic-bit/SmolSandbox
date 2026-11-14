@@ -34,13 +34,13 @@ jobs:
       - run: cargo clippy --locked --features test-adapter --all-targets --target ${{ matrix.target }} -- -D warnings
       - run: cargo test --locked --all-targets --target ${{ matrix.target }}
       - run: cargo test --locked --features test-adapter --all-targets --target ${{ matrix.target }}
-      - run: cargo build --locked --release --bin smolsandbox --target ${{ matrix.target }}
+      - run: cargo build --locked --release --bin smolsbx --target ${{ matrix.target }}
       - name: Validate without retained baseline or host script tools
         run: cargo run --locked --example check_baseline_independence --target ${{ matrix.target }}
       - uses: actions/upload-artifact@v7.0.2
         with:
-          name: smolsandbox-${{ matrix.target }}
+          name: smolsbx-${{ matrix.target }}
           path: |
-            target/${{ matrix.target }}/release/smolsandbox
-            target/${{ matrix.target }}/release/smolsandbox.exe
+            target/${{ matrix.target }}/release/smolsbx
+            target/${{ matrix.target }}/release/smolsbx.exe
           if-no-files-found: error

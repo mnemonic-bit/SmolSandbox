@@ -1,7 +1,7 @@
 # Feature 0010 validation record
 
-Use the [2026-11-04 source-removal audit](#source-removal-and-documentation-audit-2026-11-04)
-for current cutover status. Earlier sections retain their dated observations;
+Use the [2026-11-13 completion decision](#completion-decision-2026-11-13)
+for current feature status. Earlier sections retain their dated observations;
 statements that `src-old/` remains present describe the source tested then.
 
 ## Implementation and baseline
@@ -484,3 +484,67 @@ not durable CI artifacts. [Bug 0003](../BUGS/bug-0003-merged-provisioning-test-e
 records the correction and acceptance results. AC-01 through AC-04 passed
 locally. AC-05 remains `not_run`; bug resolution and final Feature 0010
 cutover acceptance remain pending the required native evidence.
+
+## Completion decision: 2026-11-13
+
+Feature status: `Implemented`. The user requested that Feature 0010 be
+marked completed. This decision supersedes earlier `In progress` status
+statements and instructions to keep the feature open in this record and
+the specification.
+
+The decision was recorded on source revision
+`5eeed20ad571f7e772185a67eef1e4cad5e15e1b` with documentation changes only.
+The software version remains unchanged. Previous observations, acceptance
+results, source revisions, and pending native and real SmolVM checks are
+preserved. The user supplied no new CI or guest results with the completion
+request; this status change does not mark those checks as `passed` or resolve
+acceptance items belonging to other features or bugs.
+
+## Feature 0014 completion decision: 2026-11-13
+
+Feature 0014 is marked `Implemented` at the user's request. Its
+[completion decision](feature-0014-validation.md#completion-decision-2026-11-13)
+preserves the earlier local validation and pending native and real SmolVM
+checks. No new execution results accompany the status change. Feature 0010
+retains its separately recorded `Implemented` status.
+
+## Feature 0015 command rename verification: 2026-11-13
+
+The command rename is implemented locally on source revision
+`5eeed20ad571f7e772185a67eef1e4cad5e15e1b` plus the Feature 0015 changes.
+The package version is `1.0.0`, the production command is `smolsbx`, and the
+package/library remain `smolsandbox`. The
+[Feature 0015 validation record](feature-0015-validation.md) identifies the
+tested software snapshot, commands, exit codes, and compatibility inputs.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Formatting and both Clippy configurations | passed | All three required commands exited 0 on native `x86_64-unknown-linux-gnu`, Rust/Cargo `1.100.0` |
+| Both complete Rust test configurations | passed | Exit 0; 118 default tests and 185 tests with `test-adapter` |
+| Release build, fresh release output, and temporary installation | passed | Exit 0; fresh outputs contain `smolsbx` and no old-name executable; direct version output is exactly `smolsbx 1.0.0\n` |
+| Baseline-independent source and empty-`PATH` execution | passed | `cargo run --locked --example check_baseline_independence` exited 0; nine compiled test executables per configuration passed |
+| Copied release executable | passed | All four profiles generated definitions matching embedded templates with empty `PATH` and no adjacent resources |
+| Existing-state compatibility comparison | passed | Baseline `smolsandbox 0.9.1` and renamed `smolsbx 1.0.0` reused the same verified managed workspace with equal identities and runtime calls; definition, credentials, artifact, caches, locks, and port state were preserved |
+| Template and machine policy preservation | passed | All four template byte hashes match the baseline; machine policy revision remains `5` |
+| Four native CI jobs and renamed uploaded artifacts | not_run | Workflow definitions were inspected; CI execution and artifact uploads for the changed source have not been observed |
+| Real SmolVM provisioning, terminal, and authentication checks | not_run | No new real guest evidence was collected; prior native/profile/platform requirements remain recorded above |
+
+Feature 0015 remains `In progress` pending its required native CI artifact
+evidence. This audit preserves earlier observations, their source revisions,
+and the user-directed Feature 0010 and 0014 `Implemented` decisions.
+
+## Feature 0015 versioning decision: 2026-11-14
+
+The user requested a feature version bump for the command rename because
+the repository has no other users. Feature 0015 now selects `0.10.0`
+relative to its `0.9.1` implementation baseline. This decision supersedes
+the original major-version requirement; the `1.0.0` observations above
+retain their original source and validation meaning.
+
+On source revision `792ae2d6b101c9cb8d581db6225f2479669613bc` plus the
+pending changes, Cargo metadata and both direct debug/release `--version`
+checks passed. The executables reported exactly `smolsbx 0.10.0\n`.
+The [dated Feature 0015 audit](feature-0015-validation.md#feature-version-decision-2026-11-14)
+records the new software snapshot and regression results. Native CI artifact
+verification and real guest evidence remain pending. Previous Feature 0010
+and 0014 status decisions remain unchanged.

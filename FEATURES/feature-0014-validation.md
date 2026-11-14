@@ -1,5 +1,9 @@
 # Feature 0014 validation
 
+Current feature status: `Implemented`. See the
+[2026-11-13 completion decision](#completion-decision-2026-11-13).
+Earlier sections preserve observations from their recorded source revisions.
+
 ## Tested source and scope
 
 Date: 2026-11-04. Package: `smolsandbox 0.7.0`. Native target:
@@ -138,3 +142,20 @@ Windows console observations and CI run URLs when available.
 
 `src-old/` remains present. Baseline-independent validation does not establish
 physical removal or complete the pending Feature 0010 cutover gates.
+
+## Completion decision: 2026-11-13
+
+Feature status: `Implemented`. The user requested that Feature 0014 be
+marked completed. The decision was recorded on source revision
+`5eeed20ad571f7e772185a67eef1e4cad5e15e1b` with documentation changes only;
+the software version remains unchanged.
+
+Previous observations, acceptance results, and source revisions are
+preserved. AC-06 remains `inconclusive` in the recorded validation, and
+the pending native and real runtime checks remain `not_run`. The user
+supplied no new CI or guest results with the completion request.
+
+Feature 0010 was separately marked `Implemented` at the user's request on
+2026-11-13. Its [completion decision](feature-0010-validation.md#completion-decision-2026-11-13)
+and dated audits supersede the earlier feature-status and baseline-presence
+statements above without changing those historical observations.

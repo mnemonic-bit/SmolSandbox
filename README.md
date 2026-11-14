@@ -3,7 +3,8 @@
 [![Version](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmnemonic-bit%2FAI-Sandbox%2Fdevelop%2FCargo.toml&query=%24.package.version&label=version&prefix=v&color=blue)](https://github.com/mnemonic-bit/AI-Sandbox/blob/develop/Cargo.toml)
 [![Build and tests (develop)](https://github.com/mnemonic-bit/AI-Sandbox/actions/workflows/rust.yml/badge.svg?branch=develop&event=push)](https://github.com/mnemonic-bit/AI-Sandbox/actions/workflows/rust.yml?query=branch%3Adevelop+event%3Apush)
 
-Run Claude, Codex, OpenCode, or Hermes Agent in a persistent SmolVM sandbox.
+Run Claude, Codex, OpenCode, or Hermes Agent in a persistent SmolVM sandbox
+with `smolsbx`.
 The Rust executable embeds the four configuration templates. Workspace files
 are mounted into the guest, while each harness keeps its own persistent state.
 
@@ -12,13 +13,24 @@ are mounted into the guest, while each harness keeps its own persistent state.
 Building from this checkout requires a Rust toolchain:
 
 ```text
-cargo build --locked --release --bin smolsandbox
+cargo build --locked --release --bin smolsbx
 ```
 
-Copy `target/release/smolsandbox` to a directory on `PATH`. On Windows, copy
-`target/release/smolsandbox.exe`. A copied executable needs no checkout,
+Copy `target/release/smolsbx` to a directory on `PATH`. On Windows, copy
+`target/release/smolsbx.exe`. A copied executable needs no checkout,
 adjacent templates, host Bash/Python, host harness installation, or Rust
 toolchain. Guest provisioning still uses the commands in the selected template.
+
+Alternatively, install the command from this checkout:
+
+```text
+cargo install --locked --path . --bin smolsbx
+```
+
+If you previously used the `smolsandbox` command, update scripts and shell
+aliases to invoke `smolsbx`. Existing `.smolsandbox` definitions, credentials,
+and machines remain available. See [command migration](RUST-APPLICATION.md#command-migration)
+for the retained state paths and installation behavior.
 
 Install [SmolVM](https://github.com/smol-machines/smolvm#install) separately.
 The application does not install or bundle SmolVM. The configured release
@@ -34,10 +46,10 @@ Generate a default definition, build its guest, authenticate, and launch the
 selected harness in a project:
 
 ```text
-smolsandbox create-config --harness codex
-smolsandbox build /path/to/project
-smolsandbox login
-smolsandbox start /path/to/project
+smolsbx create-config --harness codex
+smolsbx build /path/to/project
+smolsbx login
+smolsbx start /path/to/project
 ```
 
 Choose `claude`, `codex`, `opencode`, or `hermes` with `--harness`. Generation
@@ -49,10 +61,10 @@ To keep another profile in a named file, use `--smolfile` for creation and
 selection:
 
 ```text
-smolsandbox create-config --harness claude --smolfile claude.smlbx
-smolsandbox build --smolfile ./claude.smlbx /path/to/project
-smolsandbox login --smolfile ./claude.smlbx
-smolsandbox start --smolfile ./claude.smlbx /path/to/project
+smolsbx create-config --harness claude --smolfile claude.smlbx
+smolsbx build --smolfile ./claude.smlbx /path/to/project
+smolsbx login --smolfile ./claude.smlbx
+smolsbx start --smolfile ./claude.smlbx /path/to/project
 ```
 
 For `create-config`, a relative destination is relative to the current
@@ -67,14 +79,14 @@ precedence, whole-file selection, and explicit template adoption.
 Select a separately installed runtime with `--smolvm`:
 
 ```text
-smolsandbox build --smolvm /path/to/smolvm /path/to/project
+smolsbx build --smolvm /path/to/smolvm /path/to/project
 ```
 
 Repeat `--allow-host` to extend the selected definition's network policy.
 Repeat `--port` to publish guest TCP services on the same host loopback ports:
 
 ```text
-smolsandbox start --allow-host packages.example.com --allow-host downloads.example.com --port 3000 --port 5173 /path/to/project
+smolsbx start --allow-host packages.example.com --allow-host downloads.example.com --port 3000 --port 5173 /path/to/project
 ```
 
 Each start requests an exact port set. Omitting every `--port` clears previous
@@ -87,10 +99,10 @@ Application help is available without configuration or SmolVM. Arguments
 after `--` are passed to the guest harness:
 
 ```text
-smolsandbox --help
-smolsandbox start --help
-smolsandbox --version
-smolsandbox start /path/to/project -- --help
+smolsbx --help
+smolsbx start --help
+smolsbx --version
+smolsbx start /path/to/project -- --help
 ```
 
 Routine SmolVM management and provisioning output is suppressed by default.
@@ -99,10 +111,10 @@ before the command or among its application arguments to stream runtime
 stdout and stderr live to application stderr:
 
 ```text
-smolsandbox build /path/to/project
-smolsandbox --verbose build /path/to/project
-smolsandbox start /path/to/project --verbose
-smolsandbox list --all --json --verbose
+smolsbx build /path/to/project
+smolsbx --verbose build /path/to/project
+smolsbx start /path/to/project --verbose
+smolsbx list --all --json --verbose
 ```
 
 Interactive shell, harness, and login sessions always inherit terminal input
@@ -120,10 +132,10 @@ List machines associated with the current directory, or inspect every managed
 machine including shared builders and login machines:
 
 ```text
-smolsandbox list
-smolsandbox list /path/to/project
-smolsandbox list --all
-smolsandbox list --all --json
+smolsbx list
+smolsbx list /path/to/project
+smolsbx list --all
+smolsbx list --all --json
 ```
 
 Listing compares each machine's identity with the current invocation and
@@ -136,10 +148,10 @@ state. Assessments do not authorize deletion or guarantee a successful start.
 Remove older-policy workspace machines for the canonical current directory:
 
 ```text
-smolsandbox remove --dry-run
-smolsandbox remove
-smolsandbox remove /path/to/project --all --force
-smolsandbox remove --global --all --force --dry-run
+smolsbx remove --dry-run
+smolsbx remove
+smolsbx remove /path/to/project --all --force
+smolsbx remove --global --all --force --dry-run
 ```
 
 `remove` deletes guest writable state without a confirmation prompt. Stale
@@ -161,8 +173,8 @@ for validation, concurrency, and partial-failure behavior.
 Inspect stale machines before authorizing replacement:
 
 ```text
-smolsandbox repair --check /path/to/project
-smolsandbox repair --replace-stale /path/to/project
+smolsbx repair --check /path/to/project
+smolsbx repair --replace-stale /path/to/project
 ```
 
 Replacement verifies the desired machine before deleting eligible stale
@@ -179,11 +191,11 @@ Definitions and persistent harness state survive these commands. Review the
 [cleanup and purge rules](RUST-APPLICATION.md#cleanup-and-purge) before use.
 
 ```text
-smolsandbox clean --workspace /path/to/project
-smolsandbox clean
-smolsandbox purge
-smolsandbox purge --force
-smolsandbox purge --force-all
+smolsbx clean --workspace /path/to/project
+smolsbx clean
+smolsbx purge
+smolsbx purge --force
+smolsbx purge --force-all
 ```
 
 ## Operating reference and project status
@@ -199,7 +211,7 @@ Rust uses `~/.smolsandbox/` and neither imports nor removes the legacy
 repository-local `artifacts/` or `.smolvm/` state.
 
 Features 0004 and 0009 retain their recorded `Implemented` status following
-the user's CI confirmation. Feature 0010's documentation and source-removal
-work is complete; final acceptance still requires native and real guest
-validation recorded in the
-[Feature 0010 validation record](FEATURES/feature-0010-validation.md#source-removal-and-documentation-audit-2026-11-04).
+the user's CI confirmation. Feature 0010 is marked `Implemented` at the user's
+request on 2026-11-13. Its
+[completion decision](FEATURES/feature-0010-validation.md#completion-decision-2026-11-13)
+preserves previous validation results and pending native and real guest checks.

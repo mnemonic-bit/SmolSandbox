@@ -2,10 +2,12 @@
 
 ## Status
 
-Proposed
+In progress
 
-This document specifies implementation work. The command has not been renamed
-by adding this specification. Implementation checks are `not_run`.
+The command rename is implemented locally. Local checks and the pending
+native CI artifact verification are recorded in
+[Feature 0015 validation](feature-0015-validation.md). AC-07 remains
+`not_run`; the feature is not marked `Implemented`.
 
 ## Summary
 
@@ -101,11 +103,14 @@ Update `.github/workflows/rust.yml` to build the renamed target and upload
 four native targets, both test configurations, and `if-no-files-found: error`.
 Distributed builds must continue to exclude `test-adapter`.
 
-Removing the old command is a breaking interface change. During implementation,
-increment the major version in `Cargo.toml` and the matching `smolsandbox`
-package entry in `Cargo.lock`, resetting minor and patch components to zero.
-From the observed `0.8.1` baseline, the resulting version is `1.0.0`. Adding
-this specification alone leaves both version entries unchanged.
+Removing the old command is a breaking interface change. On 2026-11-14, the
+user requested a feature version bump because the repository has no other
+users. This decision supersedes the original major-version requirement and
+the general breaking-change versioning rule for Feature 0015 only. Increment
+the minor version in `Cargo.toml` and the matching `smolsandbox` package entry
+in `Cargo.lock`, resetting the patch component to zero. From the implementation
+baseline `0.9.1`, the resulting version is `0.10.0`. Preserve the earlier
+`1.0.0` validation observations as historical evidence.
 
 ### CLI identity and command behavior
 
@@ -175,7 +180,7 @@ unrelated cutover gates.
 
 | ID | Required observable result | Verification |
 | --- | --- | --- |
-| AC-01 | Cargo metadata exposes production target `smolsbx`, package and library `smolsandbox`, and no binary target `smolsandbox`. The manifest and lockfile contain the required matching major version bump. | Inspect `cargo metadata --locked --no-deps --format-version 1`, `Cargo.toml`, and `Cargo.lock`. |
+| AC-01 | Cargo metadata exposes production target `smolsbx`, package and library `smolsandbox`, and no binary target `smolsandbox`. The manifest and lockfile both select the user-requested feature version `0.10.0`. | Inspect `cargo metadata --locked --no-deps --format-version 1`, `Cargo.toml`, and `Cargo.lock`. |
 | AC-02 | A fresh release build and temporary local installation produce the platform's `smolsbx` executable and no old-name production executable. | Build with a fresh `--target-dir`; install with a temporary `--root`; execute each resulting binary directly with `--version`. |
 | AC-03 | Top-level and all subcommand help, version output, and representative usage errors identify `smolsbx`; their offline, exit-status, and state-preservation contracts hold. | Update and run the CLI contract checks in `tests/cli_contract.rs`, including executable-suffix and exact version assertions. |
 | AC-04 | Application command recommendations invoke `smolsbx`. Existing parsing, verbose output, guest forwarding, and lifecycle behavior remain unchanged. | Update relevant output assertions; run the existing CLI and application regressions in both feature configurations. |

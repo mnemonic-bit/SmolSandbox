@@ -1,6 +1,8 @@
 # smolsandbox lifecycle
 
-This context defines lifecycle terms for the Rust `smolsandbox` application.
+This context defines lifecycle terms for the Rust `smolsandbox` application,
+invoked with `smolsbx`. The Cargo package and library crate remain
+`smolsandbox`; application state remains under `.smolsandbox`.
 The [operating reference](RUST-APPLICATION.md) contains command and state rules.
 The former shell/Python workflow was removed in commit
 `28087885c2b84077c62ee92c5560a2cab1b68997` and remains available in Git history.
