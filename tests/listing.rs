@@ -40,7 +40,7 @@ impl ListingFixture {
     }
 
     fn command(&self) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_smolsandbox"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_smolsbx"));
         command
             .current_dir(&self.workspace)
             .env("HOME", &self.home)

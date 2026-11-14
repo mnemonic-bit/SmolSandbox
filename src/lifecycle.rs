@@ -395,7 +395,7 @@ impl<'a> Lifecycle<'a> {
         }
         if !options.replace_stale {
             if desired.is_none() && (!stale.is_empty() || !ambiguous.is_empty()) {
-                bail!("no machine matches the current sandbox definition; run smolsandbox repair --check, then repair --replace-stale with the same workspace and additional hosts; no machines were created or deleted");
+                bail!("no machine matches the current sandbox definition; run smolsbx repair --check, then repair --replace-stale with the same workspace and additional hosts; no machines were created or deleted");
             }
             if let Some(desired) = desired {
                 if options.command == Command::Start {
@@ -940,7 +940,7 @@ pub fn run(options: &Options) -> Result<i32> {
                     eprintln!("WARNING: build completed; conservative purge failed: {error:#}");
                 }
                 println!(
-                    "Ready: {}\nNext: smolsandbox login\n      smolsandbox start {}",
+                    "Ready: {}\nNext: smolsbx login\n      smolsbx start {}",
                     lifecycle.artifact.display(),
                     config.workspace.display()
                 );
@@ -962,7 +962,7 @@ pub fn run(options: &Options) -> Result<i32> {
                 .find(|machine| machine.name == lifecycle.login)
                 .with_context(|| {
                     format!(
-                        "login machine {} does not exist; run smolsandbox build first",
+                        "login machine {} does not exist; run smolsbx build first",
                         lifecycle.login
                     )
                 })?;

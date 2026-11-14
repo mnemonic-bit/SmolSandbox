@@ -1,6 +1,6 @@
 [package]
 name = "smolsandbox"
-version = "0.9.1"
+version = "0.10.0"
 edition = "2021"
 description = "Persistent coding-agent sandboxes through SmolVM"
 
@@ -21,7 +21,7 @@ tempfile = "3"
 toml = "1.2"
 
 [[bin]]
-name = "smolsandbox"
+name = "smolsbx"
 path = "src/main.rs"
 
 [[bin]]

@@ -25,7 +25,7 @@ impl OfflineInvocation {
     }
 
     fn run(&self, arguments: &[&str]) -> Output {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_smolsandbox"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_smolsbx"));
         command
             .env_clear()
             .args(arguments)
@@ -67,7 +67,7 @@ fn assert_usage_identity(output: &str, subcommand: Option<&str>) {
         .find_map(|line| line.strip_prefix("Usage: "))
         .unwrap_or_else(|| panic!("missing usage: {output}"));
     let mut words = usage.split_whitespace();
-    assert_eq!(words.next(), Some("smolsandbox"), "{output}");
+    assert_eq!(words.next(), Some("smolsbx"), "{output}");
     if let Some(subcommand) = subcommand {
         assert_eq!(words.next(), Some(subcommand), "{output}");
     }
@@ -92,14 +92,37 @@ fn snapshot(root: &Path) -> BTreeMap<PathBuf, Option<Vec<u8>>> {
 }
 
 fn parse(arguments: &[String]) -> Options {
-    Cli::try_parse_from(std::iter::once("smolsandbox").chain(arguments.iter().map(String::as_str)))
+    Cli::try_parse_from(std::iter::once("smolsbx").chain(arguments.iter().map(String::as_str)))
         .unwrap()
         .into_options()
 }
 
 #[test]
 fn usage_identity_is_independent_of_executable_suffix() {
-    for executable in ["smolsandbox", "smolsandbox.exe"] {
+    for executable in ["smolsbx", "smolsbx.exe"] {
+        for flag in ["--version", "-V"] {
+            let error = Cli::try_parse_from([executable, flag]).unwrap_err();
+            assert_eq!(error.kind(), clap::error::ErrorKind::DisplayVersion);
+            assert_eq!(
+                error.to_string(),
+                format!("smolsbx {}\n", env!("CARGO_PKG_VERSION")),
+            );
+        }
+        for subcommand in [
+            "create-config",
+            "build",
+            "start",
+            "list",
+            "remove",
+            "login",
+            "repair",
+            "clean",
+            "purge",
+        ] {
+            let error = Cli::try_parse_from([executable, subcommand, "--help"]).unwrap_err();
+            assert_eq!(error.kind(), clap::error::ErrorKind::DisplayHelp);
+            assert_usage_identity(&error.to_string(), Some(subcommand));
+        }
         for (arguments, subcommand) in [
             (vec!["--help"], None),
             (vec!["start", "--help"], Some("start")),
@@ -389,7 +412,7 @@ fn version_reports_manifest_identity_without_tools_configuration_or_mutation() {
             assert!(output.stderr.is_empty(), "{output:?}");
             assert_eq!(
                 String::from_utf8(output.stdout).unwrap(),
-                format!("smolsandbox {}\n", env!("CARGO_PKG_VERSION")),
+                format!("smolsbx {}\n", env!("CARGO_PKG_VERSION")),
             );
         }
     }
@@ -588,7 +611,7 @@ fn verbose_create_config_is_offline_and_preserves_template_bytes() {
     for verbose in [false, true] {
         let root = tempfile::tempdir().unwrap();
         let definition = root.path().join("codex.smlbx");
-        let mut command = Command::new(env!("CARGO_BIN_EXE_smolsandbox"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_smolsbx"));
         command
             .env_clear()
             .env("PATH", "")

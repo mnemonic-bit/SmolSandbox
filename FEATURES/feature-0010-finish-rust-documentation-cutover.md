@@ -2,15 +2,21 @@
 
 ## Status
 
-In progress — documentation and source removal complete; runtime evidence pending
+Implemented
+
+Marked completed on 2026-11-13 at the user's request. See the
+[completion decision](feature-0010-validation.md#completion-decision-2026-11-13).
+The status change records the user's decision; it does not establish new
+native execution or real SmolVM results. Previously recorded pending checks
+remain pending in the validation record.
 
 The Rust application is the active user and maintenance interface. Commit
 `28087885c2b84077c62ee92c5560a2cab1b68997` removed the shell/Python baseline
 and fixtures. The 2026-11-04 documentation audit corrects references to the
-deleted archive and records removal as passed. Final acceptance still requires
-native execution evidence and real SmolVM checks for every required profile
-and release target, including authentication and terminal behavior. See the
-[latest validation audit](feature-0010-validation.md#source-removal-and-documentation-audit-2026-11-04).
+deleted archive and records removal as passed. Native execution evidence and
+real SmolVM checks for every required profile and release target, including
+authentication and terminal behavior, remain outstanding in the
+[validation record](feature-0010-validation.md).
 Feature 0004's prior user-directed completion marker remains unchanged.
 
 ## Summary

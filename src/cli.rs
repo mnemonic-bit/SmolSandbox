@@ -55,7 +55,8 @@ impl Options {
 
 #[derive(Debug, Parser)]
 #[command(
-    bin_name = "smolsandbox",
+    name = "smolsbx",
+    bin_name = "smolsbx",
     version,
     about = "Run a coding-agent harness in a persistent SmolVM sandbox"
 )]
@@ -376,15 +377,7 @@ mod tests {
     #[test]
     fn delimiter_preserves_harness_arguments() {
         let options = Cli::try_parse_from([
-            "smolsandbox",
-            "start",
-            "--port",
-            "00080",
-            ".",
-            "--",
-            "--help",
-            "a b",
-            "",
+            "smolsbx", "start", "--port", "00080", ".", "--", "--help", "a b", "",
         ])
         .unwrap()
         .into_options();
@@ -409,7 +402,7 @@ mod tests {
             vec!["clean", "somewhere"],
         ] {
             assert!(
-                Cli::try_parse_from(std::iter::once("smolsandbox").chain(args.clone())).is_err(),
+                Cli::try_parse_from(std::iter::once("smolsbx").chain(args.clone())).is_err(),
                 "{args:?}"
             );
         }

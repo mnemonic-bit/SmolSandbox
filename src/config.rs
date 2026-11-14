@@ -83,11 +83,11 @@ impl Profile {
     pub fn authentication_hint(self) -> &'static str {
         match self {
             Self::Claude => {
-                "Run smolsandbox login for Claude authentication, or use /login inside Claude."
+                "Run smolsbx login for Claude authentication, or use /login inside Claude."
             }
-            Self::Codex => "Run smolsandbox login for Codex device authentication.",
-            Self::OpenCode => "Run smolsandbox login to select and authenticate a provider.",
-            Self::Hermes => "Run smolsandbox login to configure Hermes Agent with hermes setup.",
+            Self::Codex => "Run smolsbx login for Codex device authentication.",
+            Self::OpenCode => "Run smolsbx login to select and authenticate a provider.",
+            Self::Hermes => "Run smolsbx login to configure Hermes Agent with hermes setup.",
         }
     }
     pub fn login_hosts(self) -> Vec<&'static str> {
@@ -158,7 +158,7 @@ impl Definition {
             .map(str::trim)
             .collect();
         if profiles.len() != 1 {
-            bail!("selected Smolfile {} requires exactly one '# codex-sandbox-harness: <profile>' metadata line; generate an example with smolsandbox create-config --harness codex",path.display());
+            bail!("selected Smolfile {} requires exactly one '# codex-sandbox-harness: <profile>' metadata line; generate an example with smolsbx create-config --harness codex",path.display());
         }
         let profile = Profile::parse(profiles[0])
             .with_context(|| format!("invalid selected Smolfile {}", path.display()))?;
@@ -401,7 +401,7 @@ fn find_definition(
     if allow_missing_default && flag.is_none() && base.is_none_or(|value| value.is_empty()) {
         return Ok(None);
     }
-    bail!("Smolfile not found; searched: {}. Run smolsandbox create-config --harness codex, or select an existing file with --smolfile",candidates.iter().map(|p|p.display().to_string()).collect::<Vec<_>>().join(", "))
+    bail!("Smolfile not found; searched: {}. Run smolsbx create-config --harness codex, or select an existing file with --smolfile",candidates.iter().map(|p|p.display().to_string()).collect::<Vec<_>>().join(", "))
 }
 pub fn create_config(harness: &str, file: Option<&Path>) -> Result<PathBuf> {
     let profile = Profile::parse(harness)?;
@@ -423,7 +423,7 @@ pub fn create_config(harness: &str, file: Option<&Path>) -> Result<PathBuf> {
     if file.is_some() {
         println!("Select this path with --smolfile when running build or start.");
     } else {
-        println!("Next: smolsandbox build\nThen: smolsandbox start");
+        println!("Next: smolsbx build\nThen: smolsbx start");
     }
     Ok(destination)
 }

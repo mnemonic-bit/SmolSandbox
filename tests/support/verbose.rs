@@ -78,7 +78,7 @@ fn management_output_policy_covers_build_seed_ports_and_cleanup() {
         f.configure("codex");
         let build = command(&f, verbose).arg("build").output().unwrap();
         assert_ok(&build);
-        assert!(String::from_utf8_lossy(&build.stdout).contains("Next: smolsandbox login"));
+        assert!(String::from_utf8_lossy(&build.stdout).contains("Next: smolsbx login"));
         let start = command(&f, verbose)
             .args(["start", "--port", "3000"])
             .output()

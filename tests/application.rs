@@ -33,7 +33,7 @@ impl Fixture {
         }
     }
     fn command(&self) -> Command {
-        let mut c = Command::new(env!("CARGO_BIN_EXE_smolsandbox"));
+        let mut c = Command::new(env!("CARGO_BIN_EXE_smolsbx"));
         c.current_dir(&self.workspace)
             .env("HOME", &self.home)
             .env("USERPROFILE", &self.home)
@@ -180,7 +180,7 @@ fn every_template_is_offline_and_no_clobber() {
             .unwrap();
         assert_ok(&output);
         assert!(String::from_utf8_lossy(&output.stdout)
-            .contains("Next: smolsandbox build\nThen: smolsandbox start"));
+            .contains("Next: smolsbx build\nThen: smolsbx start"));
         let before = fs::read(f.definition()).unwrap();
         let parsed: toml::Value = toml::from_str(std::str::from_utf8(&before).unwrap()).unwrap();
         assert!(parsed.is_table());
@@ -335,7 +335,7 @@ fn copied_binary_generates_configuration_without_adjacent_resources() {
         .root
         .path()
         .join(format!("relocated{}", std::env::consts::EXE_SUFFIX));
-    copy_executable(Path::new(env!("CARGO_BIN_EXE_smolsandbox")), &destination);
+    copy_executable(Path::new(env!("CARGO_BIN_EXE_smolsbx")), &destination);
     let mut command = Command::new(destination);
     command
         .env("HOME", &f.home)
@@ -372,7 +372,7 @@ fn invalid_and_missing_definitions_fail_without_lifecycle_mutation() {
     let missing = f.run(&["build"]);
     assert!(!missing.status.success());
     assert!(String::from_utf8_lossy(&missing.stderr)
-        .contains("Run smolsandbox create-config --harness codex"));
+        .contains("Run smolsbx create-config --harness codex"));
     f.configure("codex");
     for definition in [
         "garbage",
@@ -772,7 +772,7 @@ mod lifecycle {
         let refused = f.run(&["start"]);
         assert!(!refused.status.success());
         assert!(String::from_utf8_lossy(&refused.stderr).contains(&stale));
-        assert!(String::from_utf8_lossy(&refused.stderr).contains("run smolsandbox repair --check"));
+        assert!(String::from_utf8_lossy(&refused.stderr).contains("run smolsbx repair --check"));
         assert!(!f.log().contains("machine create"));
         f.clear_log();
         assert_ok(&f.run(&["repair", "--replace-stale"]));
@@ -1034,15 +1034,13 @@ mod lifecycle {
             f.configure(harness);
             let missing = f.run(&["login"]);
             assert!(!missing.status.success());
-            assert!(
-                String::from_utf8_lossy(&missing.stderr).contains("run smolsandbox build first")
-            );
+            assert!(String::from_utf8_lossy(&missing.stderr).contains("run smolsbx build first"));
             assert!(!f.log().contains("machine create --name"));
             let built = f.run(&["build"]);
             assert_ok(&built);
             let stdout = String::from_utf8_lossy(&built.stdout);
-            assert!(stdout.contains("Next: smolsandbox login"));
-            assert!(stdout.contains("smolsandbox start "));
+            assert!(stdout.contains("Next: smolsbx login"));
+            assert!(stdout.contains("smolsbx start "));
             f.clear_log();
             assert_ok(&f.run(&["login"]));
             let expected = match harness {

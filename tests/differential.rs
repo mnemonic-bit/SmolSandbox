@@ -271,7 +271,7 @@ fn port_publication_commit_and_interrupted_recovery_have_fixed_expectations() {
 }
 
 #[test]
-fn future_port_state_preserves_compatibility_path_and_recommends_smolsandbox_upgrade() {
+fn future_port_state_preserves_compatibility_path_and_recommends_smolsbx_upgrade() {
     let root = tempfile::tempdir().unwrap();
     let directory = root.path().join("codex-sandbox-existing-state");
     let future = json!({"version":2,"future_field":"preserve"});
@@ -287,30 +287,30 @@ fn future_port_state_preserves_compatibility_path_and_recommends_smolsandbox_upg
     .unwrap_err()
     .to_string();
     assert!(error.contains("codex-sandbox-existing-state"));
-    assert!(error.contains("upgrade smolsandbox before retrying"));
+    assert!(error.contains("upgrade smolsbx before retrying"));
     assert_eq!(read_state(&directory), before);
 }
 
 #[test]
-fn authentication_guidance_uses_smolsandbox_for_every_profile() {
+fn authentication_guidance_uses_smolsbx_for_every_profile() {
     use smolsandbox::config::Profile;
 
     for (profile, expected) in [
         (
             Profile::Claude,
-            "Run smolsandbox login for Claude authentication, or use /login inside Claude.",
+            "Run smolsbx login for Claude authentication, or use /login inside Claude.",
         ),
         (
             Profile::Codex,
-            "Run smolsandbox login for Codex device authentication.",
+            "Run smolsbx login for Codex device authentication.",
         ),
         (
             Profile::OpenCode,
-            "Run smolsandbox login to select and authenticate a provider.",
+            "Run smolsbx login to select and authenticate a provider.",
         ),
         (
             Profile::Hermes,
-            "Run smolsandbox login to configure Hermes Agent with hermes setup.",
+            "Run smolsbx login to configure Hermes Agent with hermes setup.",
         ),
     ] {
         assert_eq!(profile.authentication_hint(), expected);
