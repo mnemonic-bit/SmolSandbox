@@ -186,7 +186,7 @@ The host remains `x86_64-unknown-linux-gnu` with Rust/Cargo `1.100.0`.
 | `cargo test --locked --all-targets` | passed | Exit 0; 118 tests |
 | `cargo test --locked --features test-adapter --all-targets` | passed | Exit 0; 185 tests |
 | `cargo build --locked --release --bin smolsbx` | passed | Exit 0; default features |
-| `cargo run --locked --example check_baseline_independence` | not_run | Execution is still running |
+| `cargo run --locked --example check_baseline_independence` | passed | Exit 0; isolated checks and nine compiled test executables per configuration with empty `PATH` |
 | Debug and release executable version output | passed | Both direct `--version` invocations exited 0 with exactly `smolsbx 0.10.0\n` and empty stderr |
 | Independent version-change review | passed | No findings; all 79 dependency package entries remain unchanged |
 

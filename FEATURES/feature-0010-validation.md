@@ -548,3 +548,8 @@ The [dated Feature 0015 audit](feature-0015-validation.md#feature-version-decisi
 records the new software snapshot and regression results. Native CI artifact
 verification and real guest evidence remain pending. Previous Feature 0010
 and 0014 status decisions remain unchanged.
+
+All seven required Rust commands passed for `0.10.0`, including both full
+test configurations and baseline independence. The default suite passed 118
+tests; the adapter suite passed 185 tests. The baseline-independence command
+passed nine compiled test executables per configuration with empty `PATH`.
