@@ -609,3 +609,94 @@ Bug 0004 AC-04 passed locally. AC-01 through AC-03 remain `not_run` for
 the corrected workflow. No new hosted workflow revision or run URL exists.
 The earlier native CI failures and their source revisions remain recorded
 above. Prior feature completion decisions remain unchanged.
+
+## Feature 0017 main publication audit: 2026-11-21
+
+Read-only GitHub API inspection verified
+[main push run 44896711807, attempt 1](https://github.com/mnemonic-bit/SmolSandbox/actions/runs/44896711807)
+for revision `b025321647c5c0bc2719bf12fbc3650a0156c6b4`, package `0.11.0`.
+The [Bug 0005 report](../BUGS/bug-0005-release-publication-verification-race.md)
+records the source comparison, job IDs, publication evidence, deterministic
+reproduction, and diagnostic limits.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Release version eligibility | passed | Job `136823823570` reports `success` |
+| Four native Rust jobs | passed | Linux x86-64, Linux ARM64, macOS ARM64 on `macos-15`, and Windows x86-64 report `success` for formatting, both Clippy configurations, both test configurations, production compilation, baseline independence, and artifact upload |
+| Release automation tests | passed | Linux x86-64 hosted step reports `success`; local Python suite at `a90c901651b6bf16bbfe74548295d824f9a2895e` exited 0 with 40 tests |
+| Publication verification and overall workflow | failed | Release job `136826963386` reports `failure`; user-supplied output says publication cannot be verified |
+| Published release and tag identity | passed | Later REST reads return normal release `453632353`, published at `2026-11-21T11:09:52Z`, and tag `v0.11.0` resolving to the exact main push revision |
+| Artifact archive contents | not_run | Job step outcomes were inspected; archives were not downloaded |
+| Hosted publication recovery | not_run | No rerun or GitHub write was performed during this investigation |
+| Real SmolVM guest checks | not_run | No new guest execution evidence was collected |
+
+Native macOS execution is established for this source revision. The earlier
+runner failures and local-only observations remain recorded at their own
+revisions. Published release state does not make the failed workflow pass
+and does not establish all Feature 0017 hosted acceptance criteria.
+Cutover remains incomplete: artifact contents and the pending real guest
+checks still lack evidence. This audit changes no software or version.
+
+## Bug 0005 local publication verification audit: 2026-11-21
+
+The local fix for [Bug 0005](../BUGS/bug-0005-release-publication-verification-race.md#implementation-and-local-validation-2026-11-21)
+uses source revision `a90c901651b6bf16bbfe74548295d824f9a2895e` plus the
+publication verification changes and matching `0.11.1` package versions.
+The bug record preserves SHA-256 values for the tested scripts, workflow,
+and version files. Successful release writes now retain and validate the
+returned release ID. Direct reads verify that ID and the expected tag commit
+with five attempts and one-second retry intervals. Verification performs no
+additional publication writes.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Original delayed-list reproduction | passed | Before the fix: exit 1 with the reported verification error and one stored release. After the fix: exit 0 with one stored release |
+| Release regression suite and inline script equality | passed | Full Python suite exited 0; 52 tests cover delayed create/draft reads, bounded exhaustion, metadata and HTTP errors, tag identity, and reruns with zero writes |
+| Formatting and both Clippy configurations | passed | All three required commands exited 0 on native `x86_64-unknown-linux-gnu`, Rust/Cargo `1.100.0` |
+| Both complete Rust test configurations | passed | Exit 0; 118 default tests and 185 tests with `test-adapter` |
+| Production release build | passed | Exit 0; default features; binary reports `smolsbx 0.11.1` |
+| Baseline independence | passed | Required command exited 0; isolated source checks and nine compiled test executables per configuration passed with empty `PATH` |
+| Independent implementation review | passed | No actionable correctness findings; reviewer independently ran all 52 release tests |
+| Disposable hosted publication and same-commit rerun | not_run | No configured GitHub credential or disposable repository is available; no new hosted run or release identity was collected |
+| Other native targets and real SmolVM guests | not_run | No new hosted or real guest execution was performed |
+
+Bug 0005 AC-01 through AC-05 passed locally. AC-06 remains `not_run`. The original
+`v0.11.0` tag and release were preserved. No recovery rerun was performed.
+Previous observations, source revisions, and feature completion decisions
+remain recorded. New four-target CI, hosted publication, artifact-content,
+and real guest evidence remain pending.
+
+## Bug 0006 local binary release audit: 2026-11-21
+
+The [Bug 0006 implementation record](../BUGS/bug-0006-release-binary-zip-assets.md#implementation-and-local-validation-2026-11-21)
+identifies source revision `a346389f99b461f7cd745bdb9bbc2c31c64752c0`
+plus the local packaging, upload, recovery, and regression changes. Both
+package versions are `0.11.2`. The bug record retains SHA-256 values for
+the tested software inputs and the actual native Linux ZIP. The workflow
+now packages executable-only ZIPs on each native runner and retrieves all
+four from the same run before publication. Existing release assets are
+verified by downloaded bytes; missing assets are uploaded without replacing
+matching IDs or changing release notes or tag identity.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Original missing-assets regression | passed | The real publication path failed the new regression before the fix and now recovers all four missing assets on a matching published release |
+| Complete Python regression suite | passed | Exit 0; 85 tests, including 24 binary asset/transport cases and nine packaging/workflow cases |
+| Formatting and both Clippy configurations | passed | All three required commands exited 0 on native `x86_64-unknown-linux-gnu`, Rust/Cargo `1.100.0` |
+| Both complete Rust test configurations | passed | Exit 0; 118 default tests and 185 tests with `test-adapter` |
+| Production release build | passed | Exit 0; default features; executable reports `smolsbx 0.11.2` |
+| Baseline independence | passed | Required command exited 0; isolated source checks and nine compiled test executables per configuration passed with empty `PATH` |
+| Actual native Linux ZIP contents and execution | passed | Packaged the compiled executable in a temporary fixture root; sole entry `smolsbx`, mode `0755`, ELF x86-64, extracted output `smolsbx 0.11.2` |
+| Workflow lint and inline script equality | passed | actionlint 1.7.12 exited 0; canonical/inline equality is checked by the passing Python suite |
+| Independent implementation review | passed | Packaging, artifact transfer, upload, recovery, and focused regressions reviewed; diagnostic findings corrected |
+| Hosted publication, public downloads, and rerun | not_run | No GitHub credential or GitHub CLI is available; no hosted run, release, tag, or asset was changed |
+| Other native targets and real SmolVM guests | not_run | No new hosted or real guest execution evidence was collected |
+
+The local Linux ZIP check establishes packaging and extracted version
+behavior for this working tree. It does not establish hosted release
+provenance or execution on Linux ARM64, macOS ARM64, or Windows x86-64.
+Record the next hosted run URL, release URL, resolved tag SHA, all four asset
+IDs and archive listings, native version results, and recovery observations.
+Preserve the earlier main publication and Bug 0005 observations above.
+Final cutover acceptance remains pending the outstanding native and real
+guest evidence.
