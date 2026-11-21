@@ -14,9 +14,9 @@ GitHub setting, tag, or release is changed during specification preparation.
 
 After the repository owner merges a release pull request into `main`, GitHub
 Actions validates the resulting commit, creates a version tag at that exact
-commit, and publishes a GitHub Release with generated release notes. Failed
-validation prevents publication. Rerunning the workflow does not move a tag
-or duplicate a release.
+commit, and publishes a GitHub Release with generated release notes and four
+executable-only binary ZIPs. Failed validation prevents publication. Rerunning
+the workflow does not move a tag or duplicate a release or verified asset.
 
 Build and test jobs run only for `main` and `develop`. The README displays
 the latest published release version and the current development version
@@ -52,9 +52,11 @@ owns GitHub ruleset configuration, repository access, and merging release
 pull requests.
 
 Required output is a version tag and a published GitHub Release with generated
-release notes. Attaching compiled binaries is an optional extension and is
-not an acceptance requirement for this feature. Retain the existing native
-build artifacts and production build configuration.
+release notes and one binary ZIP for each supported native target. The
+[Bug 0006 requirement](../BUGS/bug-0006-release-binary-zip-assets.md)
+supersedes the original specification's optional binary attachments. Retain
+the native build artifacts and production build configuration; Actions
+artifacts alone do not satisfy the release-download requirement.
 
 The required scope also includes restricting build triggers to `main` and
 `develop` and adding release and pre-release version badges to `README.md`.
@@ -247,6 +249,36 @@ depend on a separate tag-triggered or release-triggered workflow to finish
 publication, because events created with `GITHUB_TOKEN` do not normally start
 those workflows.
 
+### Binary release assets
+
+Package the successful native production build for each target from the exact
+immutable release commit. Exclude `test-adapter` from distributed builds.
+Download all four packaged artifacts from the publication workflow's own run;
+do not select artifacts from another run or a moving branch.
+
+For version `<version>`, upload exactly these four release assets:
+
+| Target | Release asset name | Sole ZIP entry |
+| --- | --- | --- |
+| Linux x86-64 | `smolsbx-v<version>-x86_64-unknown-linux-gnu.zip` | `smolsbx` |
+| Linux ARM64 | `smolsbx-v<version>-aarch64-unknown-linux-gnu.zip` | `smolsbx` |
+| macOS ARM64 | `smolsbx-v<version>-aarch64-apple-darwin.zip` | `smolsbx` |
+| Windows x86-64 | `smolsbx-v<version>-x86_64-pc-windows-msvc.zip` | `smolsbx.exe` |
+
+Each ZIP contains exactly one regular file at its root. Exclude directories,
+source files, separate configuration templates, documentation, checksums,
+debug symbols, other build outputs, and nested artifact ZIPs. Preserve Unix
+executable permissions in the Linux and macOS archives and during extraction.
+Inspect the target architecture. Run the extracted executable's `--version`
+on its native operating system before delivering the archive.
+
+Validate all four local ZIPs before release writes. If an artifact, packaging
+step, or upload is missing or fails, fail the release job with a diagnostic
+identifying the affected target. Verify the uploaded asset bytes before
+reporting a complete binary release. Tag and release metadata alone do not
+establish completion. GitHub's automatic source ZIP and tarball links remain
+separate from the four uploaded assets.
+
 ### Reruns, partial failures, and concurrent runs
 
 Use the tag and its resolved commit as the identity of a release attempt.
@@ -257,7 +289,7 @@ Apply these outcomes before any attempted write:
 | No tag and no release | Create the tag and release for the release commit. |
 | Tag at the release commit, no release | Create the missing release without changing the tag. |
 | Tag at the release commit, matching draft release | Resume publication of that draft without creating a second release. |
-| Tag at the release commit, matching published release | Report that publication already exists and succeed without editing the release. |
+| Tag at the release commit, matching published release | Verify all four binary ZIPs and recover missing assets while preserving the release and its notes. Succeed without writes if every asset already matches. |
 | Tag resolves to another commit | Fail without changing the tag or release. |
 | Release exists but its expected tag cannot be verified | Fail without changing the existing release. |
 
@@ -265,6 +297,14 @@ If a draft is used, generate release notes before publishing the draft. Keep
 existing draft notes on recovery. A failure after tag creation leaves the
 tag available for a rerun; do not delete the tag as rollback. A failure after
 release creation is recovered by inspecting the server state on rerun.
+
+After an interrupted asset upload, recover only missing ZIPs on the matching
+release. Compare existing asset bytes with the expected ZIPs before accepting
+those assets. Preserve matching asset IDs and bytes, release notes, and tag
+SHA. Fail explicitly on conflicting asset contents or an unexpected uploaded
+asset; do not silently replace or delete assets. Handle a concurrent upload
+by verifying the resulting asset rather than accepting a duplicate-name error
+as success.
 
 Concurrent attempts for the same version must converge on one tag and one
 release. Handle an API response that a resource already exists by verifying
@@ -323,8 +363,10 @@ Document the release procedure and rerun procedure in
 version before merging, waiting for validation, finding the tag and release,
 and rerunning the original workflow after a transient failure. Explain
 resolving version conflicts through another reviewed change rather than
-moving a published tag. State that this feature does not attach binaries
-unless the optional extension is implemented.
+moving a published tag. Explain selecting the platform ZIP from the release
+page, its executable-only contents, and recovery after partial asset uploads.
+The Bug 0006 correction requires a patch bump from its actual software
+baseline: `0.11.1` selects `0.11.2` in both version files.
 
 Explain that feature branches receive no CI builds, including before their
 pull requests merge. The early read-only eligibility check runs on PRs into
@@ -354,13 +396,16 @@ caching behavior.
 | AC-12 | PRs into `main` report `Release version eligibility` immediately on the specified events, including draft PRs and PRs without version-file changes. The check reads the proposed merge metadata and rejects invalid, mismatched, tagged, or already released versions without building application code. PRs into `develop` do not require version uniqueness. | Record valid and conflicting hosted PR checks, summaries, event types, and permissions. Exercise version metadata and API failure fixtures. Inspect calls to establish no build, dependency installation, repository scripts, or writes occurred. |
 | AC-13 | A failed eligibility check blocks the main native matrix. An unused version already built on `develop` passes; an existing tag at the actual main commit permits recovery. A later conflicting tag is caught before publication. | Inspect the job dependency graph. Exercise main failures, development/manual validation, same-commit reruns, and a tag appearing between PR eligibility and publication. Record that no main native job starts after failed early eligibility. |
 | AC-14 | The owner can explicitly require the named GitHub Actions check for `main`, and a failing check prevents merging while a passing check permits merging subject to other rules. The eligibility check is not required for `develop`. | In a disposable GitHub repository, configure the main-only required check without bypass, attempt merges for failing and passing versions, and record the rule and merge outcomes. Verify a feature PR into `develop` is not waiting for the main-only check. |
+| AC-15 | Every successful eligible main release has exactly the four named binary ZIP assets, each containing only its root executable with Unix executable permissions preserved where applicable. | Download each asset through its public release URL. Inspect archive entries, extract the executable, verify its architecture, and run `--version` on the native target. Record the shared workflow run, immutable release commit, tag SHA, and asset IDs. |
+| AC-16 | Missing artifacts, packaging failures, failed uploads, and conflicting asset contents fail with a target-specific diagnostic. Partial uploads recover without replacing verified assets, changing notes, or moving the tag. | Exercise each failure with focused regressions. Interrupt a hosted upload, rerun the original workflow, and compare final asset IDs and bytes. Rerun a complete release and verify zero duplicate uploads. |
+| AC-17 | The README Release badge retains its latest-release destination, where all four binary ZIPs can be downloaded. | Render the README and follow the Release badge after hosted publication. Download each binary ZIP without Actions-artifact access; automatic source archives do not satisfy this criterion. |
 
 ## Verification and evidence
 
 During implementation, create `FEATURES/feature-0017-validation.md`. Record
 the implementation revision, package version, commands, exit codes, workflow
 and release URLs, event types, expected and observed tag SHAs, permission
-evidence, and AC-01 through AC-14 results. Use `passed`, `failed`, `not_run`,
+evidence, and AC-01 through AC-17 results. Use `passed`, `failed`, `not_run`,
 or `inconclusive`. Preserve secrets when recording command output.
 
 Use local fixtures and a fake API for failure and recovery checks. Use a
