@@ -156,3 +156,51 @@ unchanged.
 - [GitHub Releases API](https://docs.github.com/en/rest/releases/releases) documents draft listing, generated notes, and `make_latest=legacy`.
 - [Git references API](https://docs.github.com/en/rest/git/refs) documents creation of refs at explicit SHAs.
 - [Shields release badge](https://shields.io/badges/git-hub-release) and [dynamic TOML badge](https://shields.io/badges/dynamic-toml-badge) document the selected README sources.
+
+## Bug 0006 binary asset audit: 2026-11-21
+
+Status: `In progress`. Mandatory binary release assets supersede the original
+optional packaging scope. The [Bug 0006 implementation record](../BUGS/bug-0006-release-binary-zip-assets.md#implementation-and-local-validation-2026-11-21)
+identifies the tested baseline `a346389f99b461f7cd745bdb9bbc2c31c64752c0`
+plus local changes, software input hashes, and matching `0.11.2` versions.
+Previous results above remain observations of their recorded revisions.
+
+The implementation creates four deterministic executable-only ZIPs after
+native validation, checks architecture and extracted `--version`, transfers
+artifacts from the same workflow run, and verifies release asset bytes.
+Published-release recovery now fills missing assets. Complete reruns retain
+asset IDs and bytes, release notes, and tag SHA. Conflicting assets fail
+without deletion or replacement. The README Release badge is unchanged.
+
+Local validation passed all seven required Rust commands: formatting, both
+Clippy configurations, 118 default tests, 185 tests with `test-adapter`, the
+production release build, and baseline independence with empty-`PATH` test
+execution. The Python suite passed 85 tests, including the canonical/inline
+equality check, 24 asset/transport cases, and nine packaging/workflow cases.
+actionlint 1.7.12 passed. An independent agent reviewed packaging, artifact
+transfer, upload, and recovery; both diagnostic findings were corrected.
+
+The actual native Linux executable was packaged in a temporary fixture root.
+Its ZIP contained only root file `smolsbx`, mode `0755`, with an ELF x86-64
+header. The extracted executable reported `smolsbx 0.11.2`. The bug record
+retains the archive SHA-256. Other target formats have local synthetic
+fixtures only; those fixtures do not establish native execution.
+
+| Added criterion | Result | Evidence and remaining verification |
+| --- | --- | --- |
+| AC-15 | not_run | Local exact-file, executable-permission, architecture, version, and same-run workflow checks passed; four hosted public downloads and all native execution results remain pending |
+| AC-16 | not_run | Local missing/corrupt artifact, packaging, upload failure, pagination, conflicting bytes, concurrent duplicate, partial recovery, and complete-rerun preservation cases passed; hosted interrupted upload and rerun remain pending |
+| AC-17 | not_run | README badge destination preserved; hosted rendering and four public binary downloads remain pending |
+
+No GitHub credential or GitHub CLI is available. No hosted run, release, tag,
+or asset was changed. Record hosted run and release URLs, tag SHA, asset IDs,
+archive listings, native `--version` results, partial recovery, and complete
+rerun preservation before marking hosted acceptance passed. The latest
+[Feature 0010 audit](feature-0010-validation.md#bug-0006-local-binary-release-audit-2026-11-21)
+preserves the outstanding native and real guest checks.
+
+Primary interface references checked for this correction:
+
+- [GitHub release asset API](https://docs.github.com/en/rest/releases/assets?apiVersion=2022-11-28): raw binary uploads, paginated listing, octet-stream downloads, and duplicate-name failures.
+- [download-artifact v8.0.2 metadata](https://raw.githubusercontent.com/actions/download-artifact/v8.0.2/action.yml): same-run defaults and merged artifact extraction.
+- [upload-artifact v7.0.2 metadata](https://raw.githubusercontent.com/actions/upload-artifact/v7.0.2/action.yml): ZIP artifact upload and overwrite behavior for workflow reruns.

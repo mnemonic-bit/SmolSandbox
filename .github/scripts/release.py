@@ -2,20 +2,32 @@
 
 import base64
 import binascii
+import hashlib
 import html
+import io
 import json
 import os
+from pathlib import Path
 import re
+import stat
 import sys
 import time
 import tomllib
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
+import zlib
 
 
 VERIFICATION_ATTEMPTS = 5
 VERIFICATION_DELAY_SECONDS = 1
+BINARY_TARGETS = (
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+)
 
 
 class ReleaseError(Exception):
@@ -26,6 +38,17 @@ class APIError(ReleaseError):
     def __init__(self, status, message):
         self.status = status
         super().__init__(f"GitHub API HTTP {status}: {message}")
+
+
+class AssetRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        if request.get_method() != "GET" or urllib.parse.urlsplit(new_url).scheme != "https":
+            raise ReleaseError("Unexpected redirect while transferring a release asset")
+        redirected = super().redirect_request(request, response, code, message, headers, new_url)
+        if redirected is not None:
+            # Asset downloads redirect to signed storage URLs without credentials.
+            redirected.remove_header("Authorization")
+        return redirected
 
 
 class GitHubAPI:
@@ -62,6 +85,157 @@ class GitHubAPI:
             raise APIError(error.code, f"{method} {path}: {detail}") from error
         except (urllib.error.URLError, TimeoutError, ValueError) as error:
             raise ReleaseError(f"GitHub API {method} {path} failed: {error}") from error
+
+    def transfer_asset(self, method, url, data=None):
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Accept": "application/octet-stream" if method == "GET" else "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "smolsandbox-release",
+        }
+        if data is not None:
+            headers["Content-Type"] = "application/zip"
+        request = urllib.request.Request(url, data=data, headers=headers, method=method)
+        try:
+            opener = urllib.request.build_opener(AssetRedirectHandler())
+            with opener.open(request, timeout=60) as response:
+                return response.read() if method == "GET" else json.load(response)
+        except urllib.error.HTTPError as error:
+            detail = error.read(2000).decode("utf-8", errors="replace")
+            raise APIError(error.code, f"{method} release asset: {detail}") from error
+        except (urllib.error.URLError, TimeoutError, ValueError, OSError) as error:
+            raise ReleaseError(f"GitHub release asset {method} failed: {error}") from error
+
+    def upload_asset(self, release, name, data):
+        upload_url = release.get("upload_url")
+        if not isinstance(upload_url, str):
+            raise ReleaseError(f"Release has no upload URL for {name}")
+        url = urllib.parse.urlsplit(upload_url.split("{", 1)[0])
+        api_host = urllib.parse.urlsplit(self.base_url)
+        allowed_hosts = {api_host.netloc}
+        if api_host.hostname == "api.github.com":
+            allowed_hosts.add("uploads.github.com")
+        expected_path = f"/repos/{self.repository}/releases/{release['id']}/assets"
+        if (url.scheme != "https" or url.netloc not in allowed_hosts or url.username is not None
+                or url.query or url.fragment or not url.path.endswith(expected_path)):
+            raise ReleaseError(f"Release has an invalid upload URL for {name}")
+        destination = urllib.parse.urlunsplit(url) + "?" + urllib.parse.urlencode({"name": name})
+        return self.transfer_asset("POST", destination, data)
+
+    def download_asset(self, asset_id):
+        return self.transfer_asset("GET", f"{self.base_url}/releases/assets/{asset_id}")
+
+
+def load_binary_assets(tag):
+    directory = os.environ.get("RELEASE_ASSET_DIR")
+    if not directory:
+        raise ReleaseError("RELEASE_ASSET_DIR is required for all four binary targets")
+    root = Path(directory)
+    assets = {}
+    for target in BINARY_TARGETS:
+        name = f"smolsbx-{tag}-{target}.zip"
+        executable = "smolsbx.exe" if "windows" in target else "smolsbx"
+        try:
+            path = root / name
+            if path.is_symlink() or not path.is_file():
+                raise ReleaseError(f"Missing binary ZIP for {target}: {name}")
+            data = path.read_bytes()
+            with zipfile.ZipFile(io.BytesIO(data)) as package:
+                entries = package.infolist()
+                if len(entries) != 1 or entries[0].filename != executable or entries[0].is_dir():
+                    raise ReleaseError(f"Binary ZIP for {target} must contain only root file {executable}: {name}")
+                entry = entries[0]
+                mode = entry.external_attr >> 16
+                if stat.S_IFMT(mode) not in (0, stat.S_IFREG) or entry.file_size == 0:
+                    raise ReleaseError(f"Binary ZIP for {target} has no regular executable: {name}")
+                if "windows" not in target and (entry.create_system != 3 or mode & 0o111 != 0o111):
+                    raise ReleaseError(f"Binary ZIP for {target} does not preserve Unix executable permissions: {name}")
+                package.read(entry)
+            assets[name] = data
+        except (OSError, ValueError, RuntimeError, EOFError, zipfile.BadZipFile, zlib.error) as error:
+            raise ReleaseError(f"Cannot validate binary ZIP for {target}: {name}: {error}") from error
+    try:
+        actual = {path.name for path in root.iterdir()}
+    except OSError as error:
+        raise ReleaseError(f"Cannot inspect binary asset directory: {error}") from error
+    if actual != set(assets):
+        raise ReleaseError(f"Unexpected binary release files: {', '.join(sorted(actual - set(assets)))}")
+    return assets
+
+
+def list_binary_assets(api, release_id):
+    assets = {}
+    page = 1
+    while True:
+        batch = api.request("GET", f"/releases/{release_id}/assets?per_page=100&page={page}")
+        if not isinstance(batch, list):
+            raise ReleaseError("GitHub release asset listing returned invalid metadata")
+        for asset in batch:
+            if not isinstance(asset, dict) or not isinstance(asset.get("name"), str):
+                raise ReleaseError("GitHub release asset listing returned an invalid asset")
+            if asset["name"] in assets:
+                raise ReleaseError(f"Duplicate release asset: {asset['name']}")
+            assets[asset["name"]] = asset
+        if len(batch) < 100:
+            return assets
+        page += 1
+
+
+def verify_binary_asset(api, asset, name, expected):
+    if (not isinstance(asset, dict) or asset.get("name") != name
+            or type(asset.get("id")) is not int or asset["id"] <= 0
+            or asset.get("state") != "uploaded" or asset.get("size") != len(expected)):
+        raise ReleaseError(f"Release asset {name} has conflicting or incomplete metadata; existing assets are preserved")
+    if api.download_asset(asset["id"]) != expected:
+        raise ReleaseError(f"Release asset {name} has conflicting contents; existing assets are preserved")
+
+
+def ensure_binary_assets(api, release, tag, sha, expected, report):
+    release = publication_metadata(release, tag)
+    release_id = release["id"]
+    existing = list_binary_assets(api, release_id)
+    unexpected = set(existing) - set(expected)
+    if unexpected:
+        raise ReleaseError(f"Unexpected release assets are preserved: {', '.join(sorted(unexpected))}")
+    # Check every existing asset before uploading any missing target.
+    for name, asset in existing.items():
+        try:
+            verify_binary_asset(api, asset, name, expected[name])
+        except ReleaseError as error:
+            raise ReleaseError(f"Binary release verification failed for {name}: {error}") from error
+    for name, data in expected.items():
+        if name not in existing:
+            if resolve_tag(api, tag) != sha:
+                raise ReleaseError(f"Tag {tag} changed before binary upload for {name}")
+            try:
+                try:
+                    asset = api.upload_asset(release, name, data)
+                except APIError as error:
+                    if error.status not in (409, 422):
+                        raise
+                    asset = list_binary_assets(api, release_id).get(name)
+                    if asset is None:
+                        raise error
+                verify_binary_asset(api, asset, name, data)
+            except ReleaseError as error:
+                raise ReleaseError(f"Binary upload failed for {name}: {error}; rerun the original workflow") from error
+            existing[name] = asset
+        report(f"Verified binary asset {name}, ID {existing[name]['id']}, SHA-256 {hashlib.sha256(data).hexdigest()}")
+    final = list_binary_assets(api, release_id)
+    if set(final) != set(expected):
+        missing = ", ".join(sorted(set(expected) - set(final))) or "none"
+        unexpected = ", ".join(sorted(set(final) - set(expected))) or "none"
+        raise ReleaseError(
+            f"Binary release {tag} does not contain exactly the four required ZIPs; "
+            f"missing: {missing}; unexpected: {unexpected}; rerun the original workflow"
+        )
+    for name, data in expected.items():
+        if final[name]["id"] != existing[name]["id"]:
+            raise ReleaseError(f"Release asset {name} changed during verification; existing assets are preserved")
+        verify_binary_asset(api, final[name], name, data)
+    if resolve_tag(api, tag) != sha:
+        raise ReleaseError(f"Tag {tag} changed during binary release verification")
+    report(f"Verified complete binary release {tag}: all four target ZIPs")
 
 
 def parse_version(manifest_text, lock_text):
@@ -202,6 +376,7 @@ def verify_publication(api, tag, sha, result, report, expected_id=None):
 
 
 def publish(api, tag, sha, report):
+    assets = load_binary_assets(tag)
     commit, release = checked_state(api, tag, sha, report)
     if commit is None:
         try:
@@ -217,6 +392,7 @@ def publish(api, tag, sha, report):
             raise ReleaseError(f"Created tag {tag} cannot be verified")
     for _ in range(4):
         if release is not None and not release.get("draft", False):
+            ensure_binary_assets(api, release, tag, sha, assets, report)
             report(f"Publication already exists for {tag}; the release is preserved")
             return "already-published"
         body = release.get("body") if release else None
@@ -261,6 +437,7 @@ def publish(api, tag, sha, report):
                     raise error
                 continue
         release = verify_publication(api, tag, sha, result, report, expected_id=release_id)
+        ensure_binary_assets(api, release, tag, sha, assets, report)
         report(f"Published {tag}: {release.get('html_url', '(URL unavailable)')}")
         return "published"
     raise ReleaseError(f"Concurrent publication of {tag} did not converge; rerun the original workflow")

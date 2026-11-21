@@ -665,3 +665,38 @@ Bug 0005 AC-01 through AC-05 passed locally. AC-06 remains `not_run`. The origin
 Previous observations, source revisions, and feature completion decisions
 remain recorded. New four-target CI, hosted publication, artifact-content,
 and real guest evidence remain pending.
+
+## Bug 0006 local binary release audit: 2026-11-21
+
+The [Bug 0006 implementation record](../BUGS/bug-0006-release-binary-zip-assets.md#implementation-and-local-validation-2026-11-21)
+identifies source revision `a346389f99b461f7cd745bdb9bbc2c31c64752c0`
+plus the local packaging, upload, recovery, and regression changes. Both
+package versions are `0.11.2`. The bug record retains SHA-256 values for
+the tested software inputs and the actual native Linux ZIP. The workflow
+now packages executable-only ZIPs on each native runner and retrieves all
+four from the same run before publication. Existing release assets are
+verified by downloaded bytes; missing assets are uploaded without replacing
+matching IDs or changing release notes or tag identity.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Original missing-assets regression | passed | The real publication path failed the new regression before the fix and now recovers all four missing assets on a matching published release |
+| Complete Python regression suite | passed | Exit 0; 85 tests, including 24 binary asset/transport cases and nine packaging/workflow cases |
+| Formatting and both Clippy configurations | passed | All three required commands exited 0 on native `x86_64-unknown-linux-gnu`, Rust/Cargo `1.100.0` |
+| Both complete Rust test configurations | passed | Exit 0; 118 default tests and 185 tests with `test-adapter` |
+| Production release build | passed | Exit 0; default features; executable reports `smolsbx 0.11.2` |
+| Baseline independence | passed | Required command exited 0; isolated source checks and nine compiled test executables per configuration passed with empty `PATH` |
+| Actual native Linux ZIP contents and execution | passed | Packaged the compiled executable in a temporary fixture root; sole entry `smolsbx`, mode `0755`, ELF x86-64, extracted output `smolsbx 0.11.2` |
+| Workflow lint and inline script equality | passed | actionlint 1.7.12 exited 0; canonical/inline equality is checked by the passing Python suite |
+| Independent implementation review | passed | Packaging, artifact transfer, upload, recovery, and focused regressions reviewed; diagnostic findings corrected |
+| Hosted publication, public downloads, and rerun | not_run | No GitHub credential or GitHub CLI is available; no hosted run, release, tag, or asset was changed |
+| Other native targets and real SmolVM guests | not_run | No new hosted or real guest execution evidence was collected |
+
+The local Linux ZIP check establishes packaging and extracted version
+behavior for this working tree. It does not establish hosted release
+provenance or execution on Linux ARM64, macOS ARM64, or Windows x86-64.
+Record the next hosted run URL, release URL, resolved tag SHA, all four asset
+IDs and archive listings, native version results, and recovery observations.
+Preserve the earlier main publication and Bug 0005 observations above.
+Final cutover acceptance remains pending the outstanding native and real
+guest evidence.
