@@ -1,0 +1,3590 @@
+{
+  "command": "python3 .github/scripts/test_release.py --record-api-traces <destination>",
+  "result": "passed",
+  "tests_run": 40,
+  "release_sha": "1111111111111111111111111111111111111111",
+  "other_sha": "2222222222222222222222222222222222222222",
+  "scenarios": [
+    {
+      "test": "__main__.ReleaseTests.test_annotated_tag_pointing_elsewhere_fails_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/git/tags/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "tag",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_conflict_appearing_after_eligibility_is_caught_before_publication",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "2222222222222222222222222222222222222222"
+        }
+      },
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_conflicting_release_creation_race_fails_without_modifying_racing_release",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases/generate-notes",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111",
+            "name": "v0.11.0",
+            "draft": false,
+            "prerelease": false,
+            "make_latest": "legacy",
+            "body": "Generated release notes"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "2222222222222222222222222222222222222222"
+        }
+      },
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Unrelated publication",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_conflicting_tag_fails_without_writes_in_main_and_publish",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "2222222222222222222222222222222222222222"
+        }
+      },
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_different_versions_keep_own_sha_when_older_attempt_finishes_last",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=2222222222222222222222222222222222222222",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=2222222222222222222222222222222222222222",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.12.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=2222222222222222222222222222222222222222",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=2222222222222222222222222222222222222222",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.12.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/git/refs",
+          {
+            "ref": "refs/tags/v0.12.0",
+            "sha": "2222222222222222222222222222222222222222"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.12.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases/generate-notes",
+          {
+            "tag_name": "v0.12.0",
+            "target_commitish": "2222222222222222222222222222222222222222"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.12.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases",
+          {
+            "tag_name": "v0.12.0",
+            "target_commitish": "2222222222222222222222222222222222222222",
+            "name": "v0.12.0",
+            "draft": false,
+            "prerelease": false,
+            "make_latest": "legacy",
+            "body": "Generated release notes"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.12.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/git/refs",
+          {
+            "ref": "refs/tags/v0.11.0",
+            "sha": "1111111111111111111111111111111111111111"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases/generate-notes",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111",
+            "name": "v0.11.0",
+            "draft": false,
+            "prerelease": false,
+            "make_latest": "legacy",
+            "body": "Generated release notes"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.12.0": {
+          "type": "commit",
+          "sha": "2222222222222222222222222222222222222222"
+        },
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "1111111111111111111111111111111111111111"
+        }
+      },
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.12.0",
+          "name": "v0.12.0",
+          "body": "Generated release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1",
+          "target_commitish": "2222222222222222222222222222222222222222",
+          "make_latest": "legacy"
+        },
+        {
+          "id": 2,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Generated release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/2",
+          "target_commitish": "1111111111111111111111111111111111111111",
+          "make_latest": "legacy"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_duplicate_error_without_created_state_is_failure",
+      "calls": [],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_duplicate_error_without_created_state_is_failure",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/git/refs",
+          {
+            "ref": "refs/tags/v0.11.0",
+            "sha": "1111111111111111111111111111111111111111"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_duplicate_error_without_created_state_is_failure",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/git/refs",
+          {
+            "ref": "refs/tags/v0.11.0",
+            "sha": "1111111111111111111111111111111111111111"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases/generate-notes",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111",
+            "name": "v0.11.0",
+            "draft": false,
+            "prerelease": false,
+            "make_latest": "legacy",
+            "body": "Generated release notes"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "1111111111111111111111111111111111111111"
+        }
+      },
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_empty_draft_notes_are_generated_before_publication",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases/generate-notes",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "PATCH",
+          "/releases/1",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111",
+            "name": "v0.11.0",
+            "draft": false,
+            "prerelease": false,
+            "make_latest": "legacy",
+            "body": "Generated release notes"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "1111111111111111111111111111111111111111"
+        }
+      },
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Generated release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1",
+          "target_commitish": "1111111111111111111111111111111111111111",
+          "make_latest": "legacy"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_existing_prerelease_is_not_reported_as_normal_published_release",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "1111111111111111111111111111111111111111"
+        }
+      },
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": true,
+          "html_url": "https://github.example/owner/repo/releases/1"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_failed_release_creation_leaves_tag_for_recovery",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases/generate-notes",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111",
+            "name": "v0.11.0",
+            "draft": false,
+            "prerelease": false,
+            "make_latest": "legacy",
+            "body": "Generated release notes"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "1111111111111111111111111111111111111111"
+        }
+      },
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Generated release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1",
+          "target_commitish": "1111111111111111111111111111111111111111",
+          "make_latest": "legacy"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_invalid_version_metadata_never_writes",
+      "calls": [],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_invalid_version_metadata_never_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_invalid_version_metadata_never_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_invalid_version_metadata_never_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_invalid_version_metadata_never_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_invalid_version_metadata_never_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_invalid_version_metadata_never_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_invalid_version_metadata_never_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_invalid_version_metadata_never_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_invalid_version_metadata_never_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_invalid_version_metadata_never_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_invalid_version_metadata_never_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_invalid_version_metadata_never_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_invalid_version_metadata_never_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_invalid_version_metadata_never_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_invalid_version_metadata_never_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_invalid_version_metadata_never_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_invalid_version_metadata_never_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_lookup_errors_fail_without_writes",
+      "calls": [],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_lookup_errors_fail_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_lookup_errors_fail_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_lookup_errors_fail_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_lookup_errors_fail_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_lookup_errors_fail_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_lookup_errors_fail_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_lookup_errors_fail_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_lookup_errors_fail_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_lookup_errors_fail_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_lookup_errors_fail_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_lookup_errors_fail_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_lookup_errors_fail_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_lookup_errors_fail_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_lookup_errors_fail_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_lookup_errors_fail_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_lookup_errors_fail_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_main_check_with_unused_version_passes_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_matching_draft_retains_existing_notes_and_publishes_normal_release",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "PATCH",
+          "/releases/1",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111",
+            "name": "v0.11.0",
+            "draft": false,
+            "prerelease": false,
+            "make_latest": "legacy"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "1111111111111111111111111111111111111111"
+        }
+      },
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1",
+          "target_commitish": "1111111111111111111111111111111111111111",
+          "make_latest": "legacy"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_matching_prerelease_draft_recovers_as_normal_release",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "PATCH",
+          "/releases/1",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111",
+            "name": "v0.11.0",
+            "draft": false,
+            "prerelease": false,
+            "make_latest": "legacy"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "1111111111111111111111111111111111111111"
+        }
+      },
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1",
+          "target_commitish": "1111111111111111111111111111111111111111",
+          "make_latest": "legacy"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_matching_published_release_is_preserved_byte_for_byte",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "1111111111111111111111111111111111111111"
+        }
+      },
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.11.0",
+          "name": "Retained title",
+          "body": "Hand-edited release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_matching_tag_is_valid_for_main_eligibility",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "1111111111111111111111111111111111111111"
+        }
+      },
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_matching_tag_without_release_creates_only_missing_release",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases/generate-notes",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111",
+            "name": "v0.11.0",
+            "draft": false,
+            "prerelease": false,
+            "make_latest": "legacy",
+            "body": "Generated release notes"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "1111111111111111111111111111111111111111"
+        }
+      },
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Generated release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1",
+          "target_commitish": "1111111111111111111111111111111111111111",
+          "make_latest": "legacy"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_nested_annotated_tag_resolves_to_validated_commit",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/git/tags/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          null
+        ],
+        [
+          "GET",
+          "/git/tags/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases/generate-notes",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/git/tags/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          null
+        ],
+        [
+          "GET",
+          "/git/tags/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111",
+            "name": "v0.11.0",
+            "draft": false,
+            "prerelease": false,
+            "make_latest": "legacy",
+            "body": "Generated release notes"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/git/tags/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          null
+        ],
+        [
+          "GET",
+          "/git/tags/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "tag",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Generated release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1",
+          "target_commitish": "1111111111111111111111111111111111111111",
+          "make_latest": "legacy"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_new_release_uses_committed_version_exact_sha_and_generated_notes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/git/refs",
+          {
+            "ref": "refs/tags/v0.11.0",
+            "sha": "1111111111111111111111111111111111111111"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases/generate-notes",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111",
+            "name": "v0.11.0",
+            "draft": false,
+            "prerelease": false,
+            "make_latest": "legacy",
+            "body": "Generated release notes"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "1111111111111111111111111111111111111111"
+        }
+      },
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Generated release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1",
+          "target_commitish": "1111111111111111111111111111111111111111",
+          "make_latest": "legacy"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_parser_accepts_zero_and_large_components",
+      "calls": [],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_pr_finds_conflicting_draft_after_first_release_page",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=2",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v9.0.0",
+          "name": "v9.0.0",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1"
+        },
+        {
+          "id": 2,
+          "tag_name": "v9.0.1",
+          "name": "v9.0.1",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/2"
+        },
+        {
+          "id": 3,
+          "tag_name": "v9.0.2",
+          "name": "v9.0.2",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/3"
+        },
+        {
+          "id": 4,
+          "tag_name": "v9.0.3",
+          "name": "v9.0.3",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/4"
+        },
+        {
+          "id": 5,
+          "tag_name": "v9.0.4",
+          "name": "v9.0.4",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/5"
+        },
+        {
+          "id": 6,
+          "tag_name": "v9.0.5",
+          "name": "v9.0.5",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/6"
+        },
+        {
+          "id": 7,
+          "tag_name": "v9.0.6",
+          "name": "v9.0.6",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/7"
+        },
+        {
+          "id": 8,
+          "tag_name": "v9.0.7",
+          "name": "v9.0.7",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/8"
+        },
+        {
+          "id": 9,
+          "tag_name": "v9.0.8",
+          "name": "v9.0.8",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/9"
+        },
+        {
+          "id": 10,
+          "tag_name": "v9.0.9",
+          "name": "v9.0.9",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/10"
+        },
+        {
+          "id": 11,
+          "tag_name": "v9.0.10",
+          "name": "v9.0.10",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/11"
+        },
+        {
+          "id": 12,
+          "tag_name": "v9.0.11",
+          "name": "v9.0.11",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/12"
+        },
+        {
+          "id": 13,
+          "tag_name": "v9.0.12",
+          "name": "v9.0.12",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/13"
+        },
+        {
+          "id": 14,
+          "tag_name": "v9.0.13",
+          "name": "v9.0.13",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/14"
+        },
+        {
+          "id": 15,
+          "tag_name": "v9.0.14",
+          "name": "v9.0.14",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/15"
+        },
+        {
+          "id": 16,
+          "tag_name": "v9.0.15",
+          "name": "v9.0.15",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/16"
+        },
+        {
+          "id": 17,
+          "tag_name": "v9.0.16",
+          "name": "v9.0.16",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/17"
+        },
+        {
+          "id": 18,
+          "tag_name": "v9.0.17",
+          "name": "v9.0.17",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/18"
+        },
+        {
+          "id": 19,
+          "tag_name": "v9.0.18",
+          "name": "v9.0.18",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/19"
+        },
+        {
+          "id": 20,
+          "tag_name": "v9.0.19",
+          "name": "v9.0.19",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/20"
+        },
+        {
+          "id": 21,
+          "tag_name": "v9.0.20",
+          "name": "v9.0.20",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/21"
+        },
+        {
+          "id": 22,
+          "tag_name": "v9.0.21",
+          "name": "v9.0.21",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/22"
+        },
+        {
+          "id": 23,
+          "tag_name": "v9.0.22",
+          "name": "v9.0.22",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/23"
+        },
+        {
+          "id": 24,
+          "tag_name": "v9.0.23",
+          "name": "v9.0.23",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/24"
+        },
+        {
+          "id": 25,
+          "tag_name": "v9.0.24",
+          "name": "v9.0.24",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/25"
+        },
+        {
+          "id": 26,
+          "tag_name": "v9.0.25",
+          "name": "v9.0.25",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/26"
+        },
+        {
+          "id": 27,
+          "tag_name": "v9.0.26",
+          "name": "v9.0.26",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/27"
+        },
+        {
+          "id": 28,
+          "tag_name": "v9.0.27",
+          "name": "v9.0.27",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/28"
+        },
+        {
+          "id": 29,
+          "tag_name": "v9.0.28",
+          "name": "v9.0.28",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/29"
+        },
+        {
+          "id": 30,
+          "tag_name": "v9.0.29",
+          "name": "v9.0.29",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/30"
+        },
+        {
+          "id": 31,
+          "tag_name": "v9.0.30",
+          "name": "v9.0.30",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/31"
+        },
+        {
+          "id": 32,
+          "tag_name": "v9.0.31",
+          "name": "v9.0.31",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/32"
+        },
+        {
+          "id": 33,
+          "tag_name": "v9.0.32",
+          "name": "v9.0.32",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/33"
+        },
+        {
+          "id": 34,
+          "tag_name": "v9.0.33",
+          "name": "v9.0.33",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/34"
+        },
+        {
+          "id": 35,
+          "tag_name": "v9.0.34",
+          "name": "v9.0.34",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/35"
+        },
+        {
+          "id": 36,
+          "tag_name": "v9.0.35",
+          "name": "v9.0.35",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/36"
+        },
+        {
+          "id": 37,
+          "tag_name": "v9.0.36",
+          "name": "v9.0.36",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/37"
+        },
+        {
+          "id": 38,
+          "tag_name": "v9.0.37",
+          "name": "v9.0.37",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/38"
+        },
+        {
+          "id": 39,
+          "tag_name": "v9.0.38",
+          "name": "v9.0.38",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/39"
+        },
+        {
+          "id": 40,
+          "tag_name": "v9.0.39",
+          "name": "v9.0.39",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/40"
+        },
+        {
+          "id": 41,
+          "tag_name": "v9.0.40",
+          "name": "v9.0.40",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/41"
+        },
+        {
+          "id": 42,
+          "tag_name": "v9.0.41",
+          "name": "v9.0.41",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/42"
+        },
+        {
+          "id": 43,
+          "tag_name": "v9.0.42",
+          "name": "v9.0.42",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/43"
+        },
+        {
+          "id": 44,
+          "tag_name": "v9.0.43",
+          "name": "v9.0.43",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/44"
+        },
+        {
+          "id": 45,
+          "tag_name": "v9.0.44",
+          "name": "v9.0.44",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/45"
+        },
+        {
+          "id": 46,
+          "tag_name": "v9.0.45",
+          "name": "v9.0.45",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/46"
+        },
+        {
+          "id": 47,
+          "tag_name": "v9.0.46",
+          "name": "v9.0.46",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/47"
+        },
+        {
+          "id": 48,
+          "tag_name": "v9.0.47",
+          "name": "v9.0.47",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/48"
+        },
+        {
+          "id": 49,
+          "tag_name": "v9.0.48",
+          "name": "v9.0.48",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/49"
+        },
+        {
+          "id": 50,
+          "tag_name": "v9.0.49",
+          "name": "v9.0.49",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/50"
+        },
+        {
+          "id": 51,
+          "tag_name": "v9.0.50",
+          "name": "v9.0.50",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/51"
+        },
+        {
+          "id": 52,
+          "tag_name": "v9.0.51",
+          "name": "v9.0.51",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/52"
+        },
+        {
+          "id": 53,
+          "tag_name": "v9.0.52",
+          "name": "v9.0.52",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/53"
+        },
+        {
+          "id": 54,
+          "tag_name": "v9.0.53",
+          "name": "v9.0.53",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/54"
+        },
+        {
+          "id": 55,
+          "tag_name": "v9.0.54",
+          "name": "v9.0.54",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/55"
+        },
+        {
+          "id": 56,
+          "tag_name": "v9.0.55",
+          "name": "v9.0.55",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/56"
+        },
+        {
+          "id": 57,
+          "tag_name": "v9.0.56",
+          "name": "v9.0.56",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/57"
+        },
+        {
+          "id": 58,
+          "tag_name": "v9.0.57",
+          "name": "v9.0.57",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/58"
+        },
+        {
+          "id": 59,
+          "tag_name": "v9.0.58",
+          "name": "v9.0.58",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/59"
+        },
+        {
+          "id": 60,
+          "tag_name": "v9.0.59",
+          "name": "v9.0.59",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/60"
+        },
+        {
+          "id": 61,
+          "tag_name": "v9.0.60",
+          "name": "v9.0.60",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/61"
+        },
+        {
+          "id": 62,
+          "tag_name": "v9.0.61",
+          "name": "v9.0.61",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/62"
+        },
+        {
+          "id": 63,
+          "tag_name": "v9.0.62",
+          "name": "v9.0.62",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/63"
+        },
+        {
+          "id": 64,
+          "tag_name": "v9.0.63",
+          "name": "v9.0.63",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/64"
+        },
+        {
+          "id": 65,
+          "tag_name": "v9.0.64",
+          "name": "v9.0.64",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/65"
+        },
+        {
+          "id": 66,
+          "tag_name": "v9.0.65",
+          "name": "v9.0.65",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/66"
+        },
+        {
+          "id": 67,
+          "tag_name": "v9.0.66",
+          "name": "v9.0.66",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/67"
+        },
+        {
+          "id": 68,
+          "tag_name": "v9.0.67",
+          "name": "v9.0.67",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/68"
+        },
+        {
+          "id": 69,
+          "tag_name": "v9.0.68",
+          "name": "v9.0.68",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/69"
+        },
+        {
+          "id": 70,
+          "tag_name": "v9.0.69",
+          "name": "v9.0.69",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/70"
+        },
+        {
+          "id": 71,
+          "tag_name": "v9.0.70",
+          "name": "v9.0.70",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/71"
+        },
+        {
+          "id": 72,
+          "tag_name": "v9.0.71",
+          "name": "v9.0.71",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/72"
+        },
+        {
+          "id": 73,
+          "tag_name": "v9.0.72",
+          "name": "v9.0.72",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/73"
+        },
+        {
+          "id": 74,
+          "tag_name": "v9.0.73",
+          "name": "v9.0.73",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/74"
+        },
+        {
+          "id": 75,
+          "tag_name": "v9.0.74",
+          "name": "v9.0.74",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/75"
+        },
+        {
+          "id": 76,
+          "tag_name": "v9.0.75",
+          "name": "v9.0.75",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/76"
+        },
+        {
+          "id": 77,
+          "tag_name": "v9.0.76",
+          "name": "v9.0.76",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/77"
+        },
+        {
+          "id": 78,
+          "tag_name": "v9.0.77",
+          "name": "v9.0.77",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/78"
+        },
+        {
+          "id": 79,
+          "tag_name": "v9.0.78",
+          "name": "v9.0.78",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/79"
+        },
+        {
+          "id": 80,
+          "tag_name": "v9.0.79",
+          "name": "v9.0.79",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/80"
+        },
+        {
+          "id": 81,
+          "tag_name": "v9.0.80",
+          "name": "v9.0.80",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/81"
+        },
+        {
+          "id": 82,
+          "tag_name": "v9.0.81",
+          "name": "v9.0.81",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/82"
+        },
+        {
+          "id": 83,
+          "tag_name": "v9.0.82",
+          "name": "v9.0.82",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/83"
+        },
+        {
+          "id": 84,
+          "tag_name": "v9.0.83",
+          "name": "v9.0.83",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/84"
+        },
+        {
+          "id": 85,
+          "tag_name": "v9.0.84",
+          "name": "v9.0.84",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/85"
+        },
+        {
+          "id": 86,
+          "tag_name": "v9.0.85",
+          "name": "v9.0.85",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/86"
+        },
+        {
+          "id": 87,
+          "tag_name": "v9.0.86",
+          "name": "v9.0.86",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/87"
+        },
+        {
+          "id": 88,
+          "tag_name": "v9.0.87",
+          "name": "v9.0.87",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/88"
+        },
+        {
+          "id": 89,
+          "tag_name": "v9.0.88",
+          "name": "v9.0.88",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/89"
+        },
+        {
+          "id": 90,
+          "tag_name": "v9.0.89",
+          "name": "v9.0.89",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/90"
+        },
+        {
+          "id": 91,
+          "tag_name": "v9.0.90",
+          "name": "v9.0.90",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/91"
+        },
+        {
+          "id": 92,
+          "tag_name": "v9.0.91",
+          "name": "v9.0.91",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/92"
+        },
+        {
+          "id": 93,
+          "tag_name": "v9.0.92",
+          "name": "v9.0.92",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/93"
+        },
+        {
+          "id": 94,
+          "tag_name": "v9.0.93",
+          "name": "v9.0.93",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/94"
+        },
+        {
+          "id": 95,
+          "tag_name": "v9.0.94",
+          "name": "v9.0.94",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/95"
+        },
+        {
+          "id": 96,
+          "tag_name": "v9.0.95",
+          "name": "v9.0.95",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/96"
+        },
+        {
+          "id": 97,
+          "tag_name": "v9.0.96",
+          "name": "v9.0.96",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/97"
+        },
+        {
+          "id": 98,
+          "tag_name": "v9.0.97",
+          "name": "v9.0.97",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/98"
+        },
+        {
+          "id": 99,
+          "tag_name": "v9.0.98",
+          "name": "v9.0.98",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/99"
+        },
+        {
+          "id": 100,
+          "tag_name": "v9.0.99",
+          "name": "v9.0.99",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/100"
+        },
+        {
+          "id": 101,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Retained release notes",
+          "draft": true,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/101"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_pr_rejects_draft_and_published_releases_without_tags",
+      "calls": [],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_pr_rejects_draft_and_published_releases_without_tags",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Retained release notes",
+          "draft": true,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_pr_rejects_draft_and_published_releases_without_tags",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_pr_rejects_tag_even_at_synthetic_merge_sha",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "1111111111111111111111111111111111111111"
+        }
+      },
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_pr_with_unused_version_passes_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_release_creation_race_preserves_matching_server_release",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases/generate-notes",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111",
+            "name": "v0.11.0",
+            "draft": false,
+            "prerelease": false,
+            "make_latest": "legacy",
+            "body": "Generated release notes"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "1111111111111111111111111111111111111111"
+        }
+      },
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Concurrent publication notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_release_without_verifiable_tag_is_preserved",
+      "calls": [],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_release_without_verifiable_tag_is_preserved",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_release_without_verifiable_tag_is_preserved",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {},
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Retained release notes",
+          "draft": true,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_ruleset_rejection_does_not_create_release_or_remove_tag",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/git/refs",
+          {
+            "ref": "refs/tags/v0.11.0",
+            "sha": "1111111111111111111111111111111111111111"
+          }
+        ]
+      ],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_successful_rerun_creates_no_duplicate_and_preserves_release",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "1111111111111111111111111111111111111111"
+        }
+      },
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Generated release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1",
+          "target_commitish": "1111111111111111111111111111111111111111",
+          "make_latest": "legacy"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_tag_creation_race_converges_only_for_matching_commit",
+      "calls": [],
+      "tags": {},
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_tag_creation_race_converges_only_for_matching_commit",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/git/refs",
+          {
+            "ref": "refs/tags/v0.11.0",
+            "sha": "1111111111111111111111111111111111111111"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases/generate-notes",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/releases",
+          {
+            "tag_name": "v0.11.0",
+            "target_commitish": "1111111111111111111111111111111111111111",
+            "name": "v0.11.0",
+            "draft": false,
+            "prerelease": false,
+            "make_latest": "legacy",
+            "body": "Generated release notes"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "1111111111111111111111111111111111111111"
+        }
+      },
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Generated release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1",
+          "target_commitish": "1111111111111111111111111111111111111111",
+          "make_latest": "legacy"
+        }
+      ]
+    },
+    {
+      "test": "__main__.ReleaseTests.test_tag_creation_race_converges_only_for_matching_commit",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ],
+        [
+          "POST",
+          "/git/refs",
+          {
+            "ref": "refs/tags/v0.11.0",
+            "sha": "1111111111111111111111111111111111111111"
+          }
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "2222222222222222222222222222222222222222"
+        }
+      },
+      "releases": []
+    },
+    {
+      "test": "__main__.ReleaseTests.test_tag_pointing_to_noncommit_fails_without_writes",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "tree",
+          "sha": "1111111111111111111111111111111111111111"
+        }
+      },
+      "releases": []
+    },
+    {
+      "test": "__main__.TransportTests.test_conflict_summary_contains_candidate_tag_url_and_failure",
+      "calls": [
+        [
+          "GET",
+          "/contents/Cargo.toml?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/contents/Cargo.lock?ref=1111111111111111111111111111111111111111",
+          null
+        ],
+        [
+          "GET",
+          "/git/ref/tags/v0.11.0",
+          null
+        ],
+        [
+          "GET",
+          "/releases?per_page=100&page=1",
+          null
+        ]
+      ],
+      "tags": {
+        "v0.11.0": {
+          "type": "commit",
+          "sha": "2222222222222222222222222222222222222222"
+        }
+      },
+      "releases": [
+        {
+          "id": 1,
+          "tag_name": "v0.11.0",
+          "name": "v0.11.0",
+          "body": "Retained release notes",
+          "draft": false,
+          "prerelease": false,
+          "html_url": "https://github.example/owner/repo/releases/1"
+        }
+      ]
+    }
+  ]
+}

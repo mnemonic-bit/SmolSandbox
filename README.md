@@ -1,7 +1,17 @@
 # smolsandbox
 
-[![Version](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmnemonic-bit%2FAI-Sandbox%2Fdevelop%2FCargo.toml&query=%24.package.version&label=version&prefix=v&color=blue)](https://github.com/mnemonic-bit/AI-Sandbox/blob/develop/Cargo.toml)
-[![Build and tests (develop)](https://github.com/mnemonic-bit/AI-Sandbox/actions/workflows/rust.yml/badge.svg?branch=develop&event=push)](https://github.com/mnemonic-bit/AI-Sandbox/actions/workflows/rust.yml?query=branch%3Adevelop+event%3Apush)
+[![Release](https://img.shields.io/github/v/release/mnemonic-bit/SmolSandbox?label=Release)](https://github.com/mnemonic-bit/SmolSandbox/releases/latest)
+[![Pre-release](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmnemonic-bit%2FSmolSandbox%2Fdevelop%2FCargo.toml&query=%24.package.version&label=Pre-release&prefix=v&color=blue)](https://github.com/mnemonic-bit/SmolSandbox/blob/develop/Cargo.toml)
+[![Build and tests (develop)](https://github.com/mnemonic-bit/SmolSandbox/actions/workflows/rust.yml/badge.svg?branch=develop&event=push)](https://github.com/mnemonic-bit/SmolSandbox/actions/workflows/rust.yml?query=branch%3Adevelop+event%3Apush)
+
+Release shows the latest published normal GitHub Release. Pre-release shows
+the committed version on `develop`, even while validation is pending or failed;
+the build badge reports validation separately. The version badges use the same
+sources on every branch and may show equal versions after publication.
+Badge caching can delay updates; the linked release and manifest are the
+authoritative sources. Pre-release creates no tag or GitHub prerelease.
+See the [release procedure](RUST-APPLICATION.md#github-releases) for publishing
+and recovery.
 
 Run Claude, Codex, OpenCode, or Hermes Agent in a persistent SmolVM sandbox
 with `smolsbx`.
