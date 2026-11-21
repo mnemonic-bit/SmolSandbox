@@ -16,6 +16,13 @@ for Features 0004 and 0009 remain recorded in their validation records.
 
 ## Executable and host requirements
 
+Open the README's [Release badge destination](https://github.com/mnemonic-bit/SmolSandbox/releases/latest).
+Select the binary ZIP for the host's operating system and architecture.
+Each binary ZIP contains only `smolsbx` (Windows: `smolsbx.exe`) at its root.
+Extract the executable to a directory on `PATH`; use an extractor that retains
+Unix executable permissions on Linux and macOS. GitHub's source-code ZIP and
+tarball links contain source and are separate from the binary ZIPs.
+
 Build the application from this checkout with a Rust toolchain:
 
 ```text
@@ -724,6 +731,8 @@ does not weaken rules, change repository access, or commit version changes.
    The release title is `v<version>` and the release has GitHub-generated
    notes. The tag identifies the validated push SHA, even if `main` advances
    before publication finishes.
+7. Wait for the release job to succeed before treating the binary release as
+   complete. Verify that the release page lists all four binary ZIP assets.
 
 A successful PR eligibility check records GitHub state at check time; the
 check does not reserve the version. Another tag or release can appear later.
@@ -732,11 +741,36 @@ failure. The workflow repeats eligibility after merging and immediately
 before publication. API errors fail eligibility instead of treating an
 unverifiable version as unused.
 
-Published releases contain generated notes; this automation does not attach
-compiled binaries. Native production binaries remain available as workflow
-artifacts, built without `test-adapter`. GitHub determines the latest release
-using its version rules, so an older run finishing later does not explicitly
-replace a newer release as latest.
+Release automation attaches four executable-only binary ZIPs alongside the
+generated notes. For version `<version>`, the required uploaded assets are:
+
+| Operating system and architecture | Release asset name | Sole ZIP entry |
+| --- | --- | --- |
+| Linux x86-64 | `smolsbx-v<version>-x86_64-unknown-linux-gnu.zip` | `smolsbx` |
+| Linux ARM64 | `smolsbx-v<version>-aarch64-unknown-linux-gnu.zip` | `smolsbx` |
+| macOS ARM64 | `smolsbx-v<version>-aarch64-apple-darwin.zip` | `smolsbx` |
+| Windows x86-64 | `smolsbx-v<version>-x86_64-pc-windows-msvc.zip` | `smolsbx.exe` |
+
+Each archive contains one regular file at the archive root. Templates are
+embedded in the executable; the ZIPs contain no separate resources, source,
+documentation, checksums, debug symbols, directories, or nested artifact ZIPs.
+Linux and macOS ZIP entries retain executable permissions. Native jobs package
+the default-feature production builds, verify the target architecture, and run
+the extracted executables with `--version`. Distributed builds exclude
+`test-adapter`.
+
+The publication job downloads packaged artifacts from its own workflow run.
+All four executables therefore come from successful native builds of the exact
+validated release commit, rather than a moving branch or another run. The
+release job validates every local ZIP before release writes and verifies
+uploaded bytes before reporting completion. Missing artifacts, packaging
+failures, and upload failures fail the job with the affected target named in
+the diagnostic. A visible release page alone does not establish that all
+binary uploads completed. GitHub's automatically generated source archives
+remain separate from uploaded binary assets.
+
+GitHub determines the latest release using its version rules, so an older run
+finishing later does not explicitly replace a newer release as latest.
 
 ### Recover a release attempt
 
@@ -749,9 +783,18 @@ creation policy while preserving branch requirements.
 Recovery verifies the selected tag's resolved commit, including annotated
 tags. If the tag matches the original commit, recovery creates a missing
 release or publishes a matching draft while retaining existing draft notes.
-A matching published release succeeds without editing the release or its
-notes. A failure after tag creation leaves the tag available for recovery.
-Concurrent attempts verify resulting state before accepting a duplicate.
+A matching published release recovers missing binary ZIPs while preserving
+the release and its notes. A failure after tag creation leaves the tag
+available for recovery. Concurrent attempts verify resulting state before
+accepting a duplicate.
+
+Recovery compares existing asset bytes against the expected ZIPs from the
+original run. Matching assets retain their IDs and bytes; missing ZIPs are
+uploaded. A complete matching release succeeds without duplicate uploads or
+metadata edits. Conflicting asset contents or unexpected uploaded assets fail
+explicitly without silent replacement or deletion. Inspect the named target
+and conflict diagnostic before deciding on a reviewed version change. The
+release job reports completion only after all four required assets verify.
 
 After a successful release creation or draft publication, recovery retains
 the returned release ID and verifies that release through direct reads.

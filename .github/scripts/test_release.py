@@ -154,7 +154,9 @@ class ReleaseTests(unittest.TestCase):
         self.messages = []
 
     def run_release(self, mode="publish", sha=SHA):
-        return release.run(mode, self.api, sha, report=self.messages.append)
+        # These cases isolate metadata decisions; binary transfer has its own suite.
+        with mock.patch.object(release, "load_binary_assets", return_value={}), mock.patch.object(release, "ensure_binary_assets"):
+            return release.run(mode, self.api, sha, report=self.messages.append)
 
     def matching_tag(self, tag=TAG, sha=SHA):
         self.api.tags[tag] = {"type": "commit", "sha": sha}
