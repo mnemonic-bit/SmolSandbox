@@ -609,3 +609,59 @@ Bug 0004 AC-04 passed locally. AC-01 through AC-03 remain `not_run` for
 the corrected workflow. No new hosted workflow revision or run URL exists.
 The earlier native CI failures and their source revisions remain recorded
 above. Prior feature completion decisions remain unchanged.
+
+## Feature 0017 main publication audit: 2026-11-21
+
+Read-only GitHub API inspection verified
+[main push run 44896711807, attempt 1](https://github.com/mnemonic-bit/SmolSandbox/actions/runs/44896711807)
+for revision `b025321647c5c0bc2719bf12fbc3650a0156c6b4`, package `0.11.0`.
+The [Bug 0005 report](../BUGS/bug-0005-release-publication-verification-race.md)
+records the source comparison, job IDs, publication evidence, deterministic
+reproduction, and diagnostic limits.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Release version eligibility | passed | Job `136823823570` reports `success` |
+| Four native Rust jobs | passed | Linux x86-64, Linux ARM64, macOS ARM64 on `macos-15`, and Windows x86-64 report `success` for formatting, both Clippy configurations, both test configurations, production compilation, baseline independence, and artifact upload |
+| Release automation tests | passed | Linux x86-64 hosted step reports `success`; local Python suite at `a90c901651b6bf16bbfe74548295d824f9a2895e` exited 0 with 40 tests |
+| Publication verification and overall workflow | failed | Release job `136826963386` reports `failure`; user-supplied output says publication cannot be verified |
+| Published release and tag identity | passed | Later REST reads return normal release `453632353`, published at `2026-11-21T11:09:52Z`, and tag `v0.11.0` resolving to the exact main push revision |
+| Artifact archive contents | not_run | Job step outcomes were inspected; archives were not downloaded |
+| Hosted publication recovery | not_run | No rerun or GitHub write was performed during this investigation |
+| Real SmolVM guest checks | not_run | No new guest execution evidence was collected |
+
+Native macOS execution is established for this source revision. The earlier
+runner failures and local-only observations remain recorded at their own
+revisions. Published release state does not make the failed workflow pass
+and does not establish all Feature 0017 hosted acceptance criteria.
+Cutover remains incomplete: artifact contents and the pending real guest
+checks still lack evidence. This audit changes no software or version.
+
+## Bug 0005 local publication verification audit: 2026-11-21
+
+The local fix for [Bug 0005](../BUGS/bug-0005-release-publication-verification-race.md#implementation-and-local-validation-2026-11-21)
+uses source revision `a90c901651b6bf16bbfe74548295d824f9a2895e` plus the
+publication verification changes and matching `0.11.1` package versions.
+The bug record preserves SHA-256 values for the tested scripts, workflow,
+and version files. Successful release writes now retain and validate the
+returned release ID. Direct reads verify that ID and the expected tag commit
+with five attempts and one-second retry intervals. Verification performs no
+additional publication writes.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Original delayed-list reproduction | passed | Before the fix: exit 1 with the reported verification error and one stored release. After the fix: exit 0 with one stored release |
+| Release regression suite and inline script equality | passed | Full Python suite exited 0; 52 tests cover delayed create/draft reads, bounded exhaustion, metadata and HTTP errors, tag identity, and reruns with zero writes |
+| Formatting and both Clippy configurations | passed | All three required commands exited 0 on native `x86_64-unknown-linux-gnu`, Rust/Cargo `1.100.0` |
+| Both complete Rust test configurations | passed | Exit 0; 118 default tests and 185 tests with `test-adapter` |
+| Production release build | passed | Exit 0; default features; binary reports `smolsbx 0.11.1` |
+| Baseline independence | passed | Required command exited 0; isolated source checks and nine compiled test executables per configuration passed with empty `PATH` |
+| Independent implementation review | passed | No actionable correctness findings; reviewer independently ran all 52 release tests |
+| Disposable hosted publication and same-commit rerun | not_run | No configured GitHub credential or disposable repository is available; no new hosted run or release identity was collected |
+| Other native targets and real SmolVM guests | not_run | No new hosted or real guest execution was performed |
+
+Bug 0005 AC-01 through AC-05 passed locally. AC-06 remains `not_run`. The original
+`v0.11.0` tag and release were preserved. No recovery rerun was performed.
+Previous observations, source revisions, and feature completion decisions
+remain recorded. New four-target CI, hosted publication, artifact-content,
+and real guest evidence remain pending.

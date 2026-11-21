@@ -753,6 +753,16 @@ A matching published release succeeds without editing the release or its
 notes. A failure after tag creation leaves the tag available for recovery.
 Concurrent attempts verify resulting state before accepting a duplicate.
 
+After a successful release creation or draft publication, recovery retains
+the returned release ID and verifies that release through direct reads.
+Verification makes at most five attempts, with a one-second wait between
+attempts. A missing release, a stale draft response, or a temporarily missing
+tag consumes an attempt. Every attempt resolves the tag against the original
+push commit. Verification performs no additional publication writes. An
+exhausted limit fails with the release ID and attempt count so the owner can
+rerun the original workflow. Conflicting tags, invalid metadata, authorization
+failures, and rate limits fail without being treated as successful publication.
+
 If the tag resolves to another commit, or a release's expected tag cannot be
 verified, publication fails without changing existing state. Resolve a
 version conflict through another reviewed version change before a new merge
