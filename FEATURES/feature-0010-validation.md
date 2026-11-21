@@ -554,29 +554,58 @@ test configurations and baseline independence. The default suite passed 118
 tests; the adapter suite passed 185 tests. The baseline-independence command
 passed nine compiled test executables per configuration with empty `PATH`.
 
-## Feature 0017 release automation audit: 2026-11-21
+## Native CI runner availability audit: 2026-11-15
 
-Feature 0017 is implemented locally on source revision
-`af4496c8e4b797613a3ca621e5f5029663e4a2e1` plus uncommitted changes, with
-package version `0.11.0`. The [Feature 0017 validation record](feature-0017-validation.md)
-identifies software input hashes, commands, acceptance results, and
-[recorded fake API calls](feature-0017-api-traces.json).
+Read-only GitHub Actions API inspection verified the
+[develop push run 43591773427](https://github.com/mnemonic-bit/SmolSandbox/actions/runs/43591773427),
+created on 2026-11-14 for revision
+`af4496c8e4b797613a3ca621e5f5029663e4a2e1`, package `0.10.0`.
+The workflow and `Cargo.toml` at that revision match the corresponding
+workspace files at `530f0578ce12593ec2365c7e2175c206ef0a75d8`.
+The [feature branch push run 43591744170](https://github.com/mnemonic-bit/SmolSandbox/actions/runs/43591744170)
+at the workspace revision independently has the same platform outcomes.
 
-Formatting, both Clippy configurations, both Rust test configurations
-(118 default tests and 185 adapter tests), and the production release build
-passed on native `x86_64-unknown-linux-gnu`, Rust/Cargo `1.100.0`.
-Baseline-independence verification passed: isolated source checks and nine
-compiled test executables per feature configuration passed with empty `PATH`.
-All 40 release regression tests passed, including 355 event/branch/
-validation-result guard combinations. Actionlint `1.7.12` passed workflow
-syntax validation. Release logic tests record recovery, immutable commit
-identity, API errors, and creation races without contacting GitHub.
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Linux x86-64 native workflow | passed | Develop job `132437828876`: formatting, both Clippy configurations, both test configurations, release build, baseline independence, and artifact upload report `success` |
+| Linux ARM64 native workflow | passed | Develop job `132437829151`: all the same steps report `success` |
+| Windows x86-64 native workflow | passed | Develop job `132437829157`: all the same steps report `success` |
+| macOS ARM64 runner allocation | failed | Develop job `132437829109`: conclusion `cancelled`, no assigned runner, no steps; annotation: `The configuration 'macos-14-arm64-us-default' is not supported` |
+| macOS ARM64 Rust checks and release upload | not_run | Runner allocation stopped the job before checkout; no macOS artifact exists |
+| Artifact metadata | passed | Develop run lists `smolsbx-x86_64-unknown-linux-gnu`, `smolsbx-aarch64-unknown-linux-gnu`, and `smolsbx-x86_64-pc-windows-msvc`; archive contents were not inspected |
+| Overall workflow | failed | API conclusion is `cancelled`; four-platform success remains unestablished |
+| Replacement macOS runner | not_run | No workflow change or new dispatch was performed for this report |
+| Real SmolVM guest checks | not_run | No new guest execution evidence was collected |
 
-Hosted release publication, reruns, read-only draft visibility, token
-permissions, branch rules, and required-check merge enforcement remain
-`not_run`. No disposable GitHub repository or GitHub credential was available.
-Feature 0017 remains `In progress` until mandatory hosted acceptance checks
-pass. Linux ARM64, macOS ARM64, Windows x86-64 native execution and real
-SmolVM guest/profile checks for this source remain `not_run`. No new real
-guest evidence accompanies release automation. Previous source observations,
-status decisions, and pending native or guest requirements remain preserved.
+[Bug 0004](../BUGS/bug-0004-retired-macos-runner.md) records the exact
+annotations, source links, GitHub's 2026-11-02 macOS 14 retirement, proposed
+`macos-15` replacement, and recovery acceptance criteria. This audit adds
+observed native CI evidence while preserving previous observations and
+their source revisions. The report and audit leave the software version
+unchanged. Local Rust checks were `not_run` during this documentation-only
+investigation. Prior feature completion decisions remain recorded; macOS
+native validation, archive-content inspection, and real guest checks remain
+pending.
+
+## Bug 0004 local runner fix validation: 2026-11-15
+
+The local fix for [Bug 0004](../BUGS/bug-0004-retired-macos-runner.md#implementation-and-local-validation-2026-11-15)
+uses source revision `530f0578ce12593ec2365c7e2175c206ef0a75d8` plus
+the `macos-15` workflow selection and matching `0.10.1` package versions.
+The macOS target remains `aarch64-apple-darwin`. Exact workflow comparison
+confirmed that the runner label is the only workflow change.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Formatting and both Clippy configurations | passed | All three required commands exited 0 on native `x86_64-unknown-linux-gnu`, Rust/Cargo `1.100.0` |
+| Both full Rust test configurations | passed | Exit 0; 118 default tests and 185 tests with `test-adapter` |
+| Production release build | passed | Exit 0; default features; executable reports `smolsbx 0.10.1` |
+| Baseline independence | passed | Required command exited 0; isolated source checks and nine compiled test executables per configuration passed with empty `PATH` |
+| Matching package versions | passed | Parsed `Cargo.toml` and the `smolsandbox` entry in `Cargo.lock` both select `0.10.1` |
+| Corrected native CI workflow and artifact inspection | not_run | Fix remains local; a new hosted run must verify macOS runner allocation, all four job conclusions, artifact presence, and macOS archive contents |
+| Real SmolVM guest checks | not_run | No new guest execution evidence was collected |
+
+Bug 0004 AC-04 passed locally. AC-01 through AC-03 remain `not_run` for
+the corrected workflow. No new hosted workflow revision or run URL exists.
+The earlier native CI failures and their source revisions remain recorded
+above. Prior feature completion decisions remain unchanged.
