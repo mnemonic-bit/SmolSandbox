@@ -654,6 +654,130 @@ retain their historical spelling to preserve identity and ownership.
 additional provisioning-download integrity independently of migration and
 documentation completion.
 
+## GitHub releases
+
+The [Rust application validation workflow](.github/workflows/rust.yml) builds
+and tests only pushes to exact branch names `main` and `develop`. Feature
+branches receive no CI builds, including through pull requests into either
+branch. Pull requests into `main` run only the read-only check
+`Release version eligibility`. The check starts on `opened`, `reopened`,
+`synchronize`, `edited`, and `ready_for_review` events, including draft PRs
+and pull requests that leave both version files unchanged. The check parses
+the proposed merge commit's `Cargo.toml` and `Cargo.lock` without building
+code, running repository scripts, or installing project dependencies.
+
+After a merge reaches `develop`, all four native matrix jobs validate the
+committed source. After a merge reaches `main`, an early eligibility check
+validates the actual push commit before the native matrix starts. Publication
+requires that check and every native job to succeed in the same run. Failed,
+cancelled, or skipped validation publishes nothing. Manual validation accepts
+only `main` and `develop`; manual runs on other branches or tags skip builds.
+Manual runs never publish. Tag pushes start no builds or publication.
+
+### Repository prerequisites
+
+The repository owner configures GitHub rules before enabling publication:
+
+1. Keep a pull-request requirement for exact branches `main` and `develop`.
+2. Keep repository write access limited to the owner while the owner is the
+   only intended merger. A pull-request requirement does not restrict which
+   users can merge.
+3. Review required status checks. Remove requirements for per-PR native
+   builds, because pull requests no longer start those jobs. Preserve the
+   pull-request requirement while configuring checks for validation after
+   merges into `develop` and `main`.
+4. After the first metadata check appears, require the exact check
+   `Release version eligibility` in a ruleset targeting only `main`. Select
+   GitHub Actions as the expected source. Keep bypass permissions empty.
+   Do not require this check in a shared `main`/`develop` ruleset: feature
+   pull requests into `develop` do not report release eligibility.
+5. Permit the release identity to create tags matching `v*`. Resolve any
+   tag-creation restriction before enabling publication. Restrictions on
+   updating or deleting existing tags can remain active without a bypass.
+
+The workflow uses the automatically supplied `GITHUB_TOKEN`. Its default
+permission is `contents: read`; only the release job receives
+`contents: write`. No personal access token is required. Token permissions
+do not override rulesets. A ruleset rejection fails publication; the workflow
+does not weaken rules, change repository access, or commit version changes.
+
+### Select and publish a version
+
+1. Select an unused `MAJOR.MINOR.PATCH` version through a reviewed software
+   change on `develop`, following [AGENTS.md](AGENTS.md). Update
+   `[package].version` in `Cargo.toml` and the root `smolsandbox` entry in
+   `Cargo.lock` together. Components are nonnegative decimal integers;
+   leading zeros are invalid except for the component `0`.
+2. Wait for the `develop` push validation. Building on `develop` creates no
+   tag and reserves no version.
+3. Open a release pull request into `main`. Retain the selected version when
+   promoting the validated `develop` commit; the merge itself requires no
+   additional version bump.
+4. Inspect `Release version eligibility` and its summary for the candidate
+   version, selected tag, and any conflicting tag or release URL. The check
+   rejects an existing tag or release, including a draft. Resolve merge
+   conflicts before expecting the proposed merge metadata check to pass.
+5. If eligibility passes and other branch rules permit merging, merge the
+   pull request. Wait for main eligibility and all four native jobs.
+6. Find the resulting `v<version>` tag and normal GitHub Release in
+   [repository releases](https://github.com/mnemonic-bit/SmolSandbox/releases).
+   The release title is `v<version>` and the release has GitHub-generated
+   notes. The tag identifies the validated push SHA, even if `main` advances
+   before publication finishes.
+
+A successful PR eligibility check records GitHub state at check time; the
+check does not reserve the version. Another tag or release can appear later.
+Rerun the check to refresh a stale result or recover from a transient API
+failure. The workflow repeats eligibility after merging and immediately
+before publication. API errors fail eligibility instead of treating an
+unverifiable version as unused.
+
+Published releases contain generated notes; this automation does not attach
+compiled binaries. Native production binaries remain available as workflow
+artifacts, built without `test-adapter`. GitHub determines the latest release
+using its version rules, so an older run finishing later does not explicitly
+replace a newer release as latest.
+
+### Recover a release attempt
+
+After a transient validation or API failure, rerun the original workflow for
+the original main push commit. A manual dispatch performs validation only
+and cannot replace that publication attempt. Inspect the failed job output
+before rerunning; ruleset rejection requires the owner to resolve the tag
+creation policy while preserving branch requirements.
+
+Recovery verifies the selected tag's resolved commit, including annotated
+tags. If the tag matches the original commit, recovery creates a missing
+release or publishes a matching draft while retaining existing draft notes.
+A matching published release succeeds without editing the release or its
+notes. A failure after tag creation leaves the tag available for recovery.
+Concurrent attempts verify resulting state before accepting a duplicate.
+
+If the tag resolves to another commit, or a release's expected tag cannot be
+verified, publication fails without changing existing state. Resolve a
+version conflict through another reviewed version change before a new merge
+into `main`. Never move or delete a published tag to make a conflicting run
+pass. A later merge that retains an already released version cannot create
+another release, even when compilation and tests would pass.
+
+### README version badges
+
+The README's Release badge reads the latest published normal release from
+`mnemonic-bit/SmolSandbox`; drafts and prereleases are excluded. If no normal
+release exists, the badge does not substitute the unreleased main manifest.
+Its link to the [latest release](https://github.com/mnemonic-bit/SmolSandbox/releases/latest)
+is authoritative. The Pre-release badge reads `[package].version` from
+[`develop/Cargo.toml`](https://github.com/mnemonic-bit/SmolSandbox/blob/develop/Cargo.toml)
+with a `v` prefix, regardless of which branch's README is viewed. The committed
+development version remains visible even when its validation is pending or
+failed; the development build-status badge reports that result separately.
+
+Pre-release is a display label. The badge creates no Git tag or GitHub
+prerelease and appends no suffix to the package version. Both badges can
+display the same version immediately after a release. Badge-service caching
+can delay updates; use the linked release or manifest to check the current
+version.
+
 ## Validation and cutover gates
 
 Run the independent Rust checks from the checkout:

@@ -553,3 +553,30 @@ All seven required Rust commands passed for `0.10.0`, including both full
 test configurations and baseline independence. The default suite passed 118
 tests; the adapter suite passed 185 tests. The baseline-independence command
 passed nine compiled test executables per configuration with empty `PATH`.
+
+## Feature 0017 release automation audit: 2026-11-21
+
+Feature 0017 is implemented locally on source revision
+`af4496c8e4b797613a3ca621e5f5029663e4a2e1` plus uncommitted changes, with
+package version `0.11.0`. The [Feature 0017 validation record](feature-0017-validation.md)
+identifies software input hashes, commands, acceptance results, and
+[recorded fake API calls](feature-0017-api-traces.json).
+
+Formatting, both Clippy configurations, both Rust test configurations
+(118 default tests and 185 adapter tests), and the production release build
+passed on native `x86_64-unknown-linux-gnu`, Rust/Cargo `1.100.0`.
+Baseline-independence verification passed: isolated source checks and nine
+compiled test executables per feature configuration passed with empty `PATH`.
+All 40 release regression tests passed, including 355 event/branch/
+validation-result guard combinations. Actionlint `1.7.12` passed workflow
+syntax validation. Release logic tests record recovery, immutable commit
+identity, API errors, and creation races without contacting GitHub.
+
+Hosted release publication, reruns, read-only draft visibility, token
+permissions, branch rules, and required-check merge enforcement remain
+`not_run`. No disposable GitHub repository or GitHub credential was available.
+Feature 0017 remains `In progress` until mandatory hosted acceptance checks
+pass. Linux ARM64, macOS ARM64, Windows x86-64 native execution and real
+SmolVM guest/profile checks for this source remain `not_run`. No new real
+guest evidence accompanies release automation. Previous source observations,
+status decisions, and pending native or guest requirements remain preserved.
