@@ -46,6 +46,10 @@ class FakeAPI:
         self.releases = []
         self.hooks = []
         self.next_id = 1
+        self.publication_happened = False
+        self.list_missing_reads = 0
+        self.direct_missing_reads = 0
+        self.direct_draft_reads = 0
 
     def add_release(self, tag=TAG, draft=False, body="Retained release notes", **fields):
         item = {
@@ -98,10 +102,29 @@ class FakeAPI:
         if method == "GET" and url.path.startswith("/git/tags/"):
             return {"object": copy.deepcopy(self.annotations[url.path.removeprefix("/git/tags/")])}
         if method == "GET" and url.path == "/releases":
+            if self.publication_happened and self.list_missing_reads:
+                self.list_missing_reads -= 1
+                return []
             query = parse_qs(url.query)
             page = int(query.get("page", ["1"])[0])
             size = int(query.get("per_page", ["30"])[0])
             return copy.deepcopy(self.releases[(page - 1) * size:page * size])
+        if method == "GET" and re.fullmatch(r"/releases/[0-9]+", url.path):
+            if self.direct_missing_reads:
+                self.direct_missing_reads -= 1
+                if allow_missing:
+                    return None
+                raise release.APIError(404, "Release temporarily absent")
+            for item in self.releases:
+                if item["id"] == int(url.path.rsplit("/", 1)[1]):
+                    visible = copy.deepcopy(item)
+                    if self.direct_draft_reads:
+                        self.direct_draft_reads -= 1
+                        visible["draft"] = True
+                    return visible
+            if allow_missing:
+                return None
+            raise release.APIError(404, "Release absent")
         if method == "POST" and url.path == "/git/refs":
             tag = data["ref"].removeprefix("refs/tags/")
             if tag in self.tags:
@@ -114,11 +137,13 @@ class FakeAPI:
             if any(item["tag_name"] == data["tag_name"] for item in self.releases):
                 raise release.APIError(422, "Release already exists")
             item = self.add_release(**{key: value for key, value in data.items() if key != "tag_name"}, tag=data["tag_name"])
+            self.publication_happened = True
             return copy.deepcopy(item)
         if method == "PATCH" and url.path.startswith("/releases/"):
             for item in self.releases:
                 if item["id"] == int(url.path.rsplit("/", 1)[1]):
                     item.update(copy.deepcopy(data))
+                    self.publication_happened = True
                     return copy.deepcopy(item)
         raise AssertionError(f"Unexpected API call: {method} {path} {data}")
 
@@ -152,6 +177,187 @@ class ReleaseTests(unittest.TestCase):
             if path.startswith("/contents/"):
                 self.assertEqual(parse_qs(urlsplit(path).query)["ref"], [SHA])
             self.assertNotIn(method, ("DELETE", "PUT"))
+
+    def test_created_release_survives_post_write_list_omission(self):
+        self.api.list_missing_reads = 1
+        self.assertEqual(self.run_release(), "published")
+        self.assertEqual(len(self.api.releases), 1)
+        self.assertEqual(self.api.tags[TAG], {"type": "commit", "sha": SHA})
+        creations = [call for call in self.api.writes if call[:2] == ("POST", "/releases")]
+        self.assertEqual(len(creations), 1)
+        self.assertIn(("GET", "/releases/1", None), self.api.calls)
+
+    def test_created_release_retries_direct_visibility_without_another_write(self):
+        self.api.list_missing_reads = 100
+        self.api.direct_missing_reads = 2
+        with mock.patch.object(release.time, "sleep") as sleep:
+            self.assertEqual(self.run_release(), "published")
+        self.assertEqual(sleep.call_args_list, [mock.call(1), mock.call(1)])
+        publication = next(index for index, call in enumerate(self.api.calls) if call[:2] == ("POST", "/releases"))
+        verification = self.api.calls[publication + 1:]
+        self.assertTrue(all(method == "GET" for method, _, _ in verification))
+        self.assertFalse(any(path.startswith("/releases?") for _, path, _ in verification))
+        self.assertEqual(verification.count(("GET", "/releases/1", None)), 3)
+        self.assertEqual(verification.count(("GET", "/git/ref/tags/" + TAG, None)), 3)
+        self.assertEqual(len(self.api.releases), 1)
+        self.assertEqual(self.api.releases[0]["body"], "Generated release notes")
+
+    def test_draft_publication_retries_stale_visibility_and_preserves_notes(self):
+        self.matching_tag()
+        item = self.api.add_release(draft=True, body="Hand-edited draft notes")
+        self.api.list_missing_reads = 100
+        self.api.direct_draft_reads = 2
+        with mock.patch.object(release.time, "sleep") as sleep:
+            self.assertEqual(self.run_release(), "published")
+        self.assertEqual(sleep.call_args_list, [mock.call(1), mock.call(1)])
+        self.assertEqual(item["id"], 1)
+        self.assertEqual(item["body"], "Hand-edited draft notes")
+        self.assertFalse(item["draft"])
+        self.assertEqual([call[:2] for call in self.api.writes], [("PATCH", "/releases/1")])
+        self.assertEqual(self.api.calls.count(("GET", "/releases/1", None)), 3)
+
+    def test_verification_limit_fails_without_repeating_publication(self):
+        for visibility in ("direct_missing_reads", "direct_draft_reads"):
+            with self.subTest(visibility=visibility):
+                self.api = FakeAPI()
+                setattr(self.api, visibility, 100)
+                with mock.patch.object(release.time, "sleep") as sleep:
+                    with self.assertRaisesRegex(release.ReleaseError, "cannot be verified.*5.*rerun"):
+                        self.run_release()
+                self.assertEqual(self.api.calls.count(("GET", "/releases/1", None)), 5)
+                self.assertEqual(sleep.call_args_list, [mock.call(1)] * 4)
+                self.assertEqual(len([call for call in self.api.writes if call[:2] == ("POST", "/releases")]), 1)
+                self.assertEqual(len(self.api.releases), 1)
+                self.assertFalse(self.api.releases[0]["draft"])
+
+    def test_verification_http_errors_fail_without_retrying_or_republishing(self):
+        for status in (401, 403, 429, 500):
+            with self.subTest(status=status):
+                self.api = FakeAPI()
+                self.api.error_next("GET", "/releases/1", status)
+                with mock.patch.object(release.time, "sleep") as sleep:
+                    with self.assertRaises(release.APIError) as raised:
+                        self.run_release()
+                self.assertEqual(raised.exception.status, status)
+                sleep.assert_not_called()
+                self.assertEqual(self.api.calls.count(("GET", "/releases/1", None)), 1)
+                self.assertEqual(len([call for call in self.api.writes if call[:2] == ("POST", "/releases")]), 1)
+
+    def test_post_write_tag_conflict_fails_without_republishing(self):
+        def change_tag(api, data):
+            api.tags[TAG] = {"type": "commit", "sha": OTHER_SHA}
+        self.api.at_next("POST", "/releases", change_tag)
+        with mock.patch.object(release.time, "sleep") as sleep:
+            with self.assertRaisesRegex(release.ReleaseError, "expected " + SHA):
+                self.run_release()
+        sleep.assert_not_called()
+        self.assertEqual(self.api.tags[TAG]["sha"], OTHER_SHA)
+        self.assertEqual(len(self.api.releases), 1)
+        self.assertEqual(len([call for call in self.api.writes if call[:2] == ("POST", "/releases")]), 1)
+
+    def test_missing_post_write_tag_is_rechecked_within_verification_limit(self):
+        def hide_tag(api, data):
+            api.tags.pop(TAG)
+            def schedule_restore(api, data):
+                api.at_next("GET", "/git/ref/tags/" + TAG, restore_tag)
+            def restore_tag(api, data):
+                api.tags[TAG] = {"type": "commit", "sha": SHA}
+            api.at_next("GET", "/git/ref/tags/" + TAG, schedule_restore)
+        self.api.at_next("POST", "/releases", hide_tag)
+        with mock.patch.object(release.time, "sleep") as sleep:
+            self.assertEqual(self.run_release(), "published")
+        sleep.assert_called_once_with(1)
+        self.assertEqual(self.api.tags[TAG]["sha"], SHA)
+        self.assertEqual(len(self.api.releases), 1)
+        self.assertEqual(len([call for call in self.api.writes if call[:2] == ("POST", "/releases")]), 1)
+
+    def test_permanently_missing_post_write_tag_does_not_accept_release_response(self):
+        def hide_tag(api, data):
+            api.tags.pop(TAG)
+        self.api.at_next("POST", "/releases", hide_tag)
+        with mock.patch.object(release.time, "sleep") as sleep:
+            with self.assertRaisesRegex(release.ReleaseError, "cannot be verified.*5.*rerun"):
+                self.run_release()
+        self.assertEqual(sleep.call_args_list, [mock.call(1)] * 4)
+        self.assertNotIn(TAG, self.api.tags)
+        self.assertEqual(len(self.api.releases), 1)
+        self.assertEqual(len([call for call in self.api.writes if call[:2] == ("POST", "/releases")]), 1)
+
+    def test_publication_response_requires_valid_identity_and_normal_release(self):
+        invalid = [
+            [], {},
+            {"id": True}, {"id": 0}, {"id": "1"},
+            {"tag_name": "v9.0.0"},
+            {"draft": True}, {"draft": 0}, {"draft": None},
+            {"prerelease": True}, {"prerelease": 0}, {"prerelease": None},
+        ]
+        for changes in invalid:
+            with self.subTest(changes=changes):
+                self.api = FakeAPI()
+                response = {"id": 1, "tag_name": TAG, "draft": False, "prerelease": False}
+                if isinstance(changes, dict) and changes:
+                    response.update(changes)
+                else:
+                    response = changes
+                self.api.at_next("POST", "/releases", lambda api, data: response)
+                with mock.patch.object(release.time, "sleep") as sleep:
+                    with self.assertRaises(release.ReleaseError):
+                        self.run_release()
+                sleep.assert_not_called()
+                self.assertEqual(len([call for call in self.api.writes if call[:2] == ("POST", "/releases")]), 1)
+                self.assertNotIn(("GET", "/releases/1", None), self.api.calls)
+
+    def test_draft_publication_response_cannot_select_another_release_id(self):
+        self.matching_tag()
+        self.api.add_release(draft=True)
+        self.api.at_next("PATCH", "/releases/1", lambda api, data: {
+            "id": 2, "tag_name": TAG, "draft": False, "prerelease": False,
+        })
+        with self.assertRaises(release.ReleaseError):
+            self.run_release()
+        self.assertEqual([call[:2] for call in self.api.writes], [("PATCH", "/releases/1")])
+        self.assertFalse(any(path == "/releases/2" for _, path, _ in self.api.calls))
+
+    def test_direct_verification_rejects_invalid_metadata(self):
+        invalid = [
+            [], {},
+            {"id": 2}, {"id": True}, {"tag_name": "v9.0.0"},
+            {"draft": 0}, {"draft": None},
+            {"prerelease": True}, {"prerelease": None},
+        ]
+        for changes in invalid:
+            with self.subTest(changes=changes):
+                self.api = FakeAPI()
+                response = {"id": 1, "tag_name": TAG, "draft": False, "prerelease": False}
+                if isinstance(changes, dict) and changes:
+                    response.update(changes)
+                else:
+                    response = changes
+                self.api.at_next("GET", "/releases/1", lambda api, data: response)
+                with mock.patch.object(release.time, "sleep") as sleep:
+                    with self.assertRaises(release.ReleaseError):
+                        self.run_release()
+                sleep.assert_not_called()
+                self.assertEqual(self.api.calls.count(("GET", "/releases/1", None)), 1)
+                self.assertEqual(len(self.api.releases), 1)
+
+    def test_rerun_after_delayed_verification_preserves_release_and_tag_without_writes(self):
+        for draft in (False, True):
+            with self.subTest(draft=draft):
+                self.api = FakeAPI()
+                if draft:
+                    self.matching_tag()
+                    self.api.add_release(draft=True, body="Retained draft notes")
+                self.api.list_missing_reads = 1
+                self.api.direct_missing_reads = 1
+                with mock.patch.object(release.time, "sleep"):
+                    self.assertEqual(self.run_release(), "published")
+                before = copy.deepcopy((self.api.tags, self.api.releases))
+                self.api.calls.clear()
+                self.api.list_missing_reads = 0
+                self.assertEqual(self.run_release(), "already-published")
+                self.assertEqual((self.api.tags, self.api.releases), before)
+                self.assert_no_writes()
 
     def test_pr_with_unused_version_passes_without_writes(self):
         self.run_release("eligibility-pr")

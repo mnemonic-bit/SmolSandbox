@@ -39,10 +39,15 @@ jobs:
           import os
           import re
           import sys
+          import time
           import tomllib
           import urllib.error
           import urllib.parse
           import urllib.request
+
+
+          VERIFICATION_ATTEMPTS = 5
+          VERIFICATION_DELAY_SECONDS = 1
 
 
           class ReleaseError(Exception):
@@ -129,7 +134,7 @@ jobs:
                   raise ReleaseError(f"Invalid file content for {path} at {sha}") from error
 
 
-          def release_state(api, tag):
+          def resolve_tag(api, tag):
               encoded_tag = urllib.parse.quote(tag, safe="")
               reference = api.request("GET", f"/git/ref/tags/{encoded_tag}", allow_missing=True)
               commit = None
@@ -145,6 +150,11 @@ jobs:
                   if obj.get("type") != "commit" or not isinstance(obj.get("sha"), str):
                       raise ReleaseError(f"Tag {tag} does not resolve to a commit")
                   commit = obj["sha"]
+              return commit
+
+
+          def release_state(api, tag):
+              commit = resolve_tag(api, tag)
               releases = []
               page = 1
               while True:
@@ -175,6 +185,52 @@ jobs:
               if release is not None and release.get("prerelease", False) and not release.get("draft", False):
                   raise ReleaseError(f"Existing release {tag} is a prerelease; publication requires a normal release")
               return commit, release
+
+
+          def publication_metadata(result, tag, expected_id=None):
+              if not isinstance(result, dict):
+                  raise ReleaseError(f"Publication of {tag} returned invalid release metadata")
+              release_id = result.get("id")
+              if type(release_id) is not int or release_id <= 0:
+                  raise ReleaseError(f"Publication of {tag} has no positive numeric release ID")
+              if expected_id is not None and release_id != expected_id:
+                  raise ReleaseError(f"Publication of {tag} returned release ID {release_id}, expected {expected_id}")
+              if result.get("tag_name") != tag:
+                  raise ReleaseError(f"Publication of {tag} returned a different release tag")
+              if type(result.get("draft")) is not bool or type(result.get("prerelease")) is not bool:
+                  raise ReleaseError(f"Publication of {tag} returned invalid draft or prerelease metadata")
+              if result["prerelease"] and not result["draft"]:
+                  raise ReleaseError(f"Publication of {tag} is a prerelease; publication requires a normal release")
+              return result
+
+
+          def verify_publication(api, tag, sha, result, report, expected_id=None):
+              result = publication_metadata(result, tag, expected_id)
+              if result["draft"]:
+                  raise ReleaseError(f"Publication of {tag} returned a draft instead of a normal release")
+              release_id = result["id"]
+              # Verify by ID up to five times, with one second between delayed reads.
+              for attempt in range(1, VERIFICATION_ATTEMPTS + 1):
+                  commit = resolve_tag(api, tag)
+                  if commit is not None:
+                      report(f"Tag: {tag} resolves to {commit}")
+                  if commit is not None and commit != sha:
+                      raise ReleaseError(f"Tag {tag} resolves to {commit}, expected {sha}; the existing tag is preserved")
+                  current = api.request("GET", f"/releases/{release_id}", allow_missing=True)
+                  if current is not None:
+                      current = publication_metadata(current, tag, release_id)
+                      if not current["draft"] and commit == sha:
+                          return current
+                  reason = "release is not visible" if current is None else "release is still a draft"
+                  if commit is None:
+                      reason = "tag is not visible"
+                  report(f"Publication verification for {tag}, release {release_id}, attempt {attempt}/{VERIFICATION_ATTEMPTS}: {reason}")
+                  if attempt < VERIFICATION_ATTEMPTS:
+                      time.sleep(VERIFICATION_DELAY_SECONDS)
+              raise ReleaseError(
+                  f"Publication of {tag}, release {release_id}, cannot be verified after "
+                  f"{VERIFICATION_ATTEMPTS} attempts; rerun the original workflow"
+              )
 
 
           def publish(api, tag, sha, report):
@@ -222,12 +278,13 @@ jobs:
                       payload["body"] = body
                   if current is not None:
                       release_id = current.get("id")
-                      if not isinstance(release_id, int):
-                          raise ReleaseError(f"Draft release {tag} has no numeric ID")
-                      api.request("PATCH", f"/releases/{release_id}", payload)
+                      if type(release_id) is not int or release_id <= 0:
+                          raise ReleaseError(f"Draft release {tag} has no positive numeric ID")
+                      result = api.request("PATCH", f"/releases/{release_id}", payload)
                   else:
+                      release_id = None
                       try:
-                          api.request("POST", "/releases", payload)
+                          result = api.request("POST", "/releases", payload)
                       except APIError as error:
                           if error.status not in (409, 422):
                               raise
@@ -235,12 +292,9 @@ jobs:
                           if release is None:
                               raise error
                           continue
-                  _, release = checked_state(api, tag, sha, report)
-                  if release is None:
-                      raise ReleaseError(f"Publication of {tag} cannot be verified; rerun the original workflow")
-                  if not release.get("draft", False):
-                      report(f"Published {tag}: {release.get('html_url', '(URL unavailable)')}")
-                      return "published"
+                  release = verify_publication(api, tag, sha, result, report, expected_id=release_id)
+                  report(f"Published {tag}: {release.get('html_url', '(URL unavailable)')}")
+                  return "published"
               raise ReleaseError(f"Concurrent publication of {tag} did not converge; rerun the original workflow")
 
 
