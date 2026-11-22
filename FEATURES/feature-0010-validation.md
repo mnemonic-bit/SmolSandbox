@@ -768,3 +768,56 @@ Windows/UNC evidence; AC-13 is `not_run` for every profile. Preserve the
 previous audits and their source revisions. Final cutover acceptance remains
 pending the outstanding native, artifact, and real guest evidence; metadata
 fixtures and baseline-independent tests do not establish real SmolVM behavior.
+
+## Bug 0007 machine-label namespace audit: 2026-11-22
+
+Source revision `e9957bbee4816dc09ff5549fcbe3d5ae80793324` plus the local
+[Bug 0007](../BUGS/bug-0007-machine-label-prefix.md) implementation changes
+uses package version `0.13.1` in both Cargo files and machine policy revision
+`7`. The software diff SHA-256 is
+`7fbb957d02f83a81efd8a860ffaf74755e0d4526805c458be9144ee0ff3a381f`,
+computed from the exact output of:
+
+```sh
+git diff --binary e9957bbee4816dc09ff5549fcbe3d5ae80793324 -- Cargo.toml Cargo.lock src tests | sha256sum
+```
+
+New builders, login machines, and workspace machines emit only `SmolSandbox.`
+application labels. Readers accept old-prefix, matching dual-prefix, and
+disjoint ownership fields. Unequal duplicate values across any of the six
+ownership keys make ownership ambiguous and cannot authorize mutation,
+including explicit workspace overrides and unused shared-machine fields.
+Descriptive-only labels confer no ownership; contradictory descriptive
+duplicates invalidate the affected metadata component. Existing machines
+retain their labels and creation-time revision. Revision-6 replacement uses
+the normal prepare-and-verify-before-delete sequence.
+
+The following commands ran on native `x86_64-unknown-linux-gnu` with Rust and
+Cargo `1.100.0`. Each final command exited `0`.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| `cargo fmt --all -- --check` | passed | Exit 0; final isolated-source run also passed |
+| `cargo clippy --locked --all-targets -- -D warnings` | passed | Exit 0; final isolated-source run also passed |
+| `cargo clippy --locked --features test-adapter --all-targets -- -D warnings` | passed | Exit 0; final isolated-source run also passed |
+| `cargo test --locked --all-targets` | passed | Final exit 0; 138 tests |
+| `cargo test --locked --features test-adapter --all-targets` | passed | Exit 0; 213 tests |
+| `cargo build --locked --release --bin smolsbx` | passed | Exit 0; default features; executable reports `smolsbx 0.13.1` |
+| `cargo run --locked --example check_baseline_independence` | passed | Exit 0; isolated Rust checks and production build passed; ten compiled test executables per feature configuration passed with empty `PATH` |
+| Original namespace reproduction | passed | Exact all-profile creation regression exited 101 before the fix because `SmolSandbox.kind` was absent; the same regression passes after the fix |
+| Compatibility and independent metadata regressions | passed | All four profiles and three creation kinds have complete independent label/argument expectations; mixed inventories, revision-6 replacement, all six conflicting ownership pairs, actual removal refusal, cleanup, purge, descriptive neutrality, and published jq filters passed |
+| Independent implementation and literal inventory review | passed | Separate agents reviewed production paths and regressions; retained old-prefix literals serve compatibility or historical evidence; templates, definition markers, and historical executable names are unchanged |
+| Other native targets and hosted CI | not_run | No new Linux ARM64, macOS ARM64, Windows x86-64, or hosted execution evidence was collected |
+| Real SmolVM namespace and metadata round-trip | not_run | SmolVM and `/dev/kvm` are absent; real create/list, all-profile provisioning, authentication, interactive behavior, long labels, and stop/start retention remain pending |
+
+The first default-suite run exposed a new test fixture that repeated the
+existing `custom` configuration instead of supplying a conflicting value.
+The fixture now uses `default`; the focused regression, final default suite,
+and isolated-source suites passed. No production change was needed for that
+fixture correction.
+
+Bug 0007 AC-01 through AC-07 passed locally. No existing machine was relabeled
+and no user definition or harness home was migrated. Preserve the previous
+audits and source revisions. Final cutover acceptance remains pending the
+outstanding native and real guest evidence; these mocked checks establish no
+new real SmolVM result.

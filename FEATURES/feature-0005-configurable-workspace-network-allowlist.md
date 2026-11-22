@@ -194,7 +194,7 @@ codex-workspace-<base-id>-r<revision>-<workspace-id>
 ```
 
 The complete digest remains stored in the
-`codex-sandbox.workspace-sha256` managed label. Although the historical label
+`SmolSandbox.workspace-sha256` managed label. Although the historical label
 name says "workspace," its value now identifies the workspace's full immutable
 machine specification.
 

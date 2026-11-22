@@ -50,7 +50,9 @@ Workspace creation already records
 `codex-sandbox.workspace-path-sha256`, the full SHA-256 of the canonical
 workspace path's UTF-8 bytes. Unlike `workspace-sha256`, this value does not
 include the base image or creation options. Use this existing association;
-do not add a new label or change machine identity.
+do not add a new label or change machine identity. Bug 0007 changes the
+current creation key to `SmolSandbox.workspace-path-sha256`; the baseline
+key remains readable for compatibility.
 
 ## Command interface
 
@@ -87,7 +89,8 @@ If a row has the matching path label but contradictory kind, name, or other
 managed metadata, retain the row as `unknown` and explain the contradiction.
 The row claims association; the listing must not imply verified ownership.
 
-For `--all`, include rows with any `codex-sandbox.` label and rows whose names
+For `--all`, include rows with ownership labels under `SmolSandbox.` or the
+compatible `codex-sandbox.` prefix and rows whose names
 match the existing complete builder, login, or workspace naming patterns.
 Exclude unrelated SmolVM machines. Recognize labelled custom names without
 requiring a deterministic name, while validating their metadata. Missing or

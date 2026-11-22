@@ -119,7 +119,7 @@ impl ListingFixture {
 
     fn selected_name(&self) -> String {
         format!(
-            "codex-workspace-{}-r6-{}",
+            "codex-workspace-{}-r7-{}",
             self.base(),
             &self.hash(&[])[..12]
         )
@@ -131,12 +131,12 @@ impl ListingFixture {
 
     fn workspace_row(&self, name: &str) -> Value {
         json!({"name": name, "state": "stopped", "labels": {
-            "codex-sandbox.kind": "workspace",
-            "codex-sandbox.base-id": self.base(),
-            "codex-sandbox.revision": "6",
-            "codex-sandbox.workspace-sha256": self.hash(&[]),
-            "codex-sandbox.workspace-path-sha256": self.path_hash(),
-            "codex-sandbox.configuration": "default"
+            "SmolSandbox.kind": "workspace",
+            "SmolSandbox.base-id": self.base(),
+            "SmolSandbox.revision": "7",
+            "SmolSandbox.workspace-sha256": self.hash(&[]),
+            "SmolSandbox.workspace-path-sha256": self.path_hash(),
+            "SmolSandbox.configuration": "default"
         }})
     }
 }
@@ -202,33 +202,33 @@ fn mixed_inventory_preserves_association_assessment_and_complete_identities() {
     let f = ListingFixture::new();
     let selected = f.workspace_row(&f.selected_name());
     let mut policy = f.workspace_row("policy-and-base-and-options");
-    policy["labels"]["codex-sandbox.revision"] = json!("4");
-    policy["labels"]["codex-sandbox.base-id"] = json!("111111111111");
-    policy["labels"]["codex-sandbox.workspace-sha256"] = json!("b".repeat(64));
-    policy["labels"]["codex-sandbox.configuration"] = json!("custom");
+    policy["labels"]["SmolSandbox.revision"] = json!("4");
+    policy["labels"]["SmolSandbox.base-id"] = json!("111111111111");
+    policy["labels"]["SmolSandbox.workspace-sha256"] = json!("b".repeat(64));
+    policy["labels"]["SmolSandbox.configuration"] = json!("custom");
     policy["state"] = json!("paused-by-new-runtime");
     let mut base = f.workspace_row("another-harness-generation");
-    base["labels"]["codex-sandbox.base-id"] = json!("222222222222");
+    base["labels"]["SmolSandbox.base-id"] = json!("222222222222");
     let mut configuration = f.workspace_row("custom-options");
-    configuration["labels"]["codex-sandbox.workspace-sha256"] = json!("c".repeat(64));
-    configuration["labels"]["codex-sandbox.configuration"] = json!("custom");
+    configuration["labels"]["SmolSandbox.workspace-sha256"] = json!("c".repeat(64));
+    configuration["labels"]["SmolSandbox.configuration"] = json!("custom");
     let different_name = f.workspace_row("name-override-from-another-invocation");
     let mut other = f.workspace_row("other-workspace");
-    other["labels"]["codex-sandbox.workspace-path-sha256"] = json!("d".repeat(64));
+    other["labels"]["SmolSandbox.workspace-path-sha256"] = json!("d".repeat(64));
     let mut contradiction = f.workspace_row("codex-builder-333333333333");
-    contradiction["labels"]["codex-sandbox.kind"] = json!("login");
+    contradiction["labels"]["SmolSandbox.kind"] = json!("login");
     let mut missing = f.workspace_row("missing-path");
     missing["labels"]
         .as_object_mut()
         .unwrap()
-        .remove("codex-sandbox.workspace-path-sha256");
+        .remove("SmolSandbox.workspace-path-sha256");
     let mut malformed = f.workspace_row("malformed-path");
-    malformed["labels"]["codex-sandbox.workspace-path-sha256"] = json!("not-a-hash");
+    malformed["labels"]["SmolSandbox.workspace-path-sha256"] = json!("not-a-hash");
     let builder = json!({"name":"custom-builder", "state":"running", "labels":{
-        "codex-sandbox.kind":"builder", "codex-sandbox.base-id":f.base()
+        "SmolSandbox.kind":"builder", "SmolSandbox.base-id":f.base()
     }});
     let login = json!({"name":"custom-login", "state":"created", "labels":{
-        "codex-sandbox.kind":"login", "codex-sandbox.base-id":f.base(), "codex-sandbox.revision":"6"
+        "SmolSandbox.kind":"login", "SmolSandbox.base-id":f.base(), "SmolSandbox.revision":"7"
     }});
     let legacy_workspace = format!("codex-workspace-{}-r3-{}", f.base(), &f.hash(&[])[..12]);
     f.inventory(&[
@@ -248,7 +248,7 @@ fn mixed_inventory_preserves_association_assessment_and_complete_identities() {
         json!({"name":"codex-login-aaaaaaaaaaaa-r3","state":"stopped"}),
         json!({"name":"prefix-codex-builder-aaaaaaaaaaaa","state":"stopped"}),
         json!({"name":"codex-workspace-invalid","state":"stopped"}),
-        json!({"name":"foreign-namespace-label","labels":{"codex-sandbox.future":"value"}}),
+        json!({"name":"foreign-namespace-label","labels":{"SmolSandbox.future":"value"}}),
     ]);
     let scoped = document(f.list().arg("--json").output().unwrap());
     assert_eq!(scoped["version"], 1);
@@ -256,7 +256,7 @@ fn mixed_inventory_preserves_association_assessment_and_complete_identities() {
     assert_eq!(scoped["workspace"], f.workspace.to_str().unwrap());
     assert_eq!(scoped["unassociated_workspace_count"], 3);
     assert_eq!(scoped["reference"]["base_id"], f.base());
-    assert_eq!(scoped["reference"]["revision"], "6");
+    assert_eq!(scoped["reference"]["revision"], "7");
     assert_eq!(scoped["reference"]["workspace_sha256"], f.hash(&[]));
     assert_eq!(scoped["reference"]["desired_machine"], f.selected_name());
     assert_eq!(
@@ -374,8 +374,8 @@ fn reference_identity_uses_normalized_hosts_and_name_override() {
     let f = ListingFixture::new();
     let hash = f.hash(&["packages.example.com", "more.example.com"]);
     let mut selected = f.workspace_row("my-explicit-workspace");
-    selected["labels"]["codex-sandbox.workspace-sha256"] = json!(hash);
-    selected["labels"]["codex-sandbox.configuration"] = json!("custom");
+    selected["labels"]["SmolSandbox.workspace-sha256"] = json!(hash);
+    selected["labels"]["SmolSandbox.configuration"] = json!("custom");
     f.inventory(&[selected]);
     let first = document(
         f.list()
@@ -605,7 +605,7 @@ fn inventory_failures_emit_no_partial_json() {
         json!({"not":"an array"}),
         json!([{"state":"stopped"}]),
         json!([{"name":"same"},{"name":"same"}]),
-        json!([{"name":"bad-label","labels":{"codex-sandbox.kind":false}}]),
+        json!([{"name":"bad-label","labels":{"SmolSandbox.kind":false}}]),
         json!([{"name":"bad-state","state":42}]),
         json!([{"name":"bad-label-map","labels":[]}]),
     ] {
@@ -807,8 +807,8 @@ fn machine_metadata(f: &ListingFixture) -> Value {
 
 fn with_metadata(mut machine: Value, base: Option<Value>, inputs: Option<Value>) -> Value {
     for (key, value) in [
-        ("codex-sandbox.base-inputs", base),
-        ("codex-sandbox.machine-inputs", inputs),
+        ("SmolSandbox.base-inputs", base),
+        ("SmolSandbox.machine-inputs", inputs),
     ] {
         if let Some(value) = value {
             machine["labels"][key] = json!(serde_json::to_string(&value).unwrap());
@@ -852,7 +852,7 @@ fn metadata_status_components_and_reference_fallback_are_independent() {
         rows.push(with_metadata(f.workspace_row(name), b, m));
     }
     let mut other = f.workspace_row("old-other-workspace");
-    other["labels"]["codex-sandbox.workspace-path-sha256"] = json!("c".repeat(64));
+    other["labels"]["SmolSandbox.workspace-path-sha256"] = json!("c".repeat(64));
     rows.push(other);
     rows.push(json!({"name":"codex-builder-aaaaaaaaaaaa","state":"stopped"}));
     f.inventory(&rows);
@@ -999,7 +999,7 @@ fn malformed_or_contradictory_metadata_preserves_scope_and_authoritative_assessm
         ));
     }
     let mut malformed = with_metadata(f.workspace_row("malformed-json"), None, Some(inputs));
-    malformed["labels"]["codex-sandbox.base-inputs"] = json!("{secret-malformed-sentinel");
+    malformed["labels"]["SmolSandbox.base-inputs"] = json!("{secret-malformed-sentinel");
     machines.push(malformed);
     let mut future_extra = base;
     future_extra["future_field"] = json!({"unknown":"accepted"});
@@ -1048,8 +1048,8 @@ fn malformed_or_contradictory_metadata_preserves_scope_and_authoritative_assessm
     );
     for machine in &mut machines {
         let labels = machine["labels"].as_object_mut().unwrap();
-        labels.remove("codex-sandbox.base-inputs");
-        labels.remove("codex-sandbox.machine-inputs");
+        labels.remove("SmolSandbox.base-inputs");
+        labels.remove("SmolSandbox.machine-inputs");
     }
     f.inventory(&machines);
     let legacy = document(f.list().args(["--all", "--json"]).output().unwrap());
@@ -1175,7 +1175,7 @@ fn published_json_filters_select_recorded_paths_and_exact_host_options() {
         Some(machine_metadata(&f)),
     );
     let mut other = f.workspace_row("old-other-workspace");
-    other["labels"]["codex-sandbox.workspace-path-sha256"] = json!("b".repeat(64));
+    other["labels"]["SmolSandbox.workspace-path-sha256"] = json!("b".repeat(64));
     f.inventory(&[described, other]);
     let report = success(f.list().args(["--all", "--json"]).output().unwrap());
     for (source, variable, value, expression) in [
@@ -1195,7 +1195,7 @@ fn published_json_filters_select_recorded_paths_and_exact_host_options() {
             fs::read(f.root.join("inventory.json")).unwrap(),
             "path",
             f.workspace.to_str().unwrap(),
-            ".[] | (.labels[\"codex-sandbox.machine-inputs\"]? | fromjson?) as $inputs | select($inputs.workspace_path == $path)",
+            ".[] | (.labels[\"SmolSandbox.machine-inputs\"]? | fromjson?) as $inputs | select($inputs.workspace_path == $path)",
         ),
     ] {
         let child = Command::new("jq")
@@ -1214,4 +1214,67 @@ fn published_json_filters_select_recorded_paths_and_exact_host_options() {
         let selected: Value = serde_json::from_slice(&result.stdout).unwrap();
         assert_eq!(selected["name"], "recorded-workspace");
     }
+}
+
+#[test]
+fn mixed_label_prefix_inventory_reads_legacy_metadata_and_exposes_conflicts() {
+    let f = ListingFixture::new();
+    let described = with_metadata(
+        f.workspace_row("new-prefix"),
+        Some(base_metadata(&f)),
+        Some(machine_metadata(&f)),
+    );
+    let mut rows = vec![described.clone()];
+    for (name, keep_current) in [("old-prefix", false), ("dual-prefix", true)] {
+        let mut machine = described.clone();
+        machine["name"] = json!(name);
+        let labels = machine["labels"].as_object_mut().unwrap();
+        for (key, value) in labels.clone() {
+            let suffix = key.strip_prefix("SmolSandbox.").unwrap();
+            labels.insert(format!("codex-sandbox.{suffix}"), value);
+            if !keep_current {
+                labels.remove(&key);
+            }
+        }
+        rows.push(machine);
+    }
+    let mut conflict = rows[2].clone();
+    conflict["name"] = json!("ownership-conflict");
+    conflict["labels"]["codex-sandbox.configuration"] = json!("custom");
+    rows.push(conflict);
+    let mut descriptive_conflict = rows[2].clone();
+    descriptive_conflict["name"] = json!("descriptive-conflict");
+    descriptive_conflict["labels"]["codex-sandbox.machine-inputs"] = json!("{}");
+    rows.push(descriptive_conflict);
+    rows.push(
+        json!({"name":"descriptive-only","state":"stopped","labels":{
+            "SmolSandbox.base-inputs":"{}", "codex-sandbox.machine-inputs":"{}"
+        }}),
+    );
+    f.inventory(&rows);
+    let report = document(f.list().args(["--all", "--json"]).output().unwrap());
+    assert_eq!(names(&report).len(), 5);
+    for name in ["new-prefix", "old-prefix", "dual-prefix"] {
+        assert_eq!(row(&report, name)["source"], "labels", "{name}");
+        assert_eq!(
+            row(&report, name)["workspace_path_sha256"],
+            f.path_hash(),
+            "{name}"
+        );
+        assert_eq!(row(&report, name)["metadata_status"], "complete", "{name}");
+        assert_eq!(
+            row(&report, name)["machine_inputs"]["workspace_path"],
+            f.workspace.to_str().unwrap(),
+            "{name}"
+        );
+    }
+    assert_eq!(row(&report, "ownership-conflict")["assessment"], "unknown");
+    assert_eq!(
+        row(&report, "descriptive-conflict")["metadata_status"],
+        "invalid"
+    );
+    assert_eq!(
+        row(&report, "descriptive-conflict")["assessment"],
+        "different-configuration"
+    );
 }

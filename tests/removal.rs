@@ -103,10 +103,10 @@ impl Fixture {
     }
     fn workspace(&self, name: &str, revision: &str, state: &str) -> Value {
         json!({"name":name,"state":state,"created_at":17,"ports":0,"labels":{
-            "codex-sandbox.kind":"workspace", "codex-sandbox.base-id":"111111111111",
-            "codex-sandbox.revision":revision, "codex-sandbox.workspace-sha256":"a".repeat(64),
-            "codex-sandbox.workspace-path-sha256":digest(self.workspace.to_str().unwrap()),
-            "codex-sandbox.configuration":"custom"
+            "SmolSandbox.kind":"workspace", "SmolSandbox.base-id":"111111111111",
+            "SmolSandbox.revision":revision, "SmolSandbox.workspace-sha256":"a".repeat(64),
+            "SmolSandbox.workspace-path-sha256":digest(self.workspace.to_str().unwrap()),
+            "SmolSandbox.configuration":"custom"
         }})
     }
     #[cfg(feature = "test-adapter")]
@@ -164,7 +164,7 @@ fn dry_run_is_definition_independent_lock_free_and_does_not_change_permissions()
     let f = Fixture::new();
     f.set(&[
         f.workspace("preview-stale", "4", "running"),
-        f.workspace("preview-current", "0006", "stopped"),
+        f.workspace("preview-current", "0007", "stopped"),
     ]);
     #[cfg(unix)]
     {
@@ -203,11 +203,11 @@ fn stale_comparison_uses_decimal_values_and_preserves_base_or_name_only_differen
     let f = Fixture::new();
     let future = "9".repeat(200);
     let old = format!("{}4", "0".repeat(200));
-    let mut different_base = f.workspace("different-base-name", "6", "created");
-    different_base["labels"]["codex-sandbox.base-id"] = json!("999999999999");
+    let mut different_base = f.workspace("different-base-name", "7", "created");
+    different_base["labels"]["SmolSandbox.base-id"] = json!("999999999999");
     f.set(&[
         f.workspace("older-decimal", &old, "stopped"),
-        f.workspace("equal-decimal", "000006", "stopped"),
+        f.workspace("equal-decimal", "000007", "stopped"),
         f.workspace("future-decimal", &future, "stopped"),
         different_base,
     ]);
@@ -241,8 +241,8 @@ fn descriptive_labels_do_not_change_removal_ownership_or_selection() {
         if !row["labels"].is_object() {
             row["labels"] = json!({});
         }
-        row["labels"]["codex-sandbox.base-inputs"] = json!("{malformed");
-        row["labels"]["codex-sandbox.machine-inputs"] =
+        row["labels"]["SmolSandbox.base-inputs"] = json!("{malformed");
+        row["labels"]["SmolSandbox.machine-inputs"] =
             json!(r#"{"version":999,"workspace_path":"contradictory"}"#);
     }
     f.set(&rows);
@@ -265,12 +265,12 @@ fn scoped_preview_counts_unassociated_candidates_without_guessing_paths() {
     missing["labels"]
         .as_object_mut()
         .unwrap()
-        .remove("codex-sandbox.workspace-path-sha256");
+        .remove("SmolSandbox.workspace-path-sha256");
     let mut malformed = f.workspace("malformed-path", "4", "stopped");
-    malformed["labels"]["codex-sandbox.workspace-path-sha256"] = json!("bad");
+    malformed["labels"]["SmolSandbox.workspace-path-sha256"] = json!("bad");
     let legacy = json!({"name":"codex-workspace-111111111111-r4-aaaaaaaaaaaa","state":"stopped"});
     let mut other = f.workspace("other-project", "4", "stopped");
-    other["labels"]["codex-sandbox.workspace-path-sha256"] = json!("b".repeat(64));
+    other["labels"]["SmolSandbox.workspace-path-sha256"] = json!("b".repeat(64));
     f.set(&[missing, malformed, legacy, other]);
     let out = f
         .command()
@@ -294,10 +294,10 @@ fn ownership_and_inventory_errors_refuse_before_any_application_write() {
         let mut bad = f.workspace("z-invalid", "4", "stopped");
         let mut rows = vec![f.workspace("a-valid", "4", "stopped")];
         match kind {
-            0 => bad["labels"]["codex-sandbox.kind"] = json!("login"),
-            1 => bad["labels"]["codex-sandbox.base-id"] = json!("BAD"),
-            2 => bad["labels"]["codex-sandbox.revision"] = json!("-1"),
-            3 => bad["labels"]["codex-sandbox.configuration"] = json!("unsupported"),
+            0 => bad["labels"]["SmolSandbox.kind"] = json!("login"),
+            1 => bad["labels"]["SmolSandbox.base-id"] = json!("BAD"),
+            2 => bad["labels"]["SmolSandbox.revision"] = json!("-1"),
+            3 => bad["labels"]["SmolSandbox.configuration"] = json!("unsupported"),
             4 => bad["state"] = json!("suspended"),
             5 => bad["created_at"] = Value::Null,
             6 => bad["name"] = json!("../escape"),
@@ -309,7 +309,7 @@ fn ownership_and_inventory_errors_refuse_before_any_application_write() {
                 .remove("name")
                 .map(|_| ())
                 .unwrap(),
-            10 => bad["labels"]["codex-sandbox.kind"] = json!(17),
+            10 => bad["labels"]["SmolSandbox.kind"] = json!(17),
             11 => bad["state"] = json!(true),
             12 => bad["labels"] = json!([]),
             _ => unreachable!(),
@@ -330,9 +330,9 @@ fn ownership_and_inventory_errors_refuse_before_any_application_write() {
 #[test]
 fn global_managed_namespace_requires_complete_labels_without_name_fallback() {
     for labels in [
-        json!({"codex-sandbox.note":"candidate"}),
-        json!({"codex-sandbox.kind":"workspace"}),
-        json!({"codex-sandbox.kind":"builder","codex-sandbox.base-id":"111111111111","codex-sandbox.revision":"4"}),
+        json!({"SmolSandbox.note":"candidate"}),
+        json!({"SmolSandbox.kind":"workspace"}),
+        json!({"SmolSandbox.kind":"builder","SmolSandbox.base-id":"111111111111","SmolSandbox.revision":"4"}),
     ] {
         let f = Fixture::new();
         f.set(&[json!({"name":"codex-builder-111111111111","state":"stopped","labels":labels})]);
@@ -381,7 +381,7 @@ fn explicit_relative_and_subdirectory_paths_preserve_canonical_workspace_scope()
     fs::create_dir_all(f.workspace.join(".git")).unwrap();
     let parent_row = f.workspace("parent-machine", "4", "stopped");
     let mut child_row = f.workspace("child-machine", "4", "stopped");
-    child_row["labels"]["codex-sandbox.workspace-path-sha256"] =
+    child_row["labels"]["SmolSandbox.workspace-path-sha256"] =
         json!(digest(native_path(&child).to_str().unwrap()));
     f.set(&[parent_row, child_row]);
     let out = f
@@ -417,25 +417,25 @@ fn all_eight_scope_revision_and_force_combinations_have_fixed_deletion_sets() {
                     ("a-old-stopped", "4", "stopped"),
                     ("b-old-created", "4", "created"),
                     ("c-old-running", "4", "running"),
-                    ("d-current", "0006", "stopped"),
-                    ("e-future", "7", "stopped"),
-                    ("f-current-running", "6", "running"),
+                    ("d-current", "0007", "stopped"),
+                    ("e-future", "8", "stopped"),
+                    ("f-current-running", "7", "running"),
                 ] {
                     let mut row = f.workspace(name, revision, state);
                     if name == "a-old-stopped" {
-                        row["labels"]["codex-sandbox.base-id"] = json!("777777777777");
-                        row["labels"]["codex-sandbox.configuration"] = json!("default");
+                        row["labels"]["SmolSandbox.base-id"] = json!("777777777777");
+                        row["labels"]["SmolSandbox.configuration"] = json!("default");
                     } else if name == "b-old-created" {
-                        row["labels"]["codex-sandbox.base-id"] = json!("888888888888");
-                        row["labels"]["codex-sandbox.workspace-sha256"] = json!("d".repeat(64));
+                        row["labels"]["SmolSandbox.base-id"] = json!("888888888888");
+                        row["labels"]["SmolSandbox.workspace-sha256"] = json!("d".repeat(64));
                     }
                     rows.push(row);
                 }
                 let mut other = f.workspace("g-other-workspace", "4", "stopped");
-                other["labels"]["codex-sandbox.workspace-path-sha256"] = json!("b".repeat(64));
+                other["labels"]["SmolSandbox.workspace-path-sha256"] = json!("b".repeat(64));
                 rows.extend([other,
-            json!({"name":"h-custom-login","state":"running","labels":{"codex-sandbox.kind":"login","codex-sandbox.base-id":"222222222222","codex-sandbox.revision":"4"}}),
-            json!({"name":"i-custom-builder","state":"stopped","labels":{"codex-sandbox.kind":"builder","codex-sandbox.base-id":"333333333333"}}),
+            json!({"name":"h-custom-login","state":"running","labels":{"SmolSandbox.kind":"login","SmolSandbox.base-id":"222222222222","SmolSandbox.revision":"4"}}),
+            json!({"name":"i-custom-builder","state":"stopped","labels":{"SmolSandbox.kind":"builder","SmolSandbox.base-id":"333333333333"}}),
             json!({"name":"codex-login-444444444444-r4","state":"stopped"}),
             json!({"name":"codex-workspace-555555555555-r4-cccccccccccc","state":"stopped"}),
             json!({"name":"codex-builder-666666666666","state":"running"}),
@@ -608,8 +608,8 @@ fn inventory_changes_under_lock_refuse_before_mutation() {
             0 => fresh["state"] = json!("running"),
             1 => fresh["created_at"] = json!(18),
             2 => fresh["ports"] = json!(1),
-            3 => fresh["labels"]["codex-sandbox.base-id"] = json!("222222222222"),
-            4 => fresh["labels"]["codex-sandbox.workspace-path-sha256"] = json!("b".repeat(64)),
+            3 => fresh["labels"]["SmolSandbox.base-id"] = json!("222222222222"),
+            4 => fresh["labels"]["SmolSandbox.workspace-path-sha256"] = json!("b".repeat(64)),
             5 => fresh["name"] = json!("new-target"),
             _ => unreachable!(),
         }
@@ -664,7 +664,7 @@ fn successful_stop_requires_same_incarnation_stopped_before_delete() {
         match change {
             0 => after["state"] = json!("running"),
             1 => after["created_at"] = json!(18),
-            2 => after["labels"]["codex-sandbox.revision"] = json!("3"),
+            2 => after["labels"]["SmolSandbox.revision"] = json!("3"),
             3 => after["ports"] = json!(1),
             4 => after["state"] = json!("created"),
             _ => unreachable!(),
@@ -926,9 +926,9 @@ fn empty_and_running_only_selections_succeed_without_capability_queries_or_state
 #[test]
 fn unknown_states_are_ignored_only_when_revision_or_workspace_scope_protects_the_machine() {
     let f = Fixture::new();
-    let current = f.workspace("current-unknown-state", "6", "future-state");
+    let current = f.workspace("current-unknown-state", "7", "future-state");
     let mut other = f.workspace("other-unknown-state", "4", "future-state");
-    other["labels"]["codex-sandbox.workspace-path-sha256"] = json!("b".repeat(64));
+    other["labels"]["SmolSandbox.workspace-path-sha256"] = json!("b".repeat(64));
     f.set(&[current, other]);
     assert_ok(&f.command().arg("--dry-run").output().unwrap());
     assert_failed(&f.command().args(["--dry-run", "--all"]).output().unwrap());
@@ -989,4 +989,101 @@ fn newly_discovered_eligible_target_does_not_expand_authorized_plan() {
         .unwrap();
     assert_failed(&out);
     assert!(f.mutations().is_empty());
+}
+
+fn legacy_labels(mut machine: Value, keep_current: bool) -> Value {
+    let labels = machine["labels"].as_object_mut().unwrap();
+    for (key, value) in labels.clone() {
+        if let Some(suffix) = key.strip_prefix("SmolSandbox.") {
+            labels.insert(format!("codex-sandbox.{suffix}"), value);
+            if !keep_current {
+                labels.remove(&key);
+            }
+        }
+    }
+    machine
+}
+
+#[test]
+fn removal_reads_old_and_matching_dual_prefix_ownership_in_mixed_inventory() {
+    let f = Fixture::new();
+    f.set(&[
+        f.workspace("new-prefix", "4", "stopped"),
+        legacy_labels(f.workspace("old-prefix", "4", "stopped"), false),
+        legacy_labels(f.workspace("dual-prefix", "4", "stopped"), true),
+        json!({"name":"descriptive-only","state":"stopped","labels":{"SmolSandbox.base-inputs":"{}","codex-sandbox.machine-inputs":"{}"}}),
+    ]);
+    let output = f
+        .command()
+        .args(["--dry-run", "--global", "--all"])
+        .output()
+        .unwrap();
+    assert_ok(&output);
+    let text = String::from_utf8_lossy(&output.stdout);
+    for name in ["new-prefix", "old-prefix", "dual-prefix"] {
+        assert!(text.contains(name), "{text}");
+    }
+    assert!(!text.contains("descriptive-only"), "{text}");
+    assert!(f.mutations().is_empty());
+    #[cfg(feature = "test-adapter")]
+    {
+        let output = f
+            .command()
+            .args(["--global", "--all"])
+            .env("SMOLVM_TEST_ALLOW_CLEANUP", "1")
+            .output()
+            .unwrap();
+        assert_ok(&output);
+        let rows: Vec<Value> =
+            serde_json::from_slice(&fs::read(f.root.join("inventory.json")).unwrap()).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["name"], "descriptive-only");
+    }
+}
+
+#[test]
+fn removal_refuses_every_cross_prefix_ownership_conflict_before_deletion() {
+    for suffix in [
+        "kind",
+        "base-id",
+        "revision",
+        "workspace-sha256",
+        "workspace-path-sha256",
+        "configuration",
+    ] {
+        let f = Fixture::new();
+        let mut bad = legacy_labels(f.workspace("z-conflict", "4", "stopped"), true);
+        bad["labels"][format!("codex-sandbox.{suffix}")] = json!(match suffix {
+            "kind" => "login".to_string(),
+            "base-id" => "222222222222".to_string(),
+            "revision" => "8".to_string(),
+            "workspace-sha256" | "workspace-path-sha256" => "c".repeat(64),
+            "configuration" => "default".to_string(),
+            _ => unreachable!(),
+        });
+        let rows = vec![f.workspace("a-eligible", "4", "stopped"), bad];
+        f.set(&rows);
+        for scope in [
+            vec!["--global", "--all", "--force", "--dry-run"],
+            vec!["--all", "--force", "--dry-run"],
+        ] {
+            let output = f.command().args(scope).output().unwrap();
+            assert_failed(&output);
+            assert!(f.mutations().is_empty(), "{suffix}");
+        }
+        #[cfg(feature = "test-adapter")]
+        {
+            let output = f
+                .command()
+                .args(["--global", "--all", "--force"])
+                .env("SMOLVM_TEST_ALLOW_CLEANUP", "1")
+                .output()
+                .unwrap();
+            assert_failed(&output);
+            assert!(f.mutations().is_empty(), "{suffix}");
+            let remaining: Vec<Value> =
+                serde_json::from_slice(&fs::read(f.root.join("inventory.json")).unwrap()).unwrap();
+            assert_eq!(remaining, rows, "{suffix}");
+        }
+    }
 }

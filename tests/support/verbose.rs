@@ -339,7 +339,7 @@ fn login_sessions_and_clean_stop_warnings_preserve_existing_policy() {
         assert!(!f
             .inventory()
             .iter()
-            .any(|machine| machine["labels"]["codex-sandbox.kind"] == "workspace"));
+            .any(|machine| machine["labels"]["SmolSandbox.kind"] == "workspace"));
     }
 }
 

@@ -84,8 +84,9 @@ distinct workspace; repository discovery only selects a definition.
 
 ### Existing coverage and required additions
 
-All existing keys below use the `codex-sandbox.` prefix. The six-key
-ownership contract is declared by `MANAGED_KEYS` in
+At the observed baseline, all existing keys below use the `codex-sandbox.`
+prefix. Bug 0007 changes new creation labels to `SmolSandbox.` while retaining
+old-key reads. The six-key ownership contract is declared by `MANAGED_KEYS` in
 [`src/domain.rs`](../src/domain.rs). Creation paths are `ensure_base`,
 `ensure_login`, and `create_workspace` in
 [`src/lifecycle.rs`](../src/lifecycle.rs).
@@ -130,14 +131,18 @@ their creation options without inventing a new identity hash for them.
 
 ## Metadata labels
 
-Preserve the six existing ownership keys and their values. Add two
-descriptive labels. Each value is a compact JSON object serialized as a
-single label string, passed directly through process arguments without a
-shell. JSON encoding preserves arrays, embedded equals signs, Unicode,
+Preserve the six ownership suffixes and their kind-specific values. Use
+`SmolSandbox.` for new ownership and descriptive labels, as specified by
+[Bug 0007](../BUGS/bug-0007-machine-label-prefix.md). Read the old namespace
+for compatibility. Conflicting duplicate ownership values refuse mutation;
+conflicting duplicate descriptive values invalidate the descriptive component
+without authorizing or denying ownership. Add two descriptive labels. Each
+value is a compact JSON object serialized as a single label string, passed
+directly through process arguments without a shell. JSON encoding preserves arrays, embedded equals signs, Unicode,
 Windows paths, and escaped control characters without comma-delimited or
 colon-delimited reconstruction rules.
 
-### `codex-sandbox.base-inputs`
+### `SmolSandbox.base-inputs`
 
 Attach this label to every newly created builder, login, and workspace
 machine. The object contains:
@@ -162,7 +167,7 @@ hashing `definition_sha256` with the version produces a different result.
 The source path may later be moved, deleted, or contain different bytes.
 Listing must not read that path or claim the file still matches.
 
-### `codex-sandbox.machine-inputs`
+### `SmolSandbox.machine-inputs`
 
 Attach this label to every newly created machine. The object contains:
 
@@ -264,7 +269,7 @@ of smolsbx's listing formatter:
 smolvm machine ls --json |
   jq --arg path '/home/me/projects/myrepo' '
     .[] |
-    (.labels["codex-sandbox.machine-inputs"]? | fromjson?) as $inputs |
+    (.labels["SmolSandbox.machine-inputs"]? | fromjson?) as $inputs |
     select($inputs.workspace_path == $path)
   '
 ```

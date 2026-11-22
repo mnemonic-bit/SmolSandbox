@@ -512,7 +512,7 @@ mod lifecycle {
     fn workspace_machine(f: &Fixture) -> Value {
         f.inventory()
             .into_iter()
-            .find(|m| m["labels"]["codex-sandbox.kind"] == "workspace")
+            .find(|m| m["labels"]["SmolSandbox.kind"] == "workspace")
             .unwrap()
     }
 
@@ -543,15 +543,15 @@ mod lifecycle {
     }
     fn stale_machine(machine: &Value, revision: &str) -> Value {
         let mut stale = machine.clone();
-        let base = stale["labels"]["codex-sandbox.base-id"].as_str().unwrap();
-        let hash = stale["labels"]["codex-sandbox.workspace-sha256"]
+        let base = stale["labels"]["SmolSandbox.base-id"].as_str().unwrap();
+        let hash = stale["labels"]["SmolSandbox.workspace-sha256"]
             .as_str()
             .unwrap();
         stale["name"] = json!(format!(
             "codex-workspace-{base}-r{revision}-{}",
             &hash[..12]
         ));
-        stale["labels"]["codex-sandbox.revision"] = json!(revision);
+        stale["labels"]["SmolSandbox.revision"] = json!(revision);
         stale
     }
     fn cache_files(f: &Fixture) -> Vec<(PathBuf, Vec<u8>)> {
@@ -690,7 +690,7 @@ mod lifecycle {
         assert_eq!(workspace_machine(&f)["name"], first["name"]);
         assert_eq!(workspace_machine(&f)["labels"], first["labels"]);
         assert_eq!(
-            workspace_machine(&f)["labels"]["codex-sandbox.configuration"],
+            workspace_machine(&f)["labels"]["SmolSandbox.configuration"],
             "custom"
         );
 
@@ -699,7 +699,7 @@ mod lifecycle {
                 .into_iter()
                 .rfind(|args| {
                     args.get(1).is_some_and(|arg| arg == "create")
-                        && args.iter().any(|arg| arg == "codex-sandbox.kind=workspace")
+                        && args.iter().any(|arg| arg == "SmolSandbox.kind=workspace")
                 })
                 .unwrap()[3]
                 .clone()
@@ -712,7 +712,7 @@ mod lifecycle {
             .find(|m| m["name"] == latest_name())
             .unwrap();
         let inputs: Value = serde_json::from_str(
-            changed["labels"]["codex-sandbox.machine-inputs"]
+            changed["labels"]["SmolSandbox.machine-inputs"]
                 .as_str()
                 .unwrap(),
         )
@@ -750,7 +750,7 @@ mod lifecycle {
         assert_ok(&defaults.run(&["start", "--allow-host", host, "--allow-host", host]));
         assert_eq!(workspace_machine(&defaults)["name"], before["name"]);
         assert_eq!(
-            workspace_machine(&defaults)["labels"]["codex-sandbox.configuration"],
+            workspace_machine(&defaults)["labels"]["SmolSandbox.configuration"],
             "default"
         );
     }
@@ -783,12 +783,12 @@ mod lifecycle {
         let mut inv = f.inventory();
         for machine in &mut inv {
             if machine["name"] == stale {
-                machine["name"] = json!(stale.replace("-r6-", "-r4-"));
-                machine["labels"]["codex-sandbox.revision"] = json!("4");
+                machine["name"] = json!(stale.replace("-r7-", "-r4-"));
+                machine["labels"]["SmolSandbox.revision"] = json!("4");
             }
         }
         f.set_inventory(&inv);
-        let stale = stale.replace("-r6-", "-r4-");
+        let stale = stale.replace("-r7-", "-r4-");
         f.clear_log();
         let refused = f.run(&["start"]);
         assert!(!refused.status.success());
@@ -837,12 +837,12 @@ mod lifecycle {
         f.configure("codex");
         assert_ok(&f.run(&["start"]));
         let desired = workspace_machine(&f)["name"].as_str().unwrap().to_owned();
-        let stale = desired.replace("-r6-", "-r4-");
+        let stale = desired.replace("-r7-", "-r4-");
         let mut inventory = f.inventory();
         for machine in &mut inventory {
             if machine["name"] == desired {
                 machine["name"] = json!(stale);
-                machine["labels"]["codex-sandbox.revision"] = json!("4");
+                machine["labels"]["SmolSandbox.revision"] = json!("4");
             }
         }
         f.set_inventory(&inventory);
@@ -874,7 +874,7 @@ mod lifecycle {
         assert_ok(&f.run(&["start", "--port", "3000"]));
         let mut inv = f.inventory();
         for m in &mut inv {
-            if m["labels"]["codex-sandbox.kind"] == "workspace" {
+            if m["labels"]["SmolSandbox.kind"] == "workspace" {
                 m["state"] = json!("running");
             }
         }
@@ -981,7 +981,7 @@ mod lifecycle {
         assert!(!f
             .inventory()
             .iter()
-            .any(|m| m["labels"]["codex-sandbox.kind"] == "workspace"));
+            .any(|m| m["labels"]["SmolSandbox.kind"] == "workspace"));
         assert!(f.definition().exists());
         assert!(f.home.join(".smolsandbox/codex-home").exists());
         assert_eq!(fs::read_dir(artifact_dir).unwrap().count(), before);
@@ -1001,7 +1001,7 @@ mod lifecycle {
         assert_eq!(
             f.inventory()
                 .iter()
-                .filter(|m| m["labels"]["codex-sandbox.kind"] == "workspace")
+                .filter(|m| m["labels"]["SmolSandbox.kind"] == "workspace")
                 .count(),
             1
         );
@@ -1184,7 +1184,7 @@ mod lifecycle {
         immutable.sort();
         immutable.dedup();
         let hash = digest(&serde_json::to_vec(&immutable).unwrap());
-        let name = format!("codex-workspace-{base}-r6-{}", &hash[..12]);
+        let name = format!("codex-workspace-{base}-r7-{}", &hash[..12]);
         let output = f
             .command()
             .env("SMOLVM_TEST_EXEC_STATUS", "17")
@@ -1197,22 +1197,22 @@ mod lifecycle {
         let machine = workspace_machine(&f);
         assert_eq!(machine["name"], name);
         let mut labels = machine["labels"].clone();
-        for key in ["codex-sandbox.base-inputs", "codex-sandbox.machine-inputs"] {
+        for key in ["SmolSandbox.base-inputs", "SmolSandbox.machine-inputs"] {
             labels[key] = serde_json::from_str(labels[key].as_str().unwrap()).unwrap();
         }
         assert_eq!(
             labels,
             json!({
-                "codex-sandbox.kind":"workspace", "codex-sandbox.base-id":base,
-                "codex-sandbox.revision":"6", "codex-sandbox.workspace-sha256":hash,
-                "codex-sandbox.workspace-path-sha256":digest(workspace.as_bytes()),
-                "codex-sandbox.configuration":"default",
-                "codex-sandbox.base-inputs":{
+                "SmolSandbox.kind":"workspace", "SmolSandbox.base-id":base,
+                "SmolSandbox.revision":"7", "SmolSandbox.workspace-sha256":hash,
+                "SmolSandbox.workspace-path-sha256":digest(workspace.as_bytes()),
+                "SmolSandbox.configuration":"default",
+                "SmolSandbox.base-inputs":{
                     "version":1, "smolvm_version":"smolvm test 1.19.2",
                     "definition_sha256":digest(&definition),
                     "definition_path":f.definition(), "harness":"codex"
                 },
-                "codex-sandbox.machine-inputs":{
+                "SmolSandbox.machine-inputs":{
                     "version":1, "workspace_path":workspace, "options":immutable
                 }
             })
@@ -1529,7 +1529,7 @@ mod lifecycle {
             .into_iter()
             .find(|a| {
                 a.get(1).is_some_and(|s| s == "create")
-                    && a.iter().any(|s| s == "codex-sandbox.kind=workspace")
+                    && a.iter().any(|s| s == "SmolSandbox.kind=workspace")
             })
             .unwrap();
         let hosts: Vec<_> = creation
@@ -1541,9 +1541,9 @@ mod lifecycle {
             hosts,
             ["duplicate.example", "selected.example", "z.example"]
         );
-        assert!(creation.iter().any(|a| a == "codex-sandbox.revision=6"));
+        assert!(creation.iter().any(|a| a == "SmolSandbox.revision=7"));
         assert_eq!(
-            workspace_machine(&f)["labels"]["codex-sandbox.configuration"],
+            workspace_machine(&f)["labels"]["SmolSandbox.configuration"],
             "custom"
         );
     }
@@ -1621,7 +1621,7 @@ mod lifecycle {
             reset_calls(&f);
             let mut refreshed = desired.clone();
             if case == "contradictory" || case == "override-contradictory" {
-                refreshed["labels"]["codex-sandbox.base-id"] = json!("111111111111");
+                refreshed["labels"]["SmolSandbox.base-id"] = json!("111111111111");
             }
             if case == "failed" {
                 refreshed["state"] = json!("failed");
@@ -1699,12 +1699,12 @@ mod lifecycle {
                     fs::read_to_string(state_root.join("base-id")).unwrap(),
                     format!(
                         "{}\n",
-                        desired["labels"]["codex-sandbox.base-id"].as_str().unwrap()
+                        desired["labels"]["SmolSandbox.base-id"].as_str().unwrap()
                     )
                 );
                 assert_eq!(
                     fs::read_to_string(state_root.join("machine-revision")).unwrap(),
-                    "6\n"
+                    "7\n"
                 );
             }
         }
@@ -1795,8 +1795,8 @@ mod lifecycle {
         let mut machine = workspace_machine(&f);
         machine["name"] = json!("explicit-name");
         machine["labels"] = json!({
-            "codex-sandbox.base-inputs":machine["labels"]["codex-sandbox.base-inputs"],
-            "codex-sandbox.machine-inputs":machine["labels"]["codex-sandbox.machine-inputs"]
+            "SmolSandbox.base-inputs":machine["labels"]["SmolSandbox.base-inputs"],
+            "SmolSandbox.machine-inputs":machine["labels"]["SmolSandbox.machine-inputs"]
         });
         f.set_inventory(std::slice::from_ref(&machine));
         reset_calls(&f);
@@ -1814,7 +1814,7 @@ mod lifecycle {
             .find(|row| row["name"] == "explicit-name")
             .unwrap();
         assert_eq!(reused["labels"], machine["labels"]);
-        machine["labels"] = json!({"codex-sandbox.kind":"login"});
+        machine["labels"] = json!({"SmolSandbox.kind":"login"});
         f.set_inventory(&[machine]);
         reset_calls(&f);
         assert!(!f
@@ -1855,7 +1855,7 @@ mod lifecycle {
                 calls
                     .iter()
                     .filter(|a| a.get(1).is_some_and(|s| s == "create")
-                        && a.iter().any(|s| s == "codex-sandbox.kind=workspace"))
+                        && a.iter().any(|s| s == "SmolSandbox.kind=workspace"))
                     .count(),
                 1
             );
@@ -1878,9 +1878,7 @@ mod lifecycle {
         f.configure("codex");
         assert_ok(&f.run(&["build"]));
         let workspace = workspace_machine(&f);
-        let base = workspace["labels"]["codex-sandbox.base-id"]
-            .as_str()
-            .unwrap();
+        let base = workspace["labels"]["SmolSandbox.base-id"].as_str().unwrap();
         let artifact_dir = f.home.join(".smolsandbox/artifacts");
         fs::write(
             artifact_dir.join(format!("codex-devtools-{base}")),
@@ -1928,23 +1926,23 @@ mod lifecycle {
             assert_ok(&f.run(&["build"]));
             let desired = workspace_machine(&f);
             let mut old = stale_machine(&desired, "3");
-            old["labels"]["codex-sandbox.base-id"] = json!("fedcba987654");
-            old["labels"]["codex-sandbox.configuration"] = json!("custom");
+            old["labels"]["SmolSandbox.base-id"] = json!("fedcba987654");
+            old["labels"]["SmolSandbox.configuration"] = json!("custom");
             old["name"] = json!(format!(
                 "codex-workspace-fedcba987654-r3-{}",
-                &old["labels"]["codex-sandbox.workspace-sha256"]
+                &old["labels"]["SmolSandbox.workspace-sha256"]
                     .as_str()
                     .unwrap()[..12]
             ));
             let mut other = stale_machine(&desired, "2");
-            other["labels"]["codex-sandbox.workspace-path-sha256"] = json!("f".repeat(64));
+            other["labels"]["SmolSandbox.workspace-path-sha256"] = json!("f".repeat(64));
             if contradictory {
-                old["labels"]["codex-sandbox.workspace-sha256"] = json!("a".repeat(64));
+                old["labels"]["SmolSandbox.workspace-sha256"] = json!("a".repeat(64));
             }
             let login = f
                 .inventory()
                 .into_iter()
-                .find(|m| m["labels"]["codex-sandbox.kind"] == "login")
+                .find(|m| m["labels"]["SmolSandbox.kind"] == "login")
                 .unwrap();
             f.set_inventory(&[desired.clone(), old.clone(), other.clone(), login.clone()]);
             let caches = cache_files(&f);
@@ -2048,9 +2046,7 @@ mod lifecycle {
             f.configure("codex");
             assert_ok(&f.run(&["start"]));
             let workspace = workspace_machine(&f);
-            let base = workspace["labels"]["codex-sandbox.base-id"]
-                .as_str()
-                .unwrap();
+            let base = workspace["labels"]["SmolSandbox.base-id"].as_str().unwrap();
             let artifacts = f.home.join(".smolsandbox/artifacts");
             let current = artifacts.join(format!("codex-devtools-{base}.smolmachine"));
             fs::remove_file(&current).unwrap();
@@ -2363,7 +2359,7 @@ mod lifecycle {
             assert!(f
                 .inventory()
                 .iter()
-                .all(|machine| machine["labels"]["codex-sandbox.kind"] == "builder"));
+                .all(|machine| machine["labels"]["SmolSandbox.kind"] == "builder"));
         }
     }
 
@@ -2374,16 +2370,14 @@ mod lifecycle {
         assert_ok(&f.run(&["start"]));
         let log = f.log();
         let pack = log.find("pack create --from-vm").unwrap();
-        let workspace_create = log.find("codex-sandbox.kind=workspace").unwrap();
+        let workspace_create = log.find("SmolSandbox.kind=workspace").unwrap();
         assert!(pack < workspace_create);
         assert!(!f
             .inventory()
             .iter()
-            .any(|m| m["labels"]["codex-sandbox.kind"] == "builder"));
+            .any(|m| m["labels"]["SmolSandbox.kind"] == "builder"));
         let workspace = workspace_machine(&f);
-        let base = workspace["labels"]["codex-sandbox.base-id"]
-            .as_str()
-            .unwrap();
+        let base = workspace["labels"]["SmolSandbox.base-id"].as_str().unwrap();
         let artifacts = f.home.join(".smolsandbox/artifacts");
         fs::write(
             artifacts.join("codex-devtools-111111111111.smolmachine"),
@@ -2425,20 +2419,20 @@ mod lifecycle {
             reset_calls(&f);
             assert_ok(&f.run(&["start"]));
             assert!(!f.log().contains("machine create --name"));
-            let base = machine["labels"]["codex-sandbox.base-id"].as_str().unwrap();
+            let base = machine["labels"]["SmolSandbox.base-id"].as_str().unwrap();
             assert_eq!(
                 fs::read_to_string(root.join("base-id")).unwrap(),
                 format!("{base}\n")
             );
             assert_eq!(
                 fs::read_to_string(root.join("machine-revision")).unwrap(),
-                "6\n"
+                "7\n"
             );
             let generation: Value =
                 serde_json::from_slice(&fs::read(root.join("generation.json")).unwrap()).unwrap();
             assert_eq!(
                 generation,
-                json!({"version":1,"base_id":base,"revision":"6"})
+                json!({"version":1,"base_id":base,"revision":"7"})
             );
         }
     }
@@ -2460,5 +2454,201 @@ mod lifecycle {
         let diagnostics = String::from_utf8_lossy(&output.stderr);
         assert!(diagnostics.contains(stale["name"].as_str().unwrap()));
         assert!(diagnostics.contains("--replace-stale"));
+    }
+
+    fn namespace_labels(machine: &Value, keep_current: bool) -> Value {
+        let mut machine = machine.clone();
+        let labels = machine["labels"].as_object_mut().unwrap();
+        for (key, value) in labels.clone() {
+            if let Some(suffix) = key.strip_prefix("SmolSandbox.") {
+                labels.insert(format!("codex-sandbox.{suffix}"), value);
+                if !keep_current {
+                    labels.remove(&key);
+                }
+            }
+        }
+        machine
+    }
+
+    #[test]
+    fn old_and_matching_dual_prefix_machines_remain_usable_and_cleanable() {
+        for keep_current in [false, true] {
+            let f = Fixture::new();
+            f.configure("codex");
+            assert_ok(&f.run(&["build"]));
+            let inventory: Vec<_> = f
+                .inventory()
+                .iter()
+                .map(|machine| namespace_labels(machine, keep_current))
+                .collect();
+            f.set_inventory(&inventory);
+            reset_calls(&f);
+            assert_ok(&f.run(&["start"]));
+            assert_ok(&f.run(&["login"]));
+            assert!(!f.log().contains("machine create --name"));
+            assert_ok(&f.run(&["clean", "--workspace"]));
+            assert_eq!(f.inventory().len(), 1);
+            assert_ok(&f.run(&["clean"]));
+            assert!(f.inventory().is_empty());
+        }
+    }
+
+    #[test]
+    fn cross_prefix_conflicts_never_authorize_workspace_mutations_even_with_override() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["build"]));
+        let inventory = f.inventory();
+        let workspace = workspace_machine(&f);
+        for suffix in [
+            "kind",
+            "base-id",
+            "revision",
+            "workspace-sha256",
+            "workspace-path-sha256",
+            "configuration",
+        ] {
+            let mut bad = namespace_labels(&workspace, true);
+            bad["labels"][format!("codex-sandbox.{suffix}")] = json!(match suffix {
+                "kind" => "login".to_string(),
+                "base-id" => "222222222222".to_string(),
+                "revision" => "8".to_string(),
+                "workspace-sha256" | "workspace-path-sha256" => "c".repeat(64),
+                "configuration" => "custom".to_string(),
+                _ => unreachable!(),
+            });
+            let rows: Vec<_> = inventory
+                .iter()
+                .map(|machine| {
+                    if machine["name"] == workspace["name"] {
+                        bad.clone()
+                    } else {
+                        machine.clone()
+                    }
+                })
+                .collect();
+            for arguments in [
+                vec!["start"],
+                vec!["start", "--name", workspace["name"].as_str().unwrap()],
+                vec!["repair", "--replace-stale"],
+                vec!["clean", "--workspace"],
+                vec!["clean"],
+                vec!["purge", "--force-all"],
+            ] {
+                f.set_inventory(&rows);
+                reset_calls(&f);
+                let output = f.run(&arguments);
+                assert!(!output.status.success(), "{suffix}: {arguments:?}");
+                assert_no_mutations(&f);
+                assert_eq!(f.inventory(), rows, "{suffix}: {arguments:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn conflicts_in_unused_shared_machine_fields_block_build_login_and_clean() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["build"]));
+        let inventory = f.inventory();
+        let login = inventory
+            .iter()
+            .find(|machine| machine["labels"]["SmolSandbox.kind"] == "login")
+            .unwrap();
+        let base = login["labels"]["SmolSandbox.base-id"].as_str().unwrap();
+        let builder = json!({"name":format!("codex-builder-{base}"),"state":"stopped","labels":{"SmolSandbox.kind":"builder","SmolSandbox.base-id":base}});
+        for shared in [login, &builder] {
+            if shared["labels"]["SmolSandbox.kind"] == "builder" {
+                fs::remove_file(
+                    f.home
+                        .join(".smolsandbox/artifacts")
+                        .join(format!("codex-devtools-{base}.smolmachine")),
+                )
+                .unwrap();
+            }
+            for suffix in ["workspace-path-sha256", "configuration"] {
+                let mut bad = namespace_labels(shared, true);
+                bad["labels"][format!("SmolSandbox.{suffix}")] = json!("first");
+                bad["labels"][format!("codex-sandbox.{suffix}")] = json!("second");
+                let mut rows: Vec<_> = inventory
+                    .iter()
+                    .filter(|machine| machine["name"] != shared["name"])
+                    .cloned()
+                    .collect();
+                rows.push(bad);
+                for arguments in [
+                    vec!["build"],
+                    vec!["login"],
+                    vec!["clean"],
+                    vec!["purge", "--force-all"],
+                ] {
+                    if shared["labels"]["SmolSandbox.kind"] == "builder" && arguments == ["login"] {
+                        continue;
+                    }
+                    f.set_inventory(&rows);
+                    reset_calls(&f);
+                    let output = f.run(&arguments);
+                    assert!(
+                        !output.status.success(),
+                        "{}: {suffix}: {arguments:?}",
+                        shared["name"]
+                    );
+                    assert_no_mutations(&f);
+                    assert_eq!(f.inventory(), rows);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn replacement_adopts_revision_six_old_prefix_workspace_without_relabelling_others() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["build"]));
+        let workspace = workspace_machine(&f);
+        let old = namespace_labels(&stale_machine(&workspace, "6"), false);
+        let mut rows: Vec<_> = f
+            .inventory()
+            .into_iter()
+            .filter(|machine| machine["name"] != workspace["name"])
+            .collect();
+        let mut unrelated = old.clone();
+        unrelated["name"] = json!("old-prefix-other-workspace");
+        unrelated["labels"]["codex-sandbox.workspace-sha256"] = json!("a".repeat(64));
+        unrelated["labels"]["codex-sandbox.workspace-path-sha256"] = json!("b".repeat(64));
+        rows.extend([old.clone(), unrelated.clone()]);
+        f.set_inventory(&rows);
+        let listing = f.run(&["list", "--json"]);
+        assert_ok(&listing);
+        let listing: Value = serde_json::from_slice(&listing.stdout).unwrap();
+        assert_eq!(listing["machines"][0]["assessment"], "different-policy");
+        assert_eq!(listing["machines"][0]["revision"], "6");
+        reset_calls(&f);
+        assert_ok(&f.run(&["repair", "--replace-stale"]));
+        let inventory = f.inventory();
+        assert!(!inventory
+            .iter()
+            .any(|machine| machine["name"] == old["name"]));
+        assert!(inventory.contains(&unrelated));
+        let current = inventory
+            .iter()
+            .find(|machine| machine["name"] == workspace["name"])
+            .unwrap();
+        assert_eq!(current["labels"]["SmolSandbox.revision"], "7");
+        assert!(current["labels"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .all(|key| key.starts_with("SmolSandbox.")));
+        let log = f.log();
+        assert!(
+            log.find("machine create --name").unwrap()
+                < log
+                    .find(&format!(
+                        "machine delete --name {}",
+                        old["name"].as_str().unwrap()
+                    ))
+                    .unwrap()
+        );
     }
 }
