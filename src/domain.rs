@@ -23,11 +23,14 @@ pub fn hash_bytes(bytes: &[u8]) -> String {
     }
     hex
 }
-pub fn hash_set(values: &[String]) -> String {
+pub fn canonical_set(values: &[String]) -> Vec<String> {
     let mut values = values.to_vec();
     values.sort();
     values.dedup();
-    hash_bytes(&serde_json::to_vec(&values).expect("string arrays serialize"))
+    values
+}
+pub fn hash_set(values: &[String]) -> String {
+    hash_bytes(&serde_json::to_vec(&canonical_set(values)).expect("string arrays serialize"))
 }
 fn matches(pattern: &str, value: &str) -> bool {
     Regex::new(pattern).unwrap().is_match(value)
@@ -64,6 +67,16 @@ pub struct Machine {
 }
 pub type Inventory = Vec<Machine>;
 impl Machine {
+    pub fn has_ownership_labels(&self) -> bool {
+        self.labels.keys().any(|key| {
+            key.starts_with("codex-sandbox.")
+                && !matches!(
+                    key.as_str(),
+                    "codex-sandbox.base-inputs" | "codex-sandbox.machine-inputs"
+                )
+        })
+    }
+
     pub fn label(&self, index: usize) -> &str {
         self.labels
             .get(MANAGED_KEYS[index])
@@ -299,10 +312,7 @@ pub fn managed_inventory(inventory: &Inventory, current_base: &str) -> Result<Ve
     let mut result = Vec::new();
     let mut ambiguous = Vec::new();
     for machine in inventory {
-        let has_labels = machine
-            .labels
-            .keys()
-            .any(|key| key.starts_with("codex-sandbox."));
+        let has_labels = machine.has_ownership_labels();
         let b = builder.captures(&machine.name);
         let l = login.captures(&machine.name);
         let w = workspace.captures(&machine.name);
@@ -600,6 +610,47 @@ mod tests {
         parse_inventory(&serde_json::to_vec(&json!([{"name":name,"state":state,"ports":0,"created_at":1,"labels":{
             MANAGED_KEYS[0]:"workspace",MANAGED_KEYS[1]:base,MANAGED_KEYS[2]:"7",MANAGED_KEYS[3]:hash,MANAGED_KEYS[4]:"c".repeat(64),MANAGED_KEYS[5]:configuration
         }}])).unwrap()).unwrap().remove(0)
+    }
+    #[test]
+    fn descriptive_labels_preserve_legacy_classification_and_managed_inventory() {
+        let inventory = parse_inventory(
+            &serde_json::to_vec(&json!([
+                {"name":"codex-builder-111111111111","state":"stopped"},
+                {"name":"codex-login-111111111111-r7","state":"stopped"},
+                {"name":"codex-workspace-111111111111-r7-bbbbbbbbbbbb","state":"stopped"},
+                {"name":"unrelated","state":"stopped"}
+            ]))
+            .unwrap(),
+        )
+        .unwrap();
+        let expected = managed_inventory(&inventory, "aaaaaaaaaaaa").unwrap();
+        let before = classify(&inventory, &identity());
+        let mut described = inventory.clone();
+        for machine in &mut described {
+            machine
+                .labels
+                .insert("codex-sandbox.base-inputs".into(), "invalid JSON".into());
+            machine.labels.insert(
+                "codex-sandbox.machine-inputs".into(),
+                r#"{"version":999}"#.into(),
+            );
+            assert!(!machine.has_ownership_labels());
+        }
+        let actual = managed_inventory(&described, "aaaaaaaaaaaa").unwrap();
+        assert_eq!(
+            serde_json::to_value(actual).unwrap(),
+            serde_json::to_value(expected).unwrap()
+        );
+        for (before, after) in before.iter().zip(classify(&described, &identity())) {
+            assert_eq!(before.category, after.category);
+            assert_eq!(before.source, after.source);
+            assert_eq!(before.reason, after.reason);
+        }
+        described[3]
+            .labels
+            .insert("codex-sandbox.unknown".into(), "value".into());
+        assert!(described[3].has_ownership_labels());
+        assert!(managed_inventory(&described, "aaaaaaaaaaaa").is_err());
     }
     #[test]
     fn malformed_inventory_never_becomes_empty() {

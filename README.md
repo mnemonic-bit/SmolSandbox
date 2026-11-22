@@ -168,6 +168,15 @@ Legacy workspace names cannot establish a path association; use `--all` to
 see those rows. Listing takes no lifecycle locks and writes no application
 state. Assessments do not authorize deletion or guarantee a successful start.
 
+New machines retain readable workspace paths, harness profiles, definition
+fingerprints, runtime versions, and creation options in structured SmolVM
+labels. Human output shows the full inputs; JSON exposes decoded objects for
+path and host filtering. Shared machines display `shared`. Older machines
+can display the reference path when its association hash matches; other
+missing paths remain `unknown`. Recorded inputs describe creation requests,
+not current guest state. See the [inventory guide](RUST-APPLICATION.md#list-machines-and-compare-selection)
+for label schemas, compatibility behavior, and JSON filtering examples.
+
 Remove older-policy workspace machines for the canonical current directory:
 
 ```text

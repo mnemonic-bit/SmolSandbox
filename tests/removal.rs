@@ -164,7 +164,7 @@ fn dry_run_is_definition_independent_lock_free_and_does_not_change_permissions()
     let f = Fixture::new();
     f.set(&[
         f.workspace("preview-stale", "4", "running"),
-        f.workspace("preview-current", "0005", "stopped"),
+        f.workspace("preview-current", "0006", "stopped"),
     ]);
     #[cfg(unix)]
     {
@@ -203,11 +203,11 @@ fn stale_comparison_uses_decimal_values_and_preserves_base_or_name_only_differen
     let f = Fixture::new();
     let future = "9".repeat(200);
     let old = format!("{}4", "0".repeat(200));
-    let mut different_base = f.workspace("different-base-name", "5", "created");
+    let mut different_base = f.workspace("different-base-name", "6", "created");
     different_base["labels"]["codex-sandbox.base-id"] = json!("999999999999");
     f.set(&[
         f.workspace("older-decimal", &old, "stopped"),
-        f.workspace("equal-decimal", "000005", "stopped"),
+        f.workspace("equal-decimal", "000006", "stopped"),
         f.workspace("future-decimal", &future, "stopped"),
         different_base,
     ]);
@@ -219,6 +219,43 @@ fn stale_comparison_uses_decimal_values_and_preserves_base_or_name_only_differen
         assert!(!text.contains(name), "{text}");
     }
     assert!(f.mutations().is_empty());
+}
+
+#[test]
+fn descriptive_labels_do_not_change_removal_ownership_or_selection() {
+    let f = Fixture::new();
+    let mut rows = vec![
+        f.workspace("owned-stale", "4", "stopped"),
+        json!({"name":"codex-login-111111111111-r4","state":"stopped"}),
+        json!({"name":"codex-builder-222222222222","state":"stopped"}),
+        json!({"name":"unrelated","state":"stopped"}),
+    ];
+    f.set(&rows);
+    let before = f
+        .command()
+        .args(["--dry-run", "--global", "--all"])
+        .output()
+        .unwrap();
+    assert_ok(&before);
+    for row in &mut rows {
+        if !row["labels"].is_object() {
+            row["labels"] = json!({});
+        }
+        row["labels"]["codex-sandbox.base-inputs"] = json!("{malformed");
+        row["labels"]["codex-sandbox.machine-inputs"] =
+            json!(r#"{"version":999,"workspace_path":"contradictory"}"#);
+    }
+    f.set(&rows);
+    let after = f
+        .command()
+        .args(["--dry-run", "--global", "--all"])
+        .output()
+        .unwrap();
+    assert_ok(&after);
+    assert_eq!(before.stdout, after.stdout);
+    assert_eq!(before.stderr, after.stderr);
+    assert!(f.mutations().is_empty());
+    assert_eq!(fs::read_dir(&f.home).unwrap().count(), 0);
 }
 
 #[test]
@@ -380,9 +417,9 @@ fn all_eight_scope_revision_and_force_combinations_have_fixed_deletion_sets() {
                     ("a-old-stopped", "4", "stopped"),
                     ("b-old-created", "4", "created"),
                     ("c-old-running", "4", "running"),
-                    ("d-current", "0005", "stopped"),
-                    ("e-future", "6", "stopped"),
-                    ("f-current-running", "5", "running"),
+                    ("d-current", "0006", "stopped"),
+                    ("e-future", "7", "stopped"),
+                    ("f-current-running", "6", "running"),
                 ] {
                     let mut row = f.workspace(name, revision, state);
                     if name == "a-old-stopped" {
@@ -889,7 +926,7 @@ fn empty_and_running_only_selections_succeed_without_capability_queries_or_state
 #[test]
 fn unknown_states_are_ignored_only_when_revision_or_workspace_scope_protects_the_machine() {
     let f = Fixture::new();
-    let current = f.workspace("current-unknown-state", "5", "future-state");
+    let current = f.workspace("current-unknown-state", "6", "future-state");
     let mut other = f.workspace("other-unknown-state", "4", "future-state");
     other["labels"]["codex-sandbox.workspace-path-sha256"] = json!("b".repeat(64));
     f.set(&[current, other]);

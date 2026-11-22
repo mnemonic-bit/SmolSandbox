@@ -138,11 +138,7 @@ impl Names {
 
     fn ownership(&self, machine: &Machine) -> Result<Option<Ownership>> {
         let legacy = self.legacy(&machine.name);
-        if !machine
-            .labels
-            .keys()
-            .any(|key| key.starts_with("codex-sandbox."))
-        {
+        if !machine.has_ownership_labels() {
             return Ok(legacy);
         }
         let kind = machine.label(0);
