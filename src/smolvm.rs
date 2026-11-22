@@ -29,6 +29,15 @@ pub struct Smolvm {
     verbose: bool,
 }
 impl Smolvm {
+    #[cfg(all(test, unix))]
+    pub(crate) fn for_test() -> Self {
+        Self {
+            path: PathBuf::from("unused-smolvm-test-runtime"),
+            version: "smolvm test 1.19.2".into(),
+            verbose: false,
+        }
+    }
+
     pub fn discover(explicit: Option<&Path>, verbose: bool) -> Result<Self> {
         let selected = if let Some(path) = explicit {
             path.to_owned()

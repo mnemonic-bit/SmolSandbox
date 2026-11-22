@@ -216,12 +216,16 @@ fn every_profile_records_exact_inputs_for_all_machine_kinds() {
         let base = digest(&identity_bytes)[..12].to_string();
         let artifact = f
             .home
-            .join(".smolsandbox/artifacts")
+            .join(".smolsandbox")
+            .join("artifacts")
             .join(format!("codex-devtools-{base}.smolmachine"));
         let harness_home = if profile == "codex" {
-            f.home.join(".smolsandbox/codex-home")
+            f.home.join(".smolsandbox").join("codex-home")
         } else {
-            f.home.join(".smolsandbox/harness-home").join(profile)
+            f.home
+                .join(".smolsandbox")
+                .join("harness-home")
+                .join(profile)
         };
         let mount = format!("--volume={}:{target}", harness_home.display());
         let workspace_options = canonical(vec![
@@ -480,12 +484,12 @@ fn resolved_input_variants_record_exact_identity_changes_and_exclude_mutable_set
         let artifacts = if variant == "artifacts" {
             f.root.join("alternate artifacts = λ")
         } else {
-            f.home.join(".smolsandbox/artifacts")
+            f.home.join(".smolsandbox").join("artifacts")
         };
         let harness_home = if variant == "harness-home" {
             f.root.join("alternate harness home = λ")
         } else {
-            f.home.join(".smolsandbox/codex-home")
+            f.home.join(".smolsandbox").join("codex-home")
         };
         let runtime = if variant == "runtime-version" {
             "smolvm test 1.19.3 build=λ\\native"
