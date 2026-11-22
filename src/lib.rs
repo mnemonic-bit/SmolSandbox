@@ -3,6 +3,7 @@ pub mod config;
 pub mod domain;
 pub mod lifecycle;
 pub mod listing;
+pub mod metadata;
 pub mod platform;
 pub mod ports;
 pub mod removal;

@@ -688,6 +688,7 @@ mod lifecycle {
             "3000",
         ]));
         assert_eq!(workspace_machine(&f)["name"], first["name"]);
+        assert_eq!(workspace_machine(&f)["labels"], first["labels"]);
         assert_eq!(
             workspace_machine(&f)["labels"]["codex-sandbox.configuration"],
             "custom"
@@ -705,6 +706,26 @@ mod lifecycle {
         };
         assert_ok(&f.run(&["start", "--allow-host", "different.example"]));
         assert_ne!(latest_name(), first["name"].as_str().unwrap());
+        let changed = f
+            .inventory()
+            .into_iter()
+            .find(|m| m["name"] == latest_name())
+            .unwrap();
+        let inputs: Value = serde_json::from_str(
+            changed["labels"]["codex-sandbox.machine-inputs"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            inputs["options"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|option| { option.as_str() == Some("--allow-host=different.example") })
+                .count(),
+            1
+        );
         let output = f
             .command()
             .env("CODEX_HOME_DIR", f.home.join("other-codex-home"))
@@ -762,12 +783,12 @@ mod lifecycle {
         let mut inv = f.inventory();
         for machine in &mut inv {
             if machine["name"] == stale {
-                machine["name"] = json!(stale.replace("-r5-", "-r4-"));
+                machine["name"] = json!(stale.replace("-r6-", "-r4-"));
                 machine["labels"]["codex-sandbox.revision"] = json!("4");
             }
         }
         f.set_inventory(&inv);
-        let stale = stale.replace("-r5-", "-r4-");
+        let stale = stale.replace("-r6-", "-r4-");
         f.clear_log();
         let refused = f.run(&["start"]);
         assert!(!refused.status.success());
@@ -816,7 +837,7 @@ mod lifecycle {
         f.configure("codex");
         assert_ok(&f.run(&["start"]));
         let desired = workspace_machine(&f)["name"].as_str().unwrap().to_owned();
-        let stale = desired.replace("-r5-", "-r4-");
+        let stale = desired.replace("-r6-", "-r4-");
         let mut inventory = f.inventory();
         for machine in &mut inventory {
             if machine["name"] == desired {
@@ -1163,7 +1184,7 @@ mod lifecycle {
         immutable.sort();
         immutable.dedup();
         let hash = digest(&serde_json::to_vec(&immutable).unwrap());
-        let name = format!("codex-workspace-{base}-r5-{}", &hash[..12]);
+        let name = format!("codex-workspace-{base}-r6-{}", &hash[..12]);
         let output = f
             .command()
             .env("SMOLVM_TEST_EXEC_STATUS", "17")
@@ -1175,13 +1196,25 @@ mod lifecycle {
         assert_eq!(output.status.code(), Some(17));
         let machine = workspace_machine(&f);
         assert_eq!(machine["name"], name);
+        let mut labels = machine["labels"].clone();
+        for key in ["codex-sandbox.base-inputs", "codex-sandbox.machine-inputs"] {
+            labels[key] = serde_json::from_str(labels[key].as_str().unwrap()).unwrap();
+        }
         assert_eq!(
-            machine["labels"],
+            labels,
             json!({
                 "codex-sandbox.kind":"workspace", "codex-sandbox.base-id":base,
-                "codex-sandbox.revision":"5", "codex-sandbox.workspace-sha256":hash,
+                "codex-sandbox.revision":"6", "codex-sandbox.workspace-sha256":hash,
                 "codex-sandbox.workspace-path-sha256":digest(workspace.as_bytes()),
-                "codex-sandbox.configuration":"default"
+                "codex-sandbox.configuration":"default",
+                "codex-sandbox.base-inputs":{
+                    "version":1, "smolvm_version":"smolvm test 1.19.2",
+                    "definition_sha256":digest(&definition),
+                    "definition_path":f.definition(), "harness":"codex"
+                },
+                "codex-sandbox.machine-inputs":{
+                    "version":1, "workspace_path":workspace, "options":immutable
+                }
             })
         );
         let calls = calls(&f);
@@ -1508,11 +1541,43 @@ mod lifecycle {
             hosts,
             ["duplicate.example", "selected.example", "z.example"]
         );
-        assert!(creation.iter().any(|a| a == "codex-sandbox.revision=5"));
+        assert!(creation.iter().any(|a| a == "codex-sandbox.revision=6"));
         assert_eq!(
             workspace_machine(&f)["labels"]["codex-sandbox.configuration"],
             "custom"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn metadata_paths_reject_non_utf8_before_lifecycle_writes() {
+        use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+        for definition in [false, true] {
+            let f = Fixture::new();
+            f.configure("codex");
+            let invalid = f
+                .root
+                .path()
+                .join(OsString::from_vec(b"path-\xff".to_vec()));
+            let mut command = f.command();
+            if definition {
+                fs::copy(f.definition(), &invalid).unwrap();
+                command.env("BASE_SMOLFILE", &invalid);
+            } else {
+                command.env("ARTIFACTS_DIR", &invalid);
+            }
+            let output = command.arg("build").output().unwrap();
+            assert!(!output.status.success());
+            assert!(String::from_utf8_lossy(&output.stderr).contains("path is not UTF-8"));
+            assert_no_mutations(&f);
+            assert!(!f.home.join(".smolsandbox/artifacts").exists());
+            assert!(!f.home.join(".smolsandbox/locks").exists());
+            assert!(!f.home.join(".smolsandbox/codex-home").exists());
+            if !definition {
+                assert!(!invalid.exists());
+            }
+            assert!(f.inventory().is_empty());
+        }
     }
     #[test]
     fn inventory_command_failure_preserves_machines_and_caches() {
@@ -1639,7 +1704,7 @@ mod lifecycle {
                 );
                 assert_eq!(
                     fs::read_to_string(state_root.join("machine-revision")).unwrap(),
-                    "5\n"
+                    "6\n"
                 );
             }
         }
@@ -1729,17 +1794,26 @@ mod lifecycle {
         assert_ok(&f.run(&["start"]));
         let mut machine = workspace_machine(&f);
         machine["name"] = json!("explicit-name");
-        machine["labels"] = json!({});
+        machine["labels"] = json!({
+            "codex-sandbox.base-inputs":machine["labels"]["codex-sandbox.base-inputs"],
+            "codex-sandbox.machine-inputs":machine["labels"]["codex-sandbox.machine-inputs"]
+        });
         f.set_inventory(std::slice::from_ref(&machine));
         reset_calls(&f);
         assert_ok(
             &f.command()
                 .env("CODEX_MACHINE", "explicit-name")
-                .arg("start")
+                .args(["start", "--allow-host", "new-request.example"])
                 .output()
                 .unwrap(),
         );
         assert!(!f.log().contains("machine create --name"));
+        let reused = f
+            .inventory()
+            .into_iter()
+            .find(|row| row["name"] == "explicit-name")
+            .unwrap();
+        assert_eq!(reused["labels"], machine["labels"]);
         machine["labels"] = json!({"codex-sandbox.kind":"login"});
         f.set_inventory(&[machine]);
         reset_calls(&f);
@@ -2358,13 +2432,13 @@ mod lifecycle {
             );
             assert_eq!(
                 fs::read_to_string(root.join("machine-revision")).unwrap(),
-                "5\n"
+                "6\n"
             );
             let generation: Value =
                 serde_json::from_slice(&fs::read(root.join("generation.json")).unwrap()).unwrap();
             assert_eq!(
                 generation,
-                json!({"version":1,"base_id":base,"revision":"5"})
+                json!({"version":1,"base_id":base,"revision":"6"})
             );
         }
     }

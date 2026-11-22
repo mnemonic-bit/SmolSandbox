@@ -90,7 +90,7 @@ impl ListingFixture {
         digest(format!("{VERSION}\n{DEFINITION}").as_bytes())[..12].into()
     }
 
-    fn hash(&self, additions: &[&str]) -> String {
+    fn immutable(&self, additions: &[&str]) -> Vec<String> {
         let artifact = self
             .home
             .join(".smolsandbox/artifacts")
@@ -110,12 +110,16 @@ impl ListingFixture {
         immutable.extend(additions.iter().map(|host| format!("--allow-host={host}")));
         immutable.sort();
         immutable.dedup();
-        digest(&serde_json::to_vec(&immutable).unwrap())
+        immutable
+    }
+
+    fn hash(&self, additions: &[&str]) -> String {
+        digest(&serde_json::to_vec(&self.immutable(additions)).unwrap())
     }
 
     fn selected_name(&self) -> String {
         format!(
-            "codex-workspace-{}-r5-{}",
+            "codex-workspace-{}-r6-{}",
             self.base(),
             &self.hash(&[])[..12]
         )
@@ -129,7 +133,7 @@ impl ListingFixture {
         json!({"name": name, "state": "stopped", "labels": {
             "codex-sandbox.kind": "workspace",
             "codex-sandbox.base-id": self.base(),
-            "codex-sandbox.revision": "5",
+            "codex-sandbox.revision": "6",
             "codex-sandbox.workspace-sha256": self.hash(&[]),
             "codex-sandbox.workspace-path-sha256": self.path_hash(),
             "codex-sandbox.configuration": "default"
@@ -224,7 +228,7 @@ fn mixed_inventory_preserves_association_assessment_and_complete_identities() {
         "codex-sandbox.kind":"builder", "codex-sandbox.base-id":f.base()
     }});
     let login = json!({"name":"custom-login", "state":"created", "labels":{
-        "codex-sandbox.kind":"login", "codex-sandbox.base-id":f.base(), "codex-sandbox.revision":"5"
+        "codex-sandbox.kind":"login", "codex-sandbox.base-id":f.base(), "codex-sandbox.revision":"6"
     }});
     let legacy_workspace = format!("codex-workspace-{}-r3-{}", f.base(), &f.hash(&[])[..12]);
     f.inventory(&[
@@ -252,7 +256,7 @@ fn mixed_inventory_preserves_association_assessment_and_complete_identities() {
     assert_eq!(scoped["workspace"], f.workspace.to_str().unwrap());
     assert_eq!(scoped["unassociated_workspace_count"], 3);
     assert_eq!(scoped["reference"]["base_id"], f.base());
-    assert_eq!(scoped["reference"]["revision"], "5");
+    assert_eq!(scoped["reference"]["revision"], "6");
     assert_eq!(scoped["reference"]["workspace_sha256"], f.hash(&[]));
     assert_eq!(scoped["reference"]["desired_machine"], f.selected_name());
     assert_eq!(
@@ -340,6 +344,13 @@ fn mixed_inventory_preserves_association_assessment_and_complete_identities() {
             "source",
             "assessment",
             "reasons",
+            "workspace_path",
+            "workspace_path_source",
+            "harness",
+            "base_inputs",
+            "machine_inputs",
+            "metadata_status",
+            "metadata_reasons",
         ] {
             assert!(value.get(field).is_some(), "missing {field}: {value}");
         }
@@ -777,5 +788,430 @@ fn selected_runtime_spawn_failures_report_context_without_partial_json() {
         assert!(!errors.contains("invalid executable fixture"));
         assert!(!f.root.join("calls.log").exists());
         assert_eq!(snapshot(&f.home), before);
+    }
+}
+
+fn base_metadata(f: &ListingFixture) -> Value {
+    json!({
+        "version": 1,
+        "smolvm_version": VERSION,
+        "definition_sha256": digest(DEFINITION.as_bytes()),
+        "definition_path": f.root.join("deleted definition = λ.smlbx").to_str().unwrap(),
+        "harness": "codex"
+    })
+}
+
+fn machine_metadata(f: &ListingFixture) -> Value {
+    json!({"version":1,"workspace_path":f.workspace.to_str().unwrap(),"options":f.immutable(&[])})
+}
+
+fn with_metadata(mut machine: Value, base: Option<Value>, inputs: Option<Value>) -> Value {
+    for (key, value) in [
+        ("codex-sandbox.base-inputs", base),
+        ("codex-sandbox.machine-inputs", inputs),
+    ] {
+        if let Some(value) = value {
+            machine["labels"][key] = json!(serde_json::to_string(&value).unwrap());
+        }
+    }
+    machine
+}
+
+#[test]
+fn metadata_status_components_and_reference_fallback_are_independent() {
+    let f = ListingFixture::new();
+    let base = base_metadata(&f);
+    let inputs = machine_metadata(&f);
+    let mut rows = Vec::new();
+    for (name, b, m) in [
+        ("complete", Some(base.clone()), Some(inputs.clone())),
+        ("base-only", Some(base.clone()), None),
+        ("machine-only", None, Some(inputs.clone())),
+        ("unavailable", None, None),
+        (
+            "unsupported-base",
+            Some(json!({"version":99})),
+            Some(inputs.clone()),
+        ),
+        (
+            "unsupported-machine",
+            Some(base.clone()),
+            Some(json!({"version":99})),
+        ),
+        (
+            "both-future",
+            Some(json!({"version":99})),
+            Some(json!({"version":99})),
+        ),
+        (
+            "invalid-precedes-future",
+            Some(json!({"version":1})),
+            Some(json!({"version":99})),
+        ),
+    ] {
+        rows.push(with_metadata(f.workspace_row(name), b, m));
+    }
+    let mut other = f.workspace_row("old-other-workspace");
+    other["labels"]["codex-sandbox.workspace-path-sha256"] = json!("c".repeat(64));
+    rows.push(other);
+    rows.push(json!({"name":"codex-builder-aaaaaaaaaaaa","state":"stopped"}));
+    f.inventory(&rows);
+    let before = snapshot(&f.home);
+    let report = document(f.list().args(["--all", "--json"]).output().unwrap());
+    for (name, status, b, m, source) in [
+        ("complete", "complete", true, true, "label"),
+        ("base-only", "partial", true, false, "reference"),
+        ("machine-only", "partial", false, true, "label"),
+        ("unavailable", "unavailable", false, false, "reference"),
+        ("unsupported-base", "unsupported", false, true, "label"),
+        (
+            "unsupported-machine",
+            "unsupported",
+            true,
+            false,
+            "reference",
+        ),
+        ("both-future", "unsupported", false, false, "reference"),
+        (
+            "invalid-precedes-future",
+            "invalid",
+            false,
+            false,
+            "reference",
+        ),
+    ] {
+        let value = row(&report, name);
+        assert_eq!(value["metadata_status"], status, "{name}");
+        assert_eq!(!value["base_inputs"].is_null(), b, "{name}");
+        assert_eq!(!value["machine_inputs"].is_null(), m, "{name}");
+        assert_eq!(
+            value["harness"],
+            if b { json!("codex") } else { Value::Null },
+            "{name}"
+        );
+        assert_eq!(value["workspace_path_source"], source, "{name}");
+        assert_eq!(
+            value["workspace_path"],
+            f.workspace.to_str().unwrap(),
+            "{name}"
+        );
+        assert_eq!(value["assessment"], "different-configuration");
+        assert_eq!(
+            value["metadata_reasons"].as_array().unwrap().is_empty(),
+            status == "complete"
+        );
+    }
+    assert_eq!(row(&report, "complete")["base_inputs"], base);
+    assert_eq!(row(&report, "complete")["machine_inputs"], inputs);
+    for name in ["old-other-workspace", "codex-builder-aaaaaaaaaaaa"] {
+        assert!(row(&report, name)["workspace_path"].is_null());
+        assert_eq!(row(&report, name)["workspace_path_source"], "unknown");
+        assert_eq!(row(&report, name)["metadata_status"], "unavailable");
+    }
+    assert_eq!(snapshot(&f.home), before);
+    assert_eq!(
+        fs::read_to_string(f.root.join("calls.log")).unwrap(),
+        "--version\nmachine ls --json\n"
+    );
+}
+
+#[test]
+fn malformed_or_contradictory_metadata_preserves_scope_and_authoritative_assessment() {
+    let f = ListingFixture::new();
+    let base = base_metadata(&f);
+    let inputs = machine_metadata(&f);
+    let mut cases: Vec<(&str, Value, Value, &str)> = Vec::new();
+    for (name, field, value) in [
+        (
+            "wrong-fingerprint",
+            "definition_sha256",
+            json!("z".repeat(64)),
+        ),
+        ("wrong-profile", "harness", json!("future-profile")),
+        ("wrong-version-type", "version", json!("1")),
+        ("wrong-definition-type", "definition_path", json!(false)),
+        ("wrong-runtime-type", "smolvm_version", json!([])),
+    ] {
+        let mut changed = base.clone();
+        changed[field] = value;
+        cases.push((name, changed, inputs.clone(), "base-inputs"));
+    }
+    let mut absent = base.clone();
+    absent.as_object_mut().unwrap().remove("harness");
+    cases.push(("missing-base-field", absent, inputs.clone(), "base-inputs"));
+    for name in [
+        "wrong-path",
+        "wrong-mount",
+        "wrong-from",
+        "wrong-resource",
+        "unsorted",
+        "duplicates",
+        "wrong-option-type",
+        "wrong-array-type",
+        "missing-machine-field",
+    ] {
+        let mut changed = inputs.clone();
+        match name {
+            "wrong-path" => {
+                changed["workspace_path"] = json!(f.root.join("other").to_str().unwrap())
+            }
+            "wrong-array-type" => changed["options"] = json!(false),
+            "missing-machine-field" => {
+                changed.as_object_mut().unwrap().remove("workspace_path");
+            }
+            _ => {
+                let options = changed["options"].as_array_mut().unwrap();
+                match name {
+                    "unsorted" => options.reverse(),
+                    "duplicates" => options.push(options[0].clone()),
+                    "wrong-option-type" => options[0] = json!(true),
+                    _ => {
+                        let prefix = match name {
+                            "wrong-mount" => "--volume=",
+                            "wrong-from" => "--from=",
+                            _ => "--mem=",
+                        };
+                        let index = options
+                            .iter()
+                            .position(|v| v.as_str().unwrap().starts_with(prefix))
+                            .unwrap();
+                        options[index] = json!(match name {
+                            "wrong-mount" => "--volume=/different:/workspace/myrepo".to_string(),
+                            "wrong-from" => format!(
+                                "--from={}/codex-devtools-aaaaaaaaaaaa.smolmachine",
+                                f.root.display()
+                            ),
+                            _ => "--mem=4096".to_string(),
+                        });
+                        options.sort_by(|a, b| a.as_str().unwrap().cmp(b.as_str().unwrap()));
+                    }
+                }
+            }
+        }
+        cases.push((name, base.clone(), changed, "machine-inputs"));
+    }
+    let mut machines = Vec::new();
+    for (name, b, m, _) in &cases {
+        machines.push(with_metadata(
+            f.workspace_row(name),
+            Some(b.clone()),
+            Some(m.clone()),
+        ));
+    }
+    let mut malformed = with_metadata(f.workspace_row("malformed-json"), None, Some(inputs));
+    malformed["labels"]["codex-sandbox.base-inputs"] = json!("{secret-malformed-sentinel");
+    machines.push(malformed);
+    let mut future_extra = base;
+    future_extra["future_field"] = json!({"unknown":"accepted"});
+    machines.push(with_metadata(
+        f.workspace_row("unknown-extra-field"),
+        Some(future_extra),
+        None,
+    ));
+    f.inventory(&machines);
+    let described = document(f.list().args(["--all", "--json"]).output().unwrap());
+    for (name, _, _, component) in &cases {
+        let result = row(&described, name);
+        assert_eq!(result["metadata_status"], "invalid", "{name}: {result}");
+        assert!(
+            result[if *component == "base-inputs" {
+                "base_inputs"
+            } else {
+                "machine_inputs"
+            }]
+            .is_null(),
+            "{name}"
+        );
+        assert!(
+            !result[if *component == "base-inputs" {
+                "machine_inputs"
+            } else {
+                "base_inputs"
+            }]
+            .is_null(),
+            "{name}"
+        );
+        let reasons = result["metadata_reasons"].to_string();
+        assert!(
+            reasons.contains(name) && reasons.contains(component),
+            "{reasons}"
+        );
+    }
+    assert_eq!(
+        row(&described, "malformed-json")["metadata_status"],
+        "invalid"
+    );
+    assert!(!described.to_string().contains("secret-malformed-sentinel"));
+    assert_eq!(
+        row(&described, "unknown-extra-field")["metadata_status"],
+        "partial"
+    );
+    for machine in &mut machines {
+        let labels = machine["labels"].as_object_mut().unwrap();
+        labels.remove("codex-sandbox.base-inputs");
+        labels.remove("codex-sandbox.machine-inputs");
+    }
+    f.inventory(&machines);
+    let legacy = document(f.list().args(["--all", "--json"]).output().unwrap());
+    assert_eq!(names(&legacy), names(&described));
+    for name in names(&legacy) {
+        for field in [
+            "source",
+            "assessment",
+            "reasons",
+            "workspace_path_sha256",
+            "workspace_sha256",
+        ] {
+            assert_eq!(
+                row(&legacy, name)[field],
+                row(&described, name)[field],
+                "{name}: {field}"
+            );
+        }
+    }
+}
+
+#[test]
+fn readable_metadata_round_trips_full_values_and_escapes_human_controls() {
+    let f = ListingFixture::new();
+    let mut base = base_metadata(&f);
+    base["smolvm_version"] = json!("smolvm build=λ\\debug\tline\nnext\u{1b}[31m");
+    base["definition_path"] = json!(format!(
+        "{}/missing = λ\\definition\t\n.smlbx",
+        f.root.display()
+    ));
+    let name = "machine\twith-control\u{1b}[31m";
+    let mut machine = f.workspace_row(name);
+    machine["state"] = json!("paused\u{7}state");
+    let inputs = machine_metadata(&f);
+    f.inventory(&[with_metadata(
+        machine,
+        Some(base.clone()),
+        Some(inputs.clone()),
+    )]);
+    let report = document(f.list().args(["--all", "--json"]).output().unwrap());
+    let result = row(&report, name);
+    assert_eq!(result["metadata_status"], "complete");
+    assert_eq!(result["base_inputs"], base);
+    assert_eq!(result["machine_inputs"], inputs);
+    let human = String::from_utf8(success(f.list().arg("--all").output().unwrap()).stdout).unwrap();
+    for text in [
+        "WORKSPACE",
+        "HARNESS",
+        "codex",
+        "--mem=12288",
+        "--cpus=4",
+        "--allow-host=api.openai.com",
+        "--allow-host=downloads.example.com",
+        f.workspace.to_str().unwrap(),
+        &digest(DEFINITION.as_bytes()),
+    ] {
+        assert!(human.contains(text), "missing {text}: {human}");
+    }
+    for character in ['\u{1b}', '\u{7}', '\r'] {
+        assert!(!human.contains(character), "unescaped control: {human:?}");
+    }
+    assert!(!human.contains("machine\twith\ncontrol"));
+    assert!(!human.contains("debug\tline\nnext"));
+    assert!(human.contains("\\t") && human.contains("\\n"));
+    let matching_paths: Vec<_> = report["machines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|v| v["workspace_path"] == f.workspace.to_str().unwrap())
+        .collect();
+    let matching_hosts: Vec<_> = report["machines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|v| {
+            v["machine_inputs"]["options"]
+                .as_array()
+                .is_some_and(|options| {
+                    options.contains(&json!("--allow-host=downloads.example.com"))
+                })
+        })
+        .collect();
+    assert_eq!(matching_paths, matching_hosts);
+    assert_eq!(matching_paths.len(), 1);
+}
+
+#[test]
+fn descriptive_labels_cannot_establish_ownership_or_workspace_association() {
+    let f = ListingFixture::new();
+    let inputs = machine_metadata(&f);
+    let base = base_metadata(&f);
+    let legacy_name = format!("codex-workspace-{}-r3-{}", f.base(), &f.hash(&[])[..12]);
+    f.inventory(&[
+        with_metadata(
+            json!({"name":"metadata-only","state":"stopped","labels":{}}),
+            Some(base.clone()),
+            Some(inputs.clone()),
+        ),
+        with_metadata(
+            json!({"name":legacy_name,"state":"stopped","labels":{}}),
+            Some(base),
+            Some(inputs),
+        ),
+    ]);
+    let scoped = document(f.list().arg("--json").output().unwrap());
+    assert_eq!(scoped["machines"], json!([]));
+    let all = document(f.list().args(["--all", "--json"]).output().unwrap());
+    assert_eq!(names(&all), [legacy_name.as_str()]);
+    let value = row(&all, &legacy_name);
+    assert_eq!(value["assessment"], "unknown");
+    assert!(value["workspace_path"].is_null());
+    assert_eq!(value["workspace_path_source"], "unknown");
+}
+
+#[test]
+fn published_json_filters_select_recorded_paths_and_exact_host_options() {
+    use std::{io::Write, process::Stdio};
+
+    let f = ListingFixture::new();
+    let described = with_metadata(
+        f.workspace_row("recorded-workspace"),
+        Some(base_metadata(&f)),
+        Some(machine_metadata(&f)),
+    );
+    let mut other = f.workspace_row("old-other-workspace");
+    other["labels"]["codex-sandbox.workspace-path-sha256"] = json!("b".repeat(64));
+    f.inventory(&[described, other]);
+    let report = success(f.list().args(["--all", "--json"]).output().unwrap());
+    for (source, variable, value, expression) in [
+        (
+            report.stdout.clone(),
+            "path",
+            f.workspace.to_str().unwrap(),
+            ".machines[] | select(.workspace_path == $path)",
+        ),
+        (
+            report.stdout,
+            "option",
+            "--allow-host=downloads.example.com",
+            ".machines[] | select((.machine_inputs.options // []) | index($option))",
+        ),
+        (
+            fs::read(f.root.join("inventory.json")).unwrap(),
+            "path",
+            f.workspace.to_str().unwrap(),
+            ".[] | (.labels[\"codex-sandbox.machine-inputs\"]? | fromjson?) as $inputs | select($inputs.workspace_path == $path)",
+        ),
+    ] {
+        let child = Command::new("jq")
+            .args(["--arg", variable, value, expression])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn();
+        let mut child = match child {
+            Ok(child) => child,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return,
+            Err(error) => panic!("could not start optional jq: {error}"),
+        };
+        child.stdin.take().unwrap().write_all(&source).unwrap();
+        let result = success(child.wait_with_output().unwrap());
+        let selected: Value = serde_json::from_slice(&result.stdout).unwrap();
+        assert_eq!(selected["name"], "recorded-workspace");
     }
 }

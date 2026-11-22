@@ -204,6 +204,11 @@ fn help_is_complete_and_does_not_require_tools_configuration_or_mutation() {
             &["list", "--help"],
             &[
                 "List managed machines",
+                "full readable workspace paths",
+                "structured JSON labels",
+                "reference path inferred",
+                "not current guest state",
+                "exact array membership",
                 "--all",
                 "--json",
                 "--allow-host",
