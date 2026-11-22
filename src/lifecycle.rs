@@ -8,6 +8,7 @@ use crate::{
 };
 use anyhow::{bail, Context, Result};
 use regex::Regex;
+use serde::Serialize;
 use std::{
     collections::BTreeSet,
     env,
@@ -16,9 +17,60 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub(crate) const REVISION: &str = "5";
+pub(crate) const REVISION: &str = "6";
 const MEMORY: &str = "12288";
 const CPUS: &str = "4";
+
+struct CreationInputs {
+    workspace_path: Option<String>,
+    options: Vec<String>,
+}
+
+impl CreationInputs {
+    fn workspace(
+        artifact: &Path,
+        home: &str,
+        workspace: &str,
+        profile: Profile,
+        memory: &str,
+        cpus: &str,
+        hosts: &[String],
+    ) -> Self {
+        let mut options = vec![
+            format!("--from={}", artifact.display()),
+            format!("--mem={memory}"),
+            format!("--cpus={cpus}"),
+            format!("--volume={home}:{}", profile.guest_home()),
+            format!("--volume={workspace}:/workspace/myrepo"),
+        ];
+        options.extend(hosts.iter().map(|host| format!("--allow-host={host}")));
+        Self {
+            workspace_path: Some(workspace.to_owned()),
+            options,
+        }
+    }
+
+    fn append_arguments(&self, values: &mut Vec<OsString>) {
+        for option in &self.options {
+            let (flag, value) = option.split_once('=').expect("resolved creation option");
+            pair(values, flag, value);
+        }
+    }
+
+    fn metadata(&self) -> Result<String> {
+        #[derive(Serialize)]
+        struct Metadata<'a> {
+            version: u8,
+            workspace_path: &'a Option<String>,
+            options: Vec<String>,
+        }
+        Ok(serde_json::to_string(&Metadata {
+            version: 1,
+            workspace_path: &self.workspace_path,
+            options: domain::canonical_set(&self.options),
+        })?)
+    }
+}
 
 fn args(values: &[&str]) -> Vec<OsString> {
     values.iter().map(OsString::from).collect()
@@ -77,7 +129,7 @@ struct Lifecycle<'a> {
     builder: String,
     login: String,
     path_hash: String,
-    hosts: Vec<String>,
+    workspace_inputs: CreationInputs,
     configuration: &'static str,
 }
 
@@ -88,6 +140,12 @@ impl<'a> Lifecycle<'a> {
             .artifacts_dir
             .join(format!("codex-devtools-{base_id}"));
         let artifact = artifact_base.with_extension("smolmachine");
+        artifact.to_str().context("artifact path is not UTF-8")?;
+        config
+            .definition
+            .path
+            .to_str()
+            .context("definition path is not UTF-8")?;
         let mut hosts: BTreeSet<String> = config.definition.allow_hosts.iter().cloned().collect();
         let configuration = if options.allow_hosts.iter().any(|host| !hosts.contains(host)) {
             "custom"
@@ -104,15 +162,16 @@ impl<'a> Lifecycle<'a> {
             .harness_home
             .to_str()
             .context("harness home path is not UTF-8")?;
-        let mut immutable = vec![
-            format!("--from={}", artifact.display()),
-            format!("--mem={MEMORY}"),
-            format!("--cpus={CPUS}"),
-            format!("--volume={home}:{}", config.definition.profile.guest_home()),
-            format!("--volume={workspace}:/workspace/myrepo"),
-        ];
-        immutable.extend(hosts.iter().map(|host| format!("--allow-host={host}")));
-        let workspace_hash = domain::hash_set(&immutable);
+        let workspace_inputs = CreationInputs::workspace(
+            &artifact,
+            home,
+            workspace,
+            config.definition.profile,
+            MEMORY,
+            CPUS,
+            &hosts,
+        );
+        let workspace_hash = domain::hash_set(&workspace_inputs.options);
         let workspace_id = workspace_hash[..12].to_owned();
         let explicit = override_value("CODEX_MACHINE");
         let desired_name = explicit
@@ -130,7 +189,7 @@ impl<'a> Lifecycle<'a> {
             builder,
             login,
             path_hash: domain::hash_bytes(workspace.as_bytes()),
-            hosts,
+            workspace_inputs,
             configuration,
             identity: Identity {
                 base_id,
@@ -191,6 +250,37 @@ impl<'a> Lifecycle<'a> {
         pair(values, "--label", format!("codex-sandbox.{key}={value}"));
     }
 
+    fn creation_arguments(
+        &self,
+        values: &mut Vec<OsString>,
+        inputs: &CreationInputs,
+    ) -> Result<()> {
+        #[derive(Serialize)]
+        struct BaseInputs<'a> {
+            version: u8,
+            smolvm_version: &'a str,
+            definition_sha256: String,
+            definition_path: &'a str,
+            harness: &'a str,
+        }
+        let base_inputs = serde_json::to_string(&BaseInputs {
+            version: 1,
+            smolvm_version: self.smolvm.version.trim_end_matches(['\r', '\n']),
+            definition_sha256: domain::hash_bytes(&self.config.definition.bytes),
+            definition_path: self
+                .config
+                .definition
+                .path
+                .to_str()
+                .context("definition path is not UTF-8")?,
+            harness: self.config.definition.profile.id(),
+        })?;
+        Self::label(values, "base-inputs", &base_inputs);
+        Self::label(values, "machine-inputs", &inputs.metadata()?);
+        inputs.append_arguments(values);
+        Ok(())
+    }
+
     fn ensure_base(&self, inventory: &Inventory) -> Result<()> {
         private_dir(&self.config.harness_home)?;
         fs::create_dir_all(&self.config.artifacts_dir)?;
@@ -207,11 +297,16 @@ impl<'a> Lifecycle<'a> {
             let mut values = args(&["machine", "create", "--name", &self.builder]);
             Self::label(&mut values, "kind", "builder");
             Self::label(&mut values, "base-id", &self.identity.base_id);
-            pair(
+            self.creation_arguments(
                 &mut values,
-                "--smolfile",
-                self.config.definition.path.as_os_str(),
-            );
+                &CreationInputs {
+                    workspace_path: None,
+                    options: vec![format!(
+                        "--smolfile={}",
+                        self.config.definition.path.display()
+                    )],
+                },
+            )?;
             self.command(values)?;
         }
         if let Err(error) = self.machine("stop", &self.builder) {
@@ -257,19 +352,24 @@ impl<'a> Lifecycle<'a> {
         Self::label(&mut values, "kind", "login");
         Self::label(&mut values, "base-id", &self.identity.base_id);
         Self::label(&mut values, "revision", REVISION);
-        pair(&mut values, "--from", self.artifact.as_os_str());
-        pair(
-            &mut values,
-            "--volume",
+        let mut options = vec![
+            format!("--from={}", self.artifact.display()),
             format!(
-                "{}:{}",
+                "--volume={}:{}",
                 self.config.harness_home.display(),
                 self.config.definition.profile.guest_home()
             ),
-        );
+        ];
         for host in self.config.definition.profile.login_hosts() {
-            pair(&mut values, "--allow-host", host);
+            options.push(format!("--allow-host={host}"));
         }
+        self.creation_arguments(
+            &mut values,
+            &CreationInputs {
+                workspace_path: None,
+                options,
+            },
+        )?;
         self.command(values)
     }
 
@@ -285,26 +385,7 @@ impl<'a> Lifecycle<'a> {
         ] {
             Self::label(&mut values, key, value);
         }
-        pair(&mut values, "--from", self.artifact.as_os_str());
-        pair(&mut values, "--mem", MEMORY);
-        pair(&mut values, "--cpus", CPUS);
-        pair(
-            &mut values,
-            "--volume",
-            format!(
-                "{}:{}",
-                self.config.harness_home.display(),
-                self.config.definition.profile.guest_home()
-            ),
-        );
-        pair(
-            &mut values,
-            "--volume",
-            format!("{}:/workspace/myrepo", self.config.workspace.display()),
-        );
-        for host in &self.hosts {
-            pair(&mut values, "--allow-host", host.as_str());
-        }
+        self.creation_arguments(&mut values, &self.workspace_inputs)?;
         self.command(values)
     }
 
@@ -1048,6 +1129,108 @@ fn list(options: &Options) -> Result<i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resolved_creation_options_share_arguments_metadata_and_fixed_resource_hashes() {
+        let expected = [
+            "--allow-host=a.example",
+            "--allow-host=z.example",
+            "--cpus=4",
+            "--from=/artifacts/codex-devtools-abcdef123456.smolmachine",
+            "--mem=12288",
+            "--volume=/home/state:/root/.codex",
+            "--volume=/work/project:/workspace/myrepo",
+        ];
+        for (memory, cpus, digest) in [
+            (
+                "12288",
+                "4",
+                "270e63a270263e932a5eea8b44f67b7fa02718034a9bb0caac9b7ee99c61d2a2",
+            ),
+            (
+                "16384",
+                "4",
+                "7440d18ed91d2bee6ddd3144683b13dfe2a5fbaae5f1d2b5a2804c4f0c641877",
+            ),
+            (
+                "12288",
+                "8",
+                "2395691f2e2edfca4c795b9ab7a1a7d954f1f50e4ac43fd57d9b2b64772572f3",
+            ),
+        ] {
+            let inputs = CreationInputs::workspace(
+                Path::new("/artifacts/codex-devtools-abcdef123456.smolmachine"),
+                "/home/state",
+                "/work/project",
+                Profile::Codex,
+                memory,
+                cpus,
+                &["a.example".into(), "z.example".into()],
+            );
+            assert_eq!(domain::hash_set(&inputs.options), digest);
+            let metadata: serde_json::Value =
+                serde_json::from_str(&inputs.metadata().unwrap()).unwrap();
+            let expected: Vec<String> = expected
+                .iter()
+                .map(|value| match *value {
+                    "--mem=12288" => format!("--mem={memory}"),
+                    "--cpus=4" => format!("--cpus={cpus}"),
+                    value => value.to_owned(),
+                })
+                .collect();
+            assert_eq!(metadata["options"], serde_json::json!(expected));
+            assert_eq!(metadata["workspace_path"], "/work/project");
+            let mut arguments = Vec::new();
+            inputs.append_arguments(&mut arguments);
+            let actual: Vec<String> = arguments
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|pair| {
+                    format!(
+                        "{}={}",
+                        pair[0].to_str().unwrap(),
+                        pair[1].to_str().unwrap()
+                    )
+                })
+                .collect();
+            assert_eq!(domain::canonical_set(&actual), expected);
+        }
+    }
+
+    #[test]
+    fn creation_metadata_preserves_complete_strings_and_canonical_option_sets() {
+        let workspace = "C:\\projects\\space = 雪\trow\n\u{1b}";
+        let mapping = format!("--volume={workspace}:/workspace/myrepo");
+        let inputs = CreationInputs {
+            workspace_path: Some(workspace.into()),
+            options: vec![
+                mapping.clone(),
+                "--allow-host=z=one.example".into(),
+                mapping.clone(),
+                "--allow-host=a.example".into(),
+            ],
+        };
+        let encoded = inputs.metadata().unwrap();
+        assert!(!encoded.contains(['\t', '\n', '\u{1b}']));
+        let decoded: serde_json::Value = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(decoded["workspace_path"], workspace);
+        assert_eq!(
+            decoded["options"],
+            serde_json::json!([
+                "--allow-host=a.example",
+                "--allow-host=z=one.example",
+                mapping,
+            ])
+        );
+        let mut arguments = Vec::new();
+        inputs.append_arguments(&mut arguments);
+        assert_eq!(
+            arguments[1],
+            OsString::from(format!("{workspace}:/workspace/myrepo"))
+        );
+        assert_eq!(arguments[3], "z=one.example");
+    }
 
     #[test]
     fn selected_bytes_and_version_define_base_identity() {
