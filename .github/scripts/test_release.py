@@ -776,10 +776,67 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(self.workflow.count("target: aarch64-unknown-linux-gnu"), 1)
         self.assertEqual(self.workflow.count("target: aarch64-apple-darwin"), 1)
         self.assertEqual(self.workflow.count("target: x86_64-pc-windows-msvc"), 1)
+        self.assertEqual(self.workflow.count("target: aarch64-pc-windows-msvc"), 1)
         self.assertIn("cargo build --locked --release --bin smolsbx --target ${{ matrix.target }}", self.jobs["native"])
         self.assertIn("ref: ${{ github.sha }}", self.jobs["release"])
         self.assertIn("ref: ${{ github.sha }}", self.jobs["native"])
         self.assertIn("RELEASE_SHA: ${{ github.sha }}", self.workflow)
+
+    def test_native_matrix_has_exact_five_runner_target_pairs(self):
+        pairs = re.findall(r"- runner: ([^\n]+)\n\s+target: ([^\n]+)", self.jobs["native"])
+        expected = {
+            ("ubuntu-24.04", "x86_64-unknown-linux-gnu"),
+            ("ubuntu-24.04-arm", "aarch64-unknown-linux-gnu"),
+            ("macos-15", "aarch64-apple-darwin"),
+            ("windows-2025", "x86_64-pc-windows-msvc"),
+            ("windows-11-arm", "aarch64-pc-windows-msvc"),
+        }
+        self.assertEqual(len(pairs), 5)
+        self.assertEqual(set(pairs), expected)
+        self.assertNotIn("continue-on-error:", self.jobs["native"])
+
+    def test_arm64_native_host_is_selected_and_verified_before_full_check_sequence(self):
+        native = self.jobs["native"]
+        self.assertIn("SMOLSBX_EXPECTED_RUST_HOST: ${{ matrix.target }}", native)
+        self.assertIn("rustup toolchain install stable-aarch64-pc-windows-msvc --profile minimal --component rustfmt --component clippy", native)
+        self.assertIn("echo 'RUSTUP_TOOLCHAIN=stable-aarch64-pc-windows-msvc' >> \"$GITHUB_ENV\"", native)
+        for line in (
+            'echo "Runner OS: $NATIVE_RUNNER_OS"',
+            'echo "Runner architecture: $NATIVE_RUNNER_ARCH"',
+            'echo "Runner image: ${ImageOS:-unknown} ${ImageVersion:-unknown}"',
+            'rustc -vV | grep -Fx "host: $SMOLSBX_EXPECTED_RUST_HOST"',
+            'cargo -vV | grep -Fx "host: $SMOLSBX_EXPECTED_RUST_HOST"',
+            'test "$NATIVE_RUNNER_ARCH" = ARM64',
+        ):
+            self.assertIn(line, native)
+        checks = (
+            "cargo fmt --all -- --check",
+            "cargo clippy --locked --all-targets --target ${{ matrix.target }} -- -D warnings",
+            "cargo clippy --locked --features test-adapter --all-targets --target ${{ matrix.target }} -- -D warnings",
+            "cargo test --locked --all-targets --target ${{ matrix.target }}",
+            "cargo test --locked --features test-adapter --all-targets --target ${{ matrix.target }}",
+            "cargo build --locked --release --bin smolsbx --target ${{ matrix.target }}",
+            "cargo run --locked --example check_baseline_independence --target ${{ matrix.target }}",
+        )
+        positions = [native.index(command) for command in checks]
+        self.assertEqual(positions, sorted(positions))
+        self.assertLess(native.index('rustc -vV | grep -Fx'), positions[0])
+        self.assertLess(native.index('RUSTUP_TOOLCHAIN=stable-aarch64-pc-windows-msvc'), positions[0])
+        example = (ROOT / "examples/check_baseline_independence.rs").read_text()
+        for expected in ('SMOLSBX_EXPECTED_RUST_HOST', 'cargo(root, &["-vV"])', 'baseline-independence {name} must use native host', '.env("PATH", "")'):
+            self.assertIn(expected, example)
+
+    def test_arm64_production_smoke_requires_offline_cli_and_preserved_state(self):
+        native = self.jobs["native"]
+        smoke = native.split("      - name: Check Windows ARM64 offline CLI and production host rejection\n", 1)[1].split("      - uses:", 1)[0]
+        self.assertIn("if: matrix.target == 'aarch64-pc-windows-msvc'", smoke)
+        self.assertIn("target/aarch64-pc-windows-msvc/release/smolsbx.exe", smoke)
+        self.assertIn("PATH='', SMOLVM_BIN=str(workspace / 'missing-smolvm.exe')", smoke)
+        for expected in ("['--help']", "['--version']", "['create-config', '--harness', 'codex'", "unsupported SmolVM host: windows/aarch64", "assert result.returncode == 1", "assert snapshot(native_state) == original_state", "assert all(not (workspace / name).exists()", "call == ['machine', 'ls', '--json']"):
+            self.assertIn(expected, smoke)
+        self.assertNotIn("SMOLVM_TEST_HOME", smoke)
+        script = textwrap.dedent(smoke.split("          python - <<'PY'\n", 1)[1].split("          PY\n", 1)[0])
+        compile(script, "ARM64 production smoke", "exec")
 
     def test_inline_eligibility_program_matches_canonical_script(self):
         workflow = (ROOT / ".github/workflows/rust.yml").read_text()

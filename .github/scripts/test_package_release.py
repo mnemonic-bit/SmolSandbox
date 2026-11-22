@@ -14,6 +14,17 @@ import package_release
 
 
 ROOT = Path(__file__).resolve().parents[2]
+TARGETS = {
+    'x86_64-unknown-linux-gnu': 'smolsbx',
+    'aarch64-unknown-linux-gnu': 'smolsbx',
+    'aarch64-apple-darwin': 'smolsbx',
+    'x86_64-pc-windows-msvc': 'smolsbx.exe',
+    'aarch64-pc-windows-msvc': 'smolsbx.exe',
+}
+WINDOWS_MACHINES = {
+    'x86_64-pc-windows-msvc': b'\x64\x86',
+    'aarch64-pc-windows-msvc': b'\x64\xaa',
+}
 
 
 class PackagingWorkflowTests(unittest.TestCase):
@@ -64,8 +75,8 @@ class PackageReleaseTests(unittest.TestCase):
             content = bytearray(128)
             content[:2] = b'MZ'
             content[60:64] = (64).to_bytes(4, 'little')
-            content[64:70] = b'PE\x00\x00\x64\x86'
-        source = self.root / 'target' / target / 'release' / package_release.TARGETS[target][0]
+            content[64:70] = b'PE\x00\x00' + WINDOWS_MACHINES[target]
+        source = self.root / 'target' / target / 'release' / TARGETS[target]
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_bytes(content)
         source.chmod(0o755)
@@ -78,7 +89,8 @@ class PackageReleaseTests(unittest.TestCase):
                                        report=self.messages.append, runner=runner)
 
     def test_all_targets_contain_only_the_native_executable_with_fixed_permissions(self):
-        for target, (name, _) in package_release.TARGETS.items():
+        self.assertEqual(set(package_release.TARGETS), set(TARGETS))
+        for target, name in TARGETS.items():
             with self.subTest(target=target):
                 source = self.executable(target)
                 def run(arguments, **options):
@@ -147,6 +159,38 @@ class PackageReleaseTests(unittest.TestCase):
         self.executable(target).write_bytes(content)
         with self.assertRaisesRegex(package_release.ReleaseError, target + ':.*ARM64'):
             self.package(target)
+
+    def test_windows_architecture_substitution_is_rejected_before_execution(self):
+        for target in WINDOWS_MACHINES:
+            for machine in (b'\x64\x86', b'\x64\xaa', b'\x4c\x01'):
+                if machine == WINDOWS_MACHINES[target]:
+                    continue
+                with self.subTest(target=target, machine=machine):
+                    source = self.executable(target)
+                    content = bytearray(source.read_bytes())
+                    content[68:70] = machine
+                    source.write_bytes(content)
+                    runner = mock.Mock()
+                    with self.assertRaisesRegex(package_release.ReleaseError, target + ':.*header'):
+                        self.package(target, runner)
+                    runner.assert_not_called()
+                    self.assertFalse(self.output.exists())
+
+    def test_windows_malformed_and_truncated_headers_are_rejected_before_execution(self):
+        for target in WINDOWS_MACHINES:
+            valid = self.executable(target).read_bytes()
+            invalid = [valid[:length] for length in (0, 1, 2, 59, 60, 63, 64, 67, 68, 69, 70, 87)]
+            invalid.extend((b'NO' + valid[2:], valid[:64] + b'PX\x00\x00' + valid[68:]))
+            for offset in (0, 60, 63, 105, 128, 0xFFFFFFFF):
+                invalid.append(valid[:60] + offset.to_bytes(4, 'little') + valid[64:])
+            for content in invalid:
+                with self.subTest(target=target, content=content):
+                    self.executable(target).write_bytes(content)
+                    runner = mock.Mock()
+                    with self.assertRaisesRegex(package_release.ReleaseError, target + ':.*header'):
+                        self.package(target, runner)
+                    runner.assert_not_called()
+                    self.assertFalse(self.output.exists())
 
     def test_version_mismatch_exit_failure_and_timeout_fail_with_target(self):
         target = 'x86_64-unknown-linux-gnu'

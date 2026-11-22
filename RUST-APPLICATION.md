@@ -9,7 +9,7 @@ complete user-owned Smolfile definitions and a separately installed SmolVM.
 The Rust documentation reflects source removal in commit
 `28087885c2b84077c62ee92c5560a2cab1b68997`. Final cutover acceptance remains
 pending because real guest validation has not been established for every
-required profile and release target. The
+required profile and supported virtualization host. The
 [Feature 0010 validation record](FEATURES/feature-0010-validation.md) separates
 observed checks from outstanding gates. The historical completion decisions
 for Features 0004 and 0009 remain recorded in their validation records.
@@ -44,18 +44,27 @@ silently selected. Capability preflight checks the required SmolVM operations,
 inventory JSON, and native virtualization prerequisites before lifecycle
 mutation. Help, version, and configuration generation require no SmolVM.
 
-The [native CI matrix](.github/workflows/rust.yml) defines these release targets:
+The [native CI matrix](.github/workflows/rust.yml) defines five CLI distribution
+targets. The sandbox prerequisites distinguish compatible virtualization hosts
+from the Windows ARM64 CLI-only target:
 
-| Host | Architecture | Native prerequisite | Rust target |
+| Host | Architecture | Sandbox prerequisite | Rust target |
 | --- | --- | --- | --- |
 | Linux | x86-64 | Read/write access to `/dev/kvm` | `x86_64-unknown-linux-gnu` |
 | Linux | ARM64 | Read/write access to `/dev/kvm` | `aarch64-unknown-linux-gnu` |
 | macOS | ARM64 | Hypervisor.framework | `aarch64-apple-darwin` |
 | Windows | x86-64 | Windows Hypervisor Platform | `x86_64-pc-windows-msvc` |
+| Windows 11 | ARM64 | Unsupported sandbox runtime | `aarch64-pc-windows-msvc` |
 
-macOS Intel and Windows ARM64 are outside this release matrix. A configured
-CI job or successful cross-compilation does not establish native execution or
-real guest compatibility. Recorded native mocked results and real guest
+Windows ARM64 supports help, version, and configuration generation without
+SmolVM. Sandbox creation and guest execution remain unsupported on Windows
+ARM64; production virtualization preflight rejects that host before lifecycle
+mutation. A compatible upstream runtime and real guest evidence are required
+before enabling Windows ARM64 virtualization in a separate feature.
+
+macOS Intel remains outside this release matrix. A configured CI job or
+successful cross-compilation does not establish native execution or real guest
+compatibility. Recorded native mocked results and real guest
 procedures have separate evidence requirements under
 [validation and cutover gates](#validation-and-cutover-gates).
 
@@ -798,7 +807,7 @@ and pull requests that leave both version files unchanged. The check parses
 the proposed merge commit's `Cargo.toml` and `Cargo.lock` without building
 code, running repository scripts, or installing project dependencies.
 
-After a merge reaches `develop`, all four native matrix jobs validate the
+After a merge reaches `develop`, all five native matrix jobs validate the
 committed source. After a merge reaches `main`, an early eligibility check
 validates the actual push commit before the native matrix starts. Publication
 requires that check and every native job to succeed in the same run. Failed,
@@ -850,14 +859,14 @@ does not weaken rules, change repository access, or commit version changes.
    rejects an existing tag or release, including a draft. Resolve merge
    conflicts before expecting the proposed merge metadata check to pass.
 5. If eligibility passes and other branch rules permit merging, merge the
-   pull request. Wait for main eligibility and all four native jobs.
+   pull request. Wait for main eligibility and all five native jobs.
 6. Find the resulting `v<version>` tag and normal GitHub Release in
    [repository releases](https://github.com/mnemonic-bit/SmolSandbox/releases).
    The release title is `v<version>` and the release has GitHub-generated
    notes. The tag identifies the validated push SHA, even if `main` advances
    before publication finishes.
 7. Wait for the release job to succeed before treating the binary release as
-   complete. Verify that the release page lists all four binary ZIP assets.
+   complete. Verify that the release page lists all five binary ZIP assets.
 
 A successful PR eligibility check records GitHub state at check time; the
 check does not reserve the version. Another tag or release can appear later.
@@ -866,9 +875,10 @@ failure. The workflow repeats eligibility after merging and immediately
 before publication. API errors fail eligibility instead of treating an
 unverifiable version as unused.
 
-Starting with version `0.13.0`, release automation attaches four executable-only
-binary ZIPs with stable filenames alongside the generated notes. The required
-uploaded assets are:
+Version `0.13.0` introduced four executable-only binary ZIPs with stable
+filenames alongside the generated notes. Version `0.15.0` adds Windows ARM64
+as the fifth ZIP. Releases using the Feature 0021 workflow require these five
+uploaded assets:
 
 | Operating system and architecture | Release asset name | Sole ZIP entry |
 | --- | --- | --- |
@@ -876,11 +886,14 @@ uploaded assets are:
 | Linux ARM64 | `smolsbx-aarch64-unknown-linux-gnu.zip` | `smolsbx` |
 | macOS ARM64 | `smolsbx-aarch64-apple-darwin.zip` | `smolsbx` |
 | Windows x86-64 | `smolsbx-x86_64-pc-windows-msvc.zip` | `smolsbx.exe` |
+| Windows ARM64 | `smolsbx-aarch64-pc-windows-msvc.zip` | `smolsbx.exe` |
 
 The README buttons use GitHub's `releases/latest/download/<asset-name>` route.
-Direct downloads require the first normal release containing all four stable
-names. Until that release is published, use the release-page link to select
-an available binary. Later releases reuse the same filenames; the tag, title,
+The Windows ARM64 button requires the first normal release containing the
+fifth stable asset name. Until that release is published, the latest release
+may contain only the original four ZIPs; use the release-page link to select
+an available binary. The other buttons require the stable names introduced
+in `0.13.0`. Later releases reuse the same filenames; the tag, title,
 and executable version still identify `v<version>`. A version-specific URL uses
 `releases/download/v<version>/<asset-name>`.
 
@@ -888,6 +901,11 @@ Earlier releases used `smolsbx-v<version>-<target>.zip`. Preserve those publishe
 names, asset IDs, bytes, and tags. No duplicate versioned aliases are uploaded
 for new releases. This transition supersedes Feature 0017's filename rule for
 new releases while preserving its historical observations.
+
+Feature 0021 supersedes the four-target counts in Features 0017 and 0019 for
+releases using the new workflow. Their previous acceptance evidence remains
+historical; the fifth distribution target does not establish Windows ARM64
+sandbox support.
 
 Each archive contains one regular file at the archive root. Templates are
 embedded in the executable; the ZIPs contain no separate resources, source,
@@ -898,7 +916,7 @@ the extracted executables with `--version`. Distributed builds exclude
 `test-adapter`.
 
 The publication job downloads packaged artifacts from its own workflow run.
-All four executables therefore come from successful native builds of the exact
+All five executables therefore come from successful native builds of the exact
 validated release commit, rather than a moving branch or another run. The
 release job validates every local ZIP before release writes and verifies
 uploaded bytes before reporting completion. Missing artifacts, packaging
@@ -914,8 +932,11 @@ finishing later does not explicitly replace a newer release as latest.
 
 After a transient validation or API failure, rerun the original workflow for
 the original main push commit. Recovery uses that workflow revision and its
-original filename scheme: versioned names for releases before this transition,
-stable names for new releases. A manual dispatch performs validation only
+original filename scheme and required target set: versioned names for releases
+before the stable-name transition, four stable ZIPs before Feature 0021, and
+five stable ZIPs for releases using the Feature 0021 workflow. Do not backfill
+older releases or recover them with the new five-target requirements.
+A manual dispatch performs validation only
 and cannot replace that publication attempt. Inspect the failed job output
 before rerunning; ruleset rejection requires the owner to resolve the tag
 creation policy while preserving branch requirements.
@@ -934,7 +955,8 @@ uploaded. A complete matching release succeeds without duplicate uploads or
 metadata edits. Conflicting asset contents or unexpected uploaded assets fail
 explicitly without silent replacement or deletion. Inspect the named target
 and conflict diagnostic before deciding on a reviewed version change. The
-release job reports completion only after all four required assets verify.
+release job reports completion only after every asset required by the original
+workflow revision verifies; the Feature 0021 workflow requires all five.
 
 After a successful release creation or draft publication, recovery retains
 the returned release ID and verifies that release through direct reads.
@@ -1010,9 +1032,9 @@ removal is now recorded separately in the
 [current Feature 0010 audit](FEATURES/feature-0010-validation.md#source-removal-and-documentation-audit-2026-11-04).
 
 Final cutover acceptance requires recorded native mocked execution, real
-guest validation for every profile and release target, and physical baseline
-removal. Source removal has passed. Keep final acceptance pending until the
-remaining execution evidence is recorded. The configured CI workflow runs
+guest validation for every profile and supported virtualization host, and
+physical baseline removal. Source removal has passed. Keep final acceptance
+pending until the remaining execution evidence is recorded. The configured CI workflow runs
 mocked checks; real guest authentication and terminal checks require separate
 native execution.
 

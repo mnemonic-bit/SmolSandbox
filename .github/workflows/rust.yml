@@ -59,6 +59,7 @@ jobs:
               "aarch64-unknown-linux-gnu",
               "aarch64-apple-darwin",
               "x86_64-pc-windows-msvc",
+              "aarch64-pc-windows-msvc",
           )
 
 
@@ -161,7 +162,7 @@ jobs:
           def load_binary_assets():
               directory = os.environ.get("RELEASE_ASSET_DIR")
               if not directory:
-                  raise ReleaseError("RELEASE_ASSET_DIR is required for all four binary targets")
+                  raise ReleaseError(f"RELEASE_ASSET_DIR is required for all {len(BINARY_TARGETS)} binary targets")
               root = Path(directory)
               assets = {}
               for target in BINARY_TARGETS:
@@ -258,7 +259,7 @@ jobs:
                   missing = ", ".join(sorted(set(expected) - set(final))) or "none"
                   unexpected = ", ".join(sorted(set(final) - set(expected))) or "none"
                   raise ReleaseError(
-                      f"Binary release {tag} does not contain exactly the four required ZIPs; "
+                      f"Binary release {tag} does not contain exactly the {len(expected)} required ZIPs; "
                       f"missing: {missing}; unexpected: {unexpected}; rerun the original workflow"
                   )
               for name, data in expected.items():
@@ -267,7 +268,7 @@ jobs:
                   verify_binary_asset(api, final[name], name, data)
               if resolve_tag(api, tag) != sha:
                   raise ReleaseError(f"Tag {tag} changed during binary release verification")
-              report(f"Verified complete binary release {tag}: all four target ZIPs")
+              report(f"Verified complete binary release {tag}: all {len(expected)} target ZIPs")
 
 
           def parse_version(manifest_text, lock_text):
@@ -545,7 +546,11 @@ jobs:
             target: aarch64-apple-darwin
           - runner: windows-2025
             target: x86_64-pc-windows-msvc
+          - runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
     runs-on: ${{ matrix.runner }}
+    env:
+      SMOLSBX_EXPECTED_RUST_HOST: ${{ matrix.target }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -558,6 +563,29 @@ jobs:
         with:
           targets: ${{ matrix.target }}
           components: rustfmt, clippy
+      - name: Select the native Windows ARM64 host toolchain
+        if: matrix.target == 'aarch64-pc-windows-msvc'
+        shell: bash
+        run: |
+          rustup toolchain install stable-aarch64-pc-windows-msvc --profile minimal --component rustfmt --component clippy
+          echo 'RUSTUP_TOOLCHAIN=stable-aarch64-pc-windows-msvc' >> "$GITHUB_ENV"
+      - name: Record runner and native Rust host
+        shell: bash
+        env:
+          NATIVE_RUNNER_OS: ${{ runner.os }}
+          NATIVE_RUNNER_ARCH: ${{ runner.arch }}
+        run: |
+          echo "Runner OS: $NATIVE_RUNNER_OS"
+          echo "Runner architecture: $NATIVE_RUNNER_ARCH"
+          echo "Runner image: ${ImageOS:-unknown} ${ImageVersion:-unknown}"
+          rustc -vV
+          cargo -vV
+          rustc -vV | grep -Fx "host: $SMOLSBX_EXPECTED_RUST_HOST"
+          cargo -vV | grep -Fx "host: $SMOLSBX_EXPECTED_RUST_HOST"
+          if [[ "$SMOLSBX_EXPECTED_RUST_HOST" == aarch64-pc-windows-msvc ]]; then
+            test "$NATIVE_RUNNER_OS" = Windows
+            test "$NATIVE_RUNNER_ARCH" = ARM64
+          fi
       - run: cargo fmt --all -- --check
       - run: cargo clippy --locked --all-targets --target ${{ matrix.target }} -- -D warnings
       - run: cargo clippy --locked --features test-adapter --all-targets --target ${{ matrix.target }} -- -D warnings
@@ -572,6 +600,57 @@ jobs:
           PACKAGE_PYTHON: ${{ runner.os == 'Windows' && 'python' || 'python3' }}
         run: |
           "$PACKAGE_PYTHON" .github/scripts/package_release.py --target '${{ matrix.target }}' --sha '${{ github.sha }}'
+      - name: Check Windows ARM64 offline CLI and production host rejection
+        if: matrix.target == 'aarch64-pc-windows-msvc'
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import tempfile
+          import tomllib
+
+          root = Path.cwd()
+          executable = root / 'target/aarch64-pc-windows-msvc/release/smolsbx.exe'
+          test_double = root / 'target/aarch64-pc-windows-msvc/debug/smolvm-test-double.exe'
+          version = tomllib.loads((root / 'Cargo.toml').read_text())['package']['version']
+
+          def snapshot(path):
+              if not path.exists():
+                  return None
+              return {str(entry.relative_to(path)): entry.read_bytes() if entry.is_file() else None
+                      for entry in path.rglob('*')}
+
+          native_state = Path.home() / '.smolsandbox'
+          original_state = snapshot(native_state)
+          with tempfile.TemporaryDirectory() as directory:
+              workspace = Path(directory)
+              environment = dict(os.environ, PATH='', SMOLVM_BIN=str(workspace / 'missing-smolvm.exe'))
+              for arguments in (['--help'], ['--version'], ['create-config', '--harness', 'codex', '--smolfile', str(workspace / 'codex.smlbx')]):
+                  result = subprocess.run([str(executable), *arguments], cwd=workspace, env=environment, capture_output=True, text=True)
+                  print(f'Offline CLI {arguments}: exit {result.returncode}')
+                  assert result.returncode == 0, result.stderr
+                  if arguments == ['--version']:
+                      assert result.stdout.strip() == f'smolsbx {version}', result.stdout
+              assert (workspace / 'codex.smlbx').is_file()
+              log = workspace / 'runtime-argv.jsonl'
+              environment.update(SMOLVM_TEST_ARGV_LOG=str(log), SMOLVM_TEST_INVENTORY='[]',
+                                 ARTIFACTS_DIR=str(workspace / 'artifacts'), STATE_ROOT=str(workspace / 'state'),
+                                 CODEX_HOME_DIR=str(workspace / 'codex-home'))
+              result = subprocess.run([str(executable), 'build', '--smolfile', str(workspace / 'codex.smlbx'),
+                                       '--smolvm', str(test_double)], cwd=workspace, env=environment, capture_output=True, text=True)
+              print(f'Production Windows ARM64 preflight with mocked capability queries: exit {result.returncode}')
+              assert result.returncode == 1, result.stdout
+              assert 'unsupported SmolVM host: windows/aarch64' in result.stderr, result.stderr
+              calls = [json.loads(line) for line in log.read_text().splitlines()]
+              assert calls, 'No capability queries were recorded'
+              assert all(call == ['--version'] or call == ['machine', 'ls', '--json'] or call[-1:] == ['--help'] for call in calls), calls
+              assert all(not (workspace / name).exists() for name in ('artifacts', 'state', 'codex-home'))
+              assert snapshot(native_state) == original_state, 'Production preflight changed native application state'
+          print('passed: offline CLI and production unsupported-host rejection without lifecycle mutation')
+          PY
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: smolsbx-${{ matrix.target }}
