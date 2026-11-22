@@ -1,4 +1,5 @@
 use crate::domain::{hash_bytes, Inventory, Machine, MANAGED_KEYS};
+use crate::metadata::{BaseInputs, MachineInputs, Metadata};
 use anyhow::Result;
 use regex::Regex;
 use serde::Serialize;
@@ -29,6 +30,13 @@ pub struct Row {
     pub source: &'static str,
     pub assessment: &'static str,
     pub reasons: Vec<String>,
+    pub workspace_path: Option<String>,
+    pub workspace_path_source: &'static str,
+    pub harness: Option<String>,
+    pub base_inputs: Option<BaseInputs>,
+    pub machine_inputs: Option<MachineInputs>,
+    pub metadata_status: &'static str,
+    pub metadata_reasons: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -129,6 +137,13 @@ fn inspect(machine: &Machine, name: Option<&NameIdentity>, labels: bool) -> Row 
         source: if labels { "labels" } else { "legacy-name" },
         assessment: "unknown",
         reasons: Vec::new(),
+        workspace_path: None,
+        workspace_path_source: "unknown",
+        harness: None,
+        base_inputs: None,
+        machine_inputs: None,
+        metadata_status: "unavailable",
+        metadata_reasons: Vec::new(),
     };
     if labels {
         row.kind = scalar(
@@ -351,10 +366,7 @@ pub fn report(inventory: &Inventory, workspace: &Path, reference: Reference, all
     }
     for machine in inventory {
         let name = patterns.identity(&machine.name);
-        let labels = machine
-            .labels
-            .keys()
-            .any(|key| key.starts_with("codex-sandbox."));
+        let labels = machine.has_ownership_labels();
         if name.is_none() && !labels {
             continue;
         }
@@ -368,6 +380,25 @@ pub fn report(inventory: &Inventory, workspace: &Path, reference: Reference, all
         }
         let mut row = inspect(machine, name.as_ref(), labels);
         compare(&mut row, &result.reference, &path_hash);
+        let metadata = Metadata::inspect(machine, row.kind.as_deref());
+        if row.kind.as_deref() == Some("workspace") {
+            if let Some(path) = metadata
+                .machine
+                .as_ref()
+                .and_then(|value| value.workspace_path.as_ref())
+            {
+                row.workspace_path = Some(path.clone());
+                row.workspace_path_source = "label";
+            } else if row.workspace_path_sha256.as_deref() == Some(path_hash.as_str()) {
+                row.workspace_path = Some(workspace.to_str().unwrap().to_owned());
+                row.workspace_path_source = "reference";
+            }
+        }
+        row.harness = metadata.base.as_ref().map(|value| value.harness.clone());
+        row.base_inputs = metadata.base;
+        row.machine_inputs = metadata.machine;
+        row.metadata_status = metadata.status;
+        row.metadata_reasons = metadata.reasons;
         if row.assessment == "unknown" {
             result.warnings.push(format!(
                 "{} has incomplete or contradictory managed metadata; ownership is unverified.",
@@ -379,6 +410,19 @@ pub fn report(inventory: &Inventory, workspace: &Path, reference: Reference, all
     result.machines.sort_by(|a, b| a.name.cmp(&b.name));
     result.warnings.sort();
     result
+}
+
+fn human_text(value: &str) -> String {
+    value
+        .chars()
+        .flat_map(|character| {
+            if character.is_control() || matches!(character, '\u{2028}' | '\u{2029}') {
+                character.escape_default().collect::<Vec<_>>()
+            } else {
+                vec![character]
+            }
+        })
+        .collect()
 }
 
 impl Report {
@@ -394,26 +438,31 @@ impl Report {
 
     fn human(&self) -> String {
         use std::fmt::Write;
-        let mut output = format!("Reference workspace: {}\n", self.workspace.display());
+        let mut output = format!(
+            "Reference workspace: {}\n",
+            human_text(&self.workspace.display().to_string())
+        );
         let definition = self
             .reference
             .definition
             .as_ref()
             .map(|path| path.display().to_string())
             .unwrap_or_else(|| "unavailable".into());
-        writeln!(output, "Selected definition: {definition}").unwrap();
+        writeln!(output, "Selected definition: {}", human_text(&definition)).unwrap();
         writeln!(
             output,
             "Desired workspace machine: {}\nCurrent policy revision: {}",
-            self.reference
-                .desired_machine
-                .as_deref()
-                .unwrap_or("unavailable"),
-            self.reference.revision
+            human_text(
+                self.reference
+                    .desired_machine
+                    .as_deref()
+                    .unwrap_or("unavailable")
+            ),
+            human_text(&self.reference.revision)
         )
         .unwrap();
         for warning in &self.warnings {
-            writeln!(output, "WARNING: {warning}").unwrap();
+            writeln!(output, "WARNING: {}", human_text(warning)).unwrap();
         }
         writeln!(output, "Unassociated workspace candidates: {} (missing or malformed path labels; association with the reference workspace is unknown).", self.unassociated_workspace_count).unwrap();
         output.push_str("Assessments compare the current invocation only; no assessment authorizes deletion. An identity match does not establish artifact availability, port reconciliation, guest boot, or authentication.\n");
@@ -421,7 +470,7 @@ impl Report {
             output.push_str("No matching machines.\n");
             return output;
         }
-        output.push_str("NAME\tSTATE\tKIND\tBASE\tREVISION\tASSESSMENT");
+        output.push_str("NAME\tSTATE\tKIND\tBASE\tREVISION\tASSESSMENT\tWORKSPACE\tHARNESS");
         if self.scope == "all" {
             output.push_str("\tASSOCIATION");
         }
@@ -429,13 +478,19 @@ impl Report {
         for row in &self.machines {
             write!(
                 output,
-                "{}\t{}\t{}\t{}\t{}\t{}",
-                row.name,
-                row.state,
-                row.kind.as_deref().unwrap_or("unknown"),
-                row.base_id.as_deref().unwrap_or("unknown"),
-                row.revision.as_deref().unwrap_or("unknown"),
-                row.assessment
+                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                human_text(&row.name),
+                human_text(&row.state),
+                human_text(row.kind.as_deref().unwrap_or("unknown")),
+                human_text(row.base_id.as_deref().unwrap_or("unknown")),
+                human_text(row.revision.as_deref().unwrap_or("unknown")),
+                row.assessment,
+                human_text(if row.assessment == "shared" {
+                    "shared"
+                } else {
+                    row.workspace_path.as_deref().unwrap_or("unknown")
+                }),
+                human_text(row.harness.as_deref().unwrap_or("unknown"))
             )
             .unwrap();
             if self.scope == "all" {
@@ -444,11 +499,43 @@ impl Report {
                 } else {
                     row.workspace_path_sha256.as_deref().unwrap_or("unknown")
                 };
-                write!(output, "\t{association}").unwrap();
+                write!(output, "\t{}", human_text(association)).unwrap();
             }
             output.push('\n');
             for reason in &row.reasons {
-                writeln!(output, "  {reason}").unwrap();
+                writeln!(output, "  {}", human_text(reason)).unwrap();
+            }
+            if let Some(hash) = &row.workspace_sha256 {
+                writeln!(output, "  Workspace SHA-256: {}", human_text(hash)).unwrap();
+            }
+            writeln!(output, "  Metadata: {}", row.metadata_status).unwrap();
+            for reason in &row.metadata_reasons {
+                writeln!(output, "  {}", human_text(reason)).unwrap();
+            }
+            if let Some(base) = &row.base_inputs {
+                writeln!(
+                    output,
+                    "  Recorded SmolVM version: {}",
+                    human_text(&base.smolvm_version)
+                )
+                .unwrap();
+                writeln!(
+                    output,
+                    "  Recorded definition: {}",
+                    human_text(&base.definition_path)
+                )
+                .unwrap();
+                writeln!(
+                    output,
+                    "  Definition SHA-256: {}",
+                    human_text(&base.definition_sha256)
+                )
+                .unwrap();
+            }
+            if let Some(inputs) = &row.machine_inputs {
+                for option in &inputs.options {
+                    writeln!(output, "  Creation option: {}", human_text(option)).unwrap();
+                }
             }
         }
         output

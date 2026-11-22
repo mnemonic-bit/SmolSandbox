@@ -369,7 +369,37 @@ including `BASE_SMOLFILE`, and invalid or unreadable selected definitions
 remain errors. `--allow-host` requires an available definition. Listing never
 falls back past an invalid nearer definition.
 
-Human output prints the reference and full machine identities. `--json`
+Human output prints the reference, full machine identities, `WORKSPACE`, and
+`HARNESS`. New machines record their full canonical workspace path and profile.
+Builders and login machines display `shared`. For older workspace machines,
+a matching reference association hash permits a path display with source
+`reference`; other unknown paths display `unknown`. Listing does not search
+other workspace directories or read historical definition paths.
+
+New builders, login machines, and workspace machines carry two compact JSON
+labels: `codex-sandbox.base-inputs` and `codex-sandbox.machine-inputs`, each
+with label schema version `1`. Base inputs record the normalized SmolVM
+version, selected definition path, full SHA-256 of the exact definition bytes,
+and harness profile. Machine inputs record the workspace path (`null` for
+shared machines) and sorted, deduplicated creation options. Human output
+prints every recorded input without truncation and escapes terminal controls.
+These values describe the creation request, not subsequent external edits or
+current guest state. Definition contents and credentials are excluded.
+The fingerprint identifies bytes; reproducing the base ID requires those
+original bytes and the recorded runtime version. The recorded source path
+does not establish that a file still exists or matches the fingerprint.
+
+Workspace options include the artifact path, memory, CPUs, both volume
+mappings, and every effective host. Their canonical JSON array reproduces
+`workspace-sha256`. Login options contain their artifact, harness mount, and
+separate authentication hosts; builder options contain their selected
+definition path. Names, labels, ports, guest arguments, and secret references
+are excluded from these arrays. Existing machines retain their original
+labels when reused. There is no metadata backfill or automatic replacement.
+Definition, artifact, harness-home, and workspace paths must be UTF-8;
+unsupported path bytes fail before lifecycle writes.
+
+`--json`
 writes one object with schema `version: 1`, `scope`, canonical `workspace`,
 `reference`, `unassociated_workspace_count`, `warnings`, and sorted `machines`.
 The reference contains `definition`, `base_id`, `revision`,
@@ -377,8 +407,42 @@ The reference contains `definition`, `base_id`, `revision`,
 Each row contains `name`, raw `state`, `kind`, `base_id`, `revision`,
 `workspace_path_sha256`, `workspace_sha256`, `configuration`, `source`,
 `assessment`, and `reasons`. Sources are `labels`, `legacy-name`, or `unknown`.
-Malformed inventory is fatal and produces no partial JSON; contradictory
-per-machine metadata remains visible as `unknown`.
+Every row also contains `workspace_path`, `workspace_path_source` (`label`,
+`reference`, or `unknown`), `harness`, decoded `base_inputs` and
+`machine_inputs`, `metadata_status`, and `metadata_reasons`. Unavailable
+components are null. Shared rows always have a null path and source `unknown`.
+Metadata status precedence is `invalid`, `unsupported`, `complete`, `partial`,
+then `unavailable`. Invalid or future components remain null while an
+independently valid component remains visible. Descriptive metadata never
+changes ownership, association scope, identity assessments, or deletion
+authorization. Malformed inventory is fatal and produces no partial JSON;
+invalid descriptive JSON strings remain per-row diagnostics.
+
+Filter recorded paths by exact equality or hosts by exact array membership
+with the optional user tool `jq`:
+
+```bash
+smolsbx list --all --json |
+  jq --arg path '/home/me/projects/myrepo' \
+    '.machines[] | select(.workspace_path == $path)'
+
+smolsbx list --all --json |
+  jq --arg option '--allow-host=packages.example.com' \
+    '.machines[] | select((.machine_inputs.options // []) | index($option))'
+```
+
+SmolVM retains the same metadata independently of the listing formatter:
+
+```bash
+smolvm machine ls --json |
+  jq --arg path '/home/me/projects/myrepo' '
+    .[] |
+    (.labels["codex-sandbox.machine-inputs"]? | fromjson?) as $inputs |
+    select($inputs.workspace_path == $path)
+  '
+```
+
+`list --allow-host` extends the comparison identity; it does not filter inventory.
 
 Listing calls only SmolVM's version and inventory interfaces. It skips
 virtualization and mutation capability preflight, takes no lifecycle locks,
@@ -390,7 +454,7 @@ SmolVM itself may maintain its own registry while answering inventory queries.
 
 `remove` deletes guest writable state without an interactive confirmation.
 By default, removal selects managed workspace machines whose policy revision
-is older than the executable's current revision (`5`), across profiles,
+is older than the executable's current revision (`6`), across profiles,
 bases, and configurations. Package version changes, different definitions,
 and different configurations alone do not make a machine stale. Revisions
 compare numerically, including leading zeros and values too large for native

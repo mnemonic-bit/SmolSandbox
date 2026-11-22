@@ -732,3 +732,39 @@ and retained-home restart observations. Preserve previous audit observations
 and source revisions. Final cutover acceptance remains pending the required
 native, artifact, and real guest evidence; this local audit establishes no
 new hosted release or cross-platform guest result.
+
+## Feature 0019 readable identity metadata audit: 2026-11-22
+
+The [Feature 0019 validation record](feature-0019-validation.md) identifies
+source revision `c2ed7d1bde477e837e1fb720d42044e5e4a15069` plus the local
+creation metadata, readable listing, compatibility, independent regression,
+help, and operating-guide changes. Both package versions are `0.13.0`;
+machine policy revision is `6`. The software content-manifest SHA-256 is
+`ccb0536170c55a6597fb2f6010c169a7c92062138c72faa90f85eaeaa4cc89ae`;
+the linked record defines its exact file set and encoding.
+
+New machines record versioned base and machine input objects. Human inventory
+shows full readable workspace paths, profiles, and creation inputs; JSON keeps
+report schema version `1` with additive decoded fields. Legacy reference-path
+inference remains explicit. Descriptive labels do not establish ownership or
+change association scope, identity assessments, or removal authorization.
+Templates, definition bytes, identity hashing, mounts, and the six authoritative
+ownership labels retain their existing contracts. Existing machines retain
+their creation-time metadata.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Formatting and both Clippy configurations | passed | All three required commands exited 0 on native `x86_64-unknown-linux-gnu`, Rust/Cargo `1.100.0` |
+| Both complete Rust test configurations | passed | Exit 0; 132 default tests and 203 tests with `test-adapter` |
+| Production release build | passed | Exit 0; default features; executable reports `smolsbx 0.13.0` |
+| Baseline independence | passed | Required command exited 0; isolated source checks, production build, and ten compiled test executables per feature configuration passed with empty `PATH` |
+| Independent metadata fixtures and jq filters | passed | All four profiles and all three creation kinds have exact label/argument expectations; identity variants, statuses, ownership neutrality, legacy paths, terminal escaping, and the three published jq expressions pass |
+| Independent implementation review | passed | The non-UTF-8 path conversion finding was corrected and re-reviewed; no actionable findings remain |
+| Other native targets and hosted CI | not_run | No new Linux ARM64, macOS ARM64, Windows x86-64, or hosted run evidence was collected |
+| Real SmolVM JSON-label round-trip | not_run | SmolVM and `/dev/kvm` are absent; create/list, long host set, native quoting, stop/start retention, and disposable deletion need observed runtime results |
+
+Feature 0019 remains `In progress`. AC-11 has only native Unix and simulated
+Windows/UNC evidence; AC-13 is `not_run` for every profile. Preserve the
+previous audits and their source revisions. Final cutover acceptance remains
+pending the outstanding native, artifact, and real guest evidence; metadata
+fixtures and baseline-independent tests do not establish real SmolVM behavior.
