@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="32" viewBox="0 0 220 32" role="img" aria-labelledby="title">
+  <title id="title">Download smolsbx for Linux ARM64 (ZIP)</title>
+  <rect x="0.5" y="0.5" width="219" height="31" rx="5" fill="#1f2937" stroke="#64748b"/>
+  <path d="M5 1h91v30H5a4 4 0 0 1-4-4V5a4 4 0 0 1 4-4Z" fill="#2563eb"/>
+  <path d="M13 10v9m-3-3 3 3 3-3m-6 6h6" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="13" text-anchor="middle">
+    <text x="57" y="21">Download</text>
+    <text x="158" y="21">Linux ARM64</text>
+  </g>
+</svg>

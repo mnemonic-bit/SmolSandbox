@@ -57,7 +57,7 @@ def package(root, target, destination, sha, report=print, runner=subprocess.run)
         if executable == 'smolsbx' and not source.stat().st_mode & 0o111:
             raise ReleaseError(f'{target}: native production executable has no executable permission')
         destination.mkdir(parents=True, exist_ok=True)
-        archive = destination / f'smolsbx-v{version}-{target}.zip'
+        archive = destination / f'smolsbx-{target}.zip'
         entry = zipfile.ZipInfo(executable, date_time=(1980, 1, 1, 0, 0, 0))
         entry.create_system = 3
         entry.external_attr = (stat.S_IFREG | (0o755 if executable == 'smolsbx' else 0o644)) << 16

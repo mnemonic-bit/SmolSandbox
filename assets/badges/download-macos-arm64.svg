@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="268" height="32" viewBox="0 0 268 32" role="img" aria-labelledby="title">
+  <title id="title">Download smolsbx for macOS Apple Silicon (ARM64, ZIP)</title>
+  <rect x="0.5" y="0.5" width="267" height="31" rx="5" fill="#1f2937" stroke="#64748b"/>
+  <path d="M5 1h91v30H5a4 4 0 0 1-4-4V5a4 4 0 0 1 4-4Z" fill="#2563eb"/>
+  <path d="M13 10v9m-3-3 3 3 3-3m-6 6h6" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="13" text-anchor="middle">
+    <text x="57" y="21">Download</text>
+    <text x="182" y="21">macOS Apple Silicon</text>
+  </g>
+</svg>

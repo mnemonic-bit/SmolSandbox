@@ -732,3 +732,37 @@ and retained-home restart observations. Preserve previous audit observations
 and source revisions. Final cutover acceptance remains pending the required
 native, artifact, and real guest evidence; this local audit establishes no
 new hosted release or cross-platform guest result.
+
+
+## Feature 0019 local README and release asset audit: 2026-11-22
+
+The [Feature 0019 validation record](feature-0019-validation.md) identifies
+source revision `f21fa1ae3541814ee94e1b8f45b1828fe75ea3e5` plus the local
+README, MIT licence, SVG buttons, stable ZIP naming, regression, operating
+guidance, and matching `0.13.0` version changes. The record preserves SHA-256
+fingerprints for all 14 implementation inputs, a native Linux ZIP fingerprint,
+read-only historical release metadata, and four public download probes.
+Application source, templates, and lifecycle revision `5` are unchanged.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Python release regressions and inline equality | passed | Exit 0; 89 tests; two-version stable names, version checks, recovery, historical asset preservation, and alias rejection |
+| Formatting and both Clippy configurations | passed | All three commands exited 0 on native Linux x86-64, Rust/Cargo 1.100.0 |
+| Both Rust test configurations | passed | Exit 0; 118 default tests and 185 tests with `test-adapter` |
+| Production release build | passed | Exit 0; default features; extracted executable reports `smolsbx 0.13.0` |
+| Baseline independence | passed | Exit 0; isolated Rust checks and nine compiled test executables per configuration with empty PATH |
+| Actual native Linux x86-64 packaging | passed | Stable ZIP name; sole regular executable entry `smolsbx`, mode 0755, ELF x86-64, extracted version 0.13.0 |
+| Local README button rendering | passed | Light/dark at 1100px and 375px; 32px images; no horizontal scrolling; image-disabled accessible link names retained |
+| Independent implementation and evidence review | passed | No actionable findings; reviewer reran 89 Python tests and checked fingerprints, public probes, metadata, measurements, and Rust totals |
+| Hosted README rendering and other native packages | not_run | No hosted rendering of these local changes or Linux ARM64, macOS ARM64, Windows x86-64 packaging was observed |
+| Public stable-name downloads | inconclusive | All four URLs return HTTP 404 under latest normal release v0.11.2, whose assets still use versioned names |
+| First stable-name publication and historical comparison | not_run | No release or asset was modified; compare recorded historical asset IDs, names, sizes, and digests after publication |
+| Real SmolVM guests | not_run | No guest was run; this feature introduces no new guest behavior |
+
+Feature 0019 remains `In progress`. All seven required Rust checks and the
+local release regressions passed. Hosted and other native acceptance remains
+pending. The README retains the release-page
+fallback and states that direct downloads require the first stable-name normal
+release. Preserve all prior release, native, and guest observations above.
+Final cutover acceptance remains pending the previously required native and
+real guest evidence; the new buttons establish no additional guest result.

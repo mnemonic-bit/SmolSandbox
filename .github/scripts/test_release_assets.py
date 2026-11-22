@@ -94,7 +94,7 @@ class BinaryReleaseTests(unittest.TestCase):
         self.messages = []
         self.packages = {}
         for target in TARGETS:
-            name = f"smolsbx-{TAG}-{target}.zip"
+            name = f"smolsbx-{target}.zip"
             self.packages[name] = archive(target)
             (Path(self.directory.name) / name).write_bytes(self.packages[name])
 
@@ -119,6 +119,42 @@ class BinaryReleaseTests(unittest.TestCase):
         self.assertEqual({name: data for _, name, data in self.api.uploads}, self.packages)
         self.assertEqual(self.api.tags[TAG], {"type": "commit", "sha": SHA})
         self.assertTrue(any("Verified complete binary release" in message for message in self.messages))
+
+    def test_later_version_uses_the_same_names_and_preserves_the_previous_release(self):
+        self.run_release()
+        previous = copy.deepcopy((self.api.releases[0], self.api.assets[1], self.api.asset_bytes))
+        next_sha = "2" * 40
+        self.api.files[next_sha] = {
+            "Cargo.toml": '[package]\nname = "smolsandbox"\nversion = "0.12.0"\n',
+            "Cargo.lock": 'version = 4\n[[package]]\nname = "smolsandbox"\nversion = "0.12.0"\n',
+        }
+        self.api.uploads.clear()
+        self.assertEqual(release.run("publish", self.api, next_sha, report=self.messages.append), "published")
+        self.assertEqual({name for _, name, _ in self.api.uploads}, set(self.packages))
+        self.assertEqual(self.api.releases[1]["tag_name"], "v0.12.0")
+        self.assertEqual(self.api.releases[1]["name"], "v0.12.0")
+        self.assertEqual((self.api.releases[0], self.api.assets[1]), previous[:2])
+        self.assertTrue(all(self.api.asset_bytes[asset_id] == data for asset_id, data in previous[2].items()))
+
+    def test_historical_versioned_assets_are_preserved_without_upload_or_metadata_writes(self):
+        item = self.matching_release()
+        for target in TARGETS:
+            self.api.add_asset(item["id"], f"smolsbx-{TAG}-{target}.zip", archive(target))
+        before = copy.deepcopy((item, self.api.assets, self.api.asset_bytes, self.api.tags))
+        with self.assertRaisesRegex(release.ReleaseError, "Unexpected release assets are preserved.*smolsbx-v"):
+            self.run_release()
+        self.assertEqual((item, self.api.assets, self.api.asset_bytes, self.api.tags), before)
+        self.assertEqual(self.api.uploads, [])
+        self.assertEqual(self.api.writes, [])
+
+    def test_versioned_local_aliases_are_rejected_before_publication(self):
+        target = TARGETS[0]
+        name = f"smolsbx-{TAG}-{target}.zip"
+        (Path(self.directory.name) / name).write_bytes(archive(target))
+        with self.assertRaisesRegex(release.ReleaseError, "Unexpected binary release files.*" + name):
+            self.run_release()
+        self.assertEqual(self.api.uploads, [])
+        self.assertEqual(self.api.writes, [])
 
     def test_partial_upload_failure_is_recovered_without_replacing_assets(self):
         item = self.matching_release()
@@ -160,7 +196,7 @@ class BinaryReleaseTests(unittest.TestCase):
 
     def test_invalid_archives_and_nonexecutable_unix_modes_fail_preflight(self):
         target = TARGETS[0]
-        name = f"smolsbx-{TAG}-{target}.zip"
+        name = f"smolsbx-{target}.zip"
         invalid = (
             b"not a ZIP",
             archive(target, []),
@@ -186,7 +222,7 @@ class BinaryReleaseTests(unittest.TestCase):
 
     def test_corrupt_deflate_payload_has_target_specific_error(self):
         target = TARGETS[0]
-        name = f"smolsbx-{TAG}-{target}.zip"
+        name = f"smolsbx-{target}.zip"
         output = io.BytesIO()
         with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as package:
             item = zipfile.ZipInfo("smolsbx")
