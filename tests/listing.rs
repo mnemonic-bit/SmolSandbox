@@ -306,7 +306,21 @@ fn mixed_inventory_preserves_association_assessment_and_complete_identities() {
         "paused-by-new-runtime"
     );
 
+    assert_eq!(
+        formatted_document(
+            f.list().args(["--format", "yaml"]).output().unwrap(),
+            "yaml"
+        ),
+        scoped
+    );
     let all = document(f.list().args(["--all", "--json"]).output().unwrap());
+    assert_eq!(
+        formatted_document(
+            f.list().args(["--all", "--format=yaml"]).output().unwrap(),
+            "yaml"
+        ),
+        all
+    );
     assert_eq!(all["scope"], "all");
     assert_eq!(all["unassociated_workspace_count"], 3);
     assert_eq!(all["machines"].as_array().unwrap().len(), 15);
@@ -819,254 +833,277 @@ fn with_metadata(mut machine: Value, base: Option<Value>, inputs: Option<Value>)
 
 #[test]
 fn metadata_status_components_and_reference_fallback_are_independent() {
-    let f = ListingFixture::new();
-    let base = base_metadata(&f);
-    let inputs = machine_metadata(&f);
-    let mut rows = Vec::new();
-    for (name, b, m) in [
-        ("complete", Some(base.clone()), Some(inputs.clone())),
-        ("base-only", Some(base.clone()), None),
-        ("machine-only", None, Some(inputs.clone())),
-        ("unavailable", None, None),
-        (
-            "unsupported-base",
-            Some(json!({"version":99})),
-            Some(inputs.clone()),
-        ),
-        (
-            "unsupported-machine",
-            Some(base.clone()),
-            Some(json!({"version":99})),
-        ),
-        (
-            "both-future",
-            Some(json!({"version":99})),
-            Some(json!({"version":99})),
-        ),
-        (
-            "invalid-precedes-future",
-            Some(json!({"version":1})),
-            Some(json!({"version":99})),
-        ),
-    ] {
-        rows.push(with_metadata(f.workspace_row(name), b, m));
-    }
-    let mut other = f.workspace_row("old-other-workspace");
-    other["labels"]["SmolSandbox.workspace-path-sha256"] = json!("c".repeat(64));
-    rows.push(other);
-    rows.push(json!({"name":"codex-builder-aaaaaaaaaaaa","state":"stopped"}));
-    f.inventory(&rows);
-    let before = snapshot(&f.home);
-    let report = document(f.list().args(["--all", "--json"]).output().unwrap());
-    for (name, status, b, m, source) in [
-        ("complete", "complete", true, true, "label"),
-        ("base-only", "partial", true, false, "reference"),
-        ("machine-only", "partial", false, true, "label"),
-        ("unavailable", "unavailable", false, false, "reference"),
-        ("unsupported-base", "unsupported", false, true, "label"),
-        (
-            "unsupported-machine",
-            "unsupported",
-            true,
-            false,
-            "reference",
-        ),
-        ("both-future", "unsupported", false, false, "reference"),
-        (
-            "invalid-precedes-future",
-            "invalid",
-            false,
-            false,
-            "reference",
-        ),
-    ] {
-        let value = row(&report, name);
-        assert_eq!(value["metadata_status"], status, "{name}");
-        assert_eq!(!value["base_inputs"].is_null(), b, "{name}");
-        assert_eq!(!value["machine_inputs"].is_null(), m, "{name}");
-        assert_eq!(
-            value["harness"],
-            if b { json!("codex") } else { Value::Null },
-            "{name}"
+    for format in ["yaml", "json"] {
+        let f = ListingFixture::new();
+        let base = base_metadata(&f);
+        let inputs = machine_metadata(&f);
+        let mut rows = Vec::new();
+        for (name, b, m) in [
+            ("complete", Some(base.clone()), Some(inputs.clone())),
+            ("base-only", Some(base.clone()), None),
+            ("machine-only", None, Some(inputs.clone())),
+            ("unavailable", None, None),
+            (
+                "unsupported-base",
+                Some(json!({"version":99})),
+                Some(inputs.clone()),
+            ),
+            (
+                "unsupported-machine",
+                Some(base.clone()),
+                Some(json!({"version":99})),
+            ),
+            (
+                "both-future",
+                Some(json!({"version":99})),
+                Some(json!({"version":99})),
+            ),
+            (
+                "invalid-precedes-future",
+                Some(json!({"version":1})),
+                Some(json!({"version":99})),
+            ),
+        ] {
+            rows.push(with_metadata(f.workspace_row(name), b, m));
+        }
+        let mut other = f.workspace_row("old-other-workspace");
+        other["labels"]["SmolSandbox.workspace-path-sha256"] = json!("c".repeat(64));
+        rows.push(other);
+        rows.push(json!({"name":"codex-builder-aaaaaaaaaaaa","state":"stopped"}));
+        f.inventory(&rows);
+        let before = snapshot(&f.home);
+        let report = formatted_document(
+            f.list()
+                .args(["--all", "--format", format])
+                .output()
+                .unwrap(),
+            format,
         );
-        assert_eq!(value["workspace_path_source"], source, "{name}");
+        for (name, status, b, m, source) in [
+            ("complete", "complete", true, true, "label"),
+            ("base-only", "partial", true, false, "reference"),
+            ("machine-only", "partial", false, true, "label"),
+            ("unavailable", "unavailable", false, false, "reference"),
+            ("unsupported-base", "unsupported", false, true, "label"),
+            (
+                "unsupported-machine",
+                "unsupported",
+                true,
+                false,
+                "reference",
+            ),
+            ("both-future", "unsupported", false, false, "reference"),
+            (
+                "invalid-precedes-future",
+                "invalid",
+                false,
+                false,
+                "reference",
+            ),
+        ] {
+            let value = row(&report, name);
+            assert_eq!(value["metadata_status"], status, "{name}");
+            assert_eq!(!value["base_inputs"].is_null(), b, "{name}");
+            assert_eq!(!value["machine_inputs"].is_null(), m, "{name}");
+            assert_eq!(
+                value["harness"],
+                if b { json!("codex") } else { Value::Null },
+                "{name}"
+            );
+            assert_eq!(value["workspace_path_source"], source, "{name}");
+            assert_eq!(
+                value["workspace_path"],
+                f.workspace.to_str().unwrap(),
+                "{name}"
+            );
+            assert_eq!(value["assessment"], "different-configuration");
+            assert_eq!(
+                value["metadata_reasons"].as_array().unwrap().is_empty(),
+                status == "complete"
+            );
+        }
+        assert_eq!(row(&report, "complete")["base_inputs"], base);
+        assert_eq!(row(&report, "complete")["machine_inputs"], inputs);
+        for name in ["old-other-workspace", "codex-builder-aaaaaaaaaaaa"] {
+            assert!(row(&report, name)["workspace_path"].is_null());
+            assert_eq!(row(&report, name)["workspace_path_source"], "unknown");
+            assert_eq!(row(&report, name)["metadata_status"], "unavailable");
+        }
+        assert_eq!(snapshot(&f.home), before);
         assert_eq!(
-            value["workspace_path"],
-            f.workspace.to_str().unwrap(),
-            "{name}"
-        );
-        assert_eq!(value["assessment"], "different-configuration");
-        assert_eq!(
-            value["metadata_reasons"].as_array().unwrap().is_empty(),
-            status == "complete"
+            fs::read_to_string(f.root.join("calls.log")).unwrap(),
+            "--version\nmachine ls --json\n"
         );
     }
-    assert_eq!(row(&report, "complete")["base_inputs"], base);
-    assert_eq!(row(&report, "complete")["machine_inputs"], inputs);
-    for name in ["old-other-workspace", "codex-builder-aaaaaaaaaaaa"] {
-        assert!(row(&report, name)["workspace_path"].is_null());
-        assert_eq!(row(&report, name)["workspace_path_source"], "unknown");
-        assert_eq!(row(&report, name)["metadata_status"], "unavailable");
-    }
-    assert_eq!(snapshot(&f.home), before);
-    assert_eq!(
-        fs::read_to_string(f.root.join("calls.log")).unwrap(),
-        "--version\nmachine ls --json\n"
-    );
 }
 
 #[test]
 fn malformed_or_contradictory_metadata_preserves_scope_and_authoritative_assessment() {
-    let f = ListingFixture::new();
-    let base = base_metadata(&f);
-    let inputs = machine_metadata(&f);
-    let mut cases: Vec<(&str, Value, Value, &str)> = Vec::new();
-    for (name, field, value) in [
-        (
-            "wrong-fingerprint",
-            "definition_sha256",
-            json!("z".repeat(64)),
-        ),
-        ("wrong-profile", "harness", json!("future-profile")),
-        ("wrong-version-type", "version", json!("1")),
-        ("wrong-definition-type", "definition_path", json!(false)),
-        ("wrong-runtime-type", "smolvm_version", json!([])),
-    ] {
-        let mut changed = base.clone();
-        changed[field] = value;
-        cases.push((name, changed, inputs.clone(), "base-inputs"));
-    }
-    let mut absent = base.clone();
-    absent.as_object_mut().unwrap().remove("harness");
-    cases.push(("missing-base-field", absent, inputs.clone(), "base-inputs"));
-    for name in [
-        "wrong-path",
-        "wrong-mount",
-        "wrong-from",
-        "wrong-resource",
-        "unsorted",
-        "duplicates",
-        "wrong-option-type",
-        "wrong-array-type",
-        "missing-machine-field",
-    ] {
-        let mut changed = inputs.clone();
-        match name {
-            "wrong-path" => {
-                changed["workspace_path"] = json!(f.root.join("other").to_str().unwrap())
-            }
-            "wrong-array-type" => changed["options"] = json!(false),
-            "missing-machine-field" => {
-                changed.as_object_mut().unwrap().remove("workspace_path");
-            }
-            _ => {
-                let options = changed["options"].as_array_mut().unwrap();
-                match name {
-                    "unsorted" => options.reverse(),
-                    "duplicates" => options.push(options[0].clone()),
-                    "wrong-option-type" => options[0] = json!(true),
-                    _ => {
-                        let prefix = match name {
-                            "wrong-mount" => "--volume=",
-                            "wrong-from" => "--from=",
-                            _ => "--mem=",
-                        };
-                        let index = options
-                            .iter()
-                            .position(|v| v.as_str().unwrap().starts_with(prefix))
-                            .unwrap();
-                        options[index] = json!(match name {
-                            "wrong-mount" => "--volume=/different:/workspace/myrepo".to_string(),
-                            "wrong-from" => format!(
-                                "--from={}/codex-devtools-aaaaaaaaaaaa.smolmachine",
-                                f.root.display()
-                            ),
-                            _ => "--mem=4096".to_string(),
-                        });
-                        options.sort_by(|a, b| a.as_str().unwrap().cmp(b.as_str().unwrap()));
+    for format in ["yaml", "json"] {
+        let f = ListingFixture::new();
+        let base = base_metadata(&f);
+        let inputs = machine_metadata(&f);
+        let mut cases: Vec<(&str, Value, Value, &str)> = Vec::new();
+        for (name, field, value) in [
+            (
+                "wrong-fingerprint",
+                "definition_sha256",
+                json!("z".repeat(64)),
+            ),
+            ("wrong-profile", "harness", json!("future-profile")),
+            ("wrong-version-type", "version", json!("1")),
+            ("wrong-definition-type", "definition_path", json!(false)),
+            ("wrong-runtime-type", "smolvm_version", json!([])),
+        ] {
+            let mut changed = base.clone();
+            changed[field] = value;
+            cases.push((name, changed, inputs.clone(), "base-inputs"));
+        }
+        let mut absent = base.clone();
+        absent.as_object_mut().unwrap().remove("harness");
+        cases.push(("missing-base-field", absent, inputs.clone(), "base-inputs"));
+        for name in [
+            "wrong-path",
+            "wrong-mount",
+            "wrong-from",
+            "wrong-resource",
+            "unsorted",
+            "duplicates",
+            "wrong-option-type",
+            "wrong-array-type",
+            "missing-machine-field",
+        ] {
+            let mut changed = inputs.clone();
+            match name {
+                "wrong-path" => {
+                    changed["workspace_path"] = json!(f.root.join("other").to_str().unwrap())
+                }
+                "wrong-array-type" => changed["options"] = json!(false),
+                "missing-machine-field" => {
+                    changed.as_object_mut().unwrap().remove("workspace_path");
+                }
+                _ => {
+                    let options = changed["options"].as_array_mut().unwrap();
+                    match name {
+                        "unsorted" => options.reverse(),
+                        "duplicates" => options.push(options[0].clone()),
+                        "wrong-option-type" => options[0] = json!(true),
+                        _ => {
+                            let prefix = match name {
+                                "wrong-mount" => "--volume=",
+                                "wrong-from" => "--from=",
+                                _ => "--mem=",
+                            };
+                            let index = options
+                                .iter()
+                                .position(|v| v.as_str().unwrap().starts_with(prefix))
+                                .unwrap();
+                            options[index] = json!(match name {
+                                "wrong-mount" =>
+                                    "--volume=/different:/workspace/myrepo".to_string(),
+                                "wrong-from" => format!(
+                                    "--from={}/codex-devtools-aaaaaaaaaaaa.smolmachine",
+                                    f.root.display()
+                                ),
+                                _ => "--mem=4096".to_string(),
+                            });
+                            options.sort_by(|a, b| a.as_str().unwrap().cmp(b.as_str().unwrap()));
+                        }
                     }
                 }
             }
+            cases.push((name, base.clone(), changed, "machine-inputs"));
         }
-        cases.push((name, base.clone(), changed, "machine-inputs"));
-    }
-    let mut machines = Vec::new();
-    for (name, b, m, _) in &cases {
+        let mut machines = Vec::new();
+        for (name, b, m, _) in &cases {
+            machines.push(with_metadata(
+                f.workspace_row(name),
+                Some(b.clone()),
+                Some(m.clone()),
+            ));
+        }
+        let mut malformed = with_metadata(f.workspace_row("malformed-json"), None, Some(inputs));
+        malformed["labels"]["SmolSandbox.base-inputs"] = json!("{secret-malformed-sentinel");
+        machines.push(malformed);
+        let mut future_extra = base;
+        future_extra["future_field"] = json!({"unknown":"accepted"});
         machines.push(with_metadata(
-            f.workspace_row(name),
-            Some(b.clone()),
-            Some(m.clone()),
+            f.workspace_row("unknown-extra-field"),
+            Some(future_extra),
+            None,
         ));
-    }
-    let mut malformed = with_metadata(f.workspace_row("malformed-json"), None, Some(inputs));
-    malformed["labels"]["SmolSandbox.base-inputs"] = json!("{secret-malformed-sentinel");
-    machines.push(malformed);
-    let mut future_extra = base;
-    future_extra["future_field"] = json!({"unknown":"accepted"});
-    machines.push(with_metadata(
-        f.workspace_row("unknown-extra-field"),
-        Some(future_extra),
-        None,
-    ));
-    f.inventory(&machines);
-    let described = document(f.list().args(["--all", "--json"]).output().unwrap());
-    for (name, _, _, component) in &cases {
-        let result = row(&described, name);
-        assert_eq!(result["metadata_status"], "invalid", "{name}: {result}");
-        assert!(
-            result[if *component == "base-inputs" {
-                "base_inputs"
-            } else {
-                "machine_inputs"
-            }]
-            .is_null(),
-            "{name}"
+        f.inventory(&machines);
+        let described = formatted_document(
+            f.list()
+                .args(["--all", "--format", format])
+                .output()
+                .unwrap(),
+            format,
         );
-        assert!(
-            !result[if *component == "base-inputs" {
-                "machine_inputs"
-            } else {
-                "base_inputs"
-            }]
-            .is_null(),
-            "{name}"
-        );
-        let reasons = result["metadata_reasons"].to_string();
-        assert!(
-            reasons.contains(name) && reasons.contains(component),
-            "{reasons}"
-        );
-    }
-    assert_eq!(
-        row(&described, "malformed-json")["metadata_status"],
-        "invalid"
-    );
-    assert!(!described.to_string().contains("secret-malformed-sentinel"));
-    assert_eq!(
-        row(&described, "unknown-extra-field")["metadata_status"],
-        "partial"
-    );
-    for machine in &mut machines {
-        let labels = machine["labels"].as_object_mut().unwrap();
-        labels.remove("SmolSandbox.base-inputs");
-        labels.remove("SmolSandbox.machine-inputs");
-    }
-    f.inventory(&machines);
-    let legacy = document(f.list().args(["--all", "--json"]).output().unwrap());
-    assert_eq!(names(&legacy), names(&described));
-    for name in names(&legacy) {
-        for field in [
-            "source",
-            "assessment",
-            "reasons",
-            "workspace_path_sha256",
-            "workspace_sha256",
-        ] {
-            assert_eq!(
-                row(&legacy, name)[field],
-                row(&described, name)[field],
-                "{name}: {field}"
+        for (name, _, _, component) in &cases {
+            let result = row(&described, name);
+            assert_eq!(result["metadata_status"], "invalid", "{name}: {result}");
+            assert!(
+                result[if *component == "base-inputs" {
+                    "base_inputs"
+                } else {
+                    "machine_inputs"
+                }]
+                .is_null(),
+                "{name}"
             );
+            assert!(
+                !result[if *component == "base-inputs" {
+                    "machine_inputs"
+                } else {
+                    "base_inputs"
+                }]
+                .is_null(),
+                "{name}"
+            );
+            let reasons = result["metadata_reasons"].to_string();
+            assert!(
+                reasons.contains(name) && reasons.contains(component),
+                "{reasons}"
+            );
+        }
+        assert_eq!(
+            row(&described, "malformed-json")["metadata_status"],
+            "invalid"
+        );
+        assert!(!described.to_string().contains("secret-malformed-sentinel"));
+        assert_eq!(
+            row(&described, "unknown-extra-field")["metadata_status"],
+            "partial"
+        );
+        for machine in &mut machines {
+            let labels = machine["labels"].as_object_mut().unwrap();
+            labels.remove("SmolSandbox.base-inputs");
+            labels.remove("SmolSandbox.machine-inputs");
+        }
+        f.inventory(&machines);
+        let legacy = formatted_document(
+            f.list()
+                .args(["--all", "--format", format])
+                .output()
+                .unwrap(),
+            format,
+        );
+        assert_eq!(names(&legacy), names(&described));
+        for name in names(&legacy) {
+            for field in [
+                "source",
+                "assessment",
+                "reasons",
+                "workspace_path_sha256",
+                "workspace_sha256",
+            ] {
+                assert_eq!(
+                    row(&legacy, name)[field],
+                    row(&described, name)[field],
+                    "{name}: {field}"
+                );
+            }
         }
     }
 }
@@ -1277,4 +1314,442 @@ fn mixed_label_prefix_inventory_reads_legacy_metadata_and_exposes_conflicts() {
         row(&report, "descriptive-conflict")["assessment"],
         "different-configuration"
     );
+}
+
+fn formatted_document(output: Output, format: &str) -> Value {
+    let output = success(output);
+    assert!(output.stderr.is_empty(), "{output:?}");
+    if format == "yaml" {
+        serde_saphyr::from_slice(&output.stdout).unwrap()
+    } else {
+        serde_json::from_slice(&output.stdout).unwrap()
+    }
+}
+
+#[test]
+fn format_syntax_positions_alias_and_empty_report_preserve_the_contract() {
+    let f = ListingFixture::new();
+    let expected = json!({
+        "version": 1, "scope": "all", "workspace": f.workspace,
+        "reference": {"definition": f.definition, "base_id": f.base(), "revision": "7",
+            "workspace_sha256": f.hash(&["extra.example"]),
+            "desired_machine": format!("codex-workspace-{}-r7-{}", f.base(), &f.hash(&["extra.example"])[..12])},
+        "unassociated_workspace_count": 0, "warnings": [], "machines": []
+    });
+    for format in ["yaml", "json"] {
+        for equals in [false, true] {
+            for workspace_first in [false, true] {
+                let mut command = f.command();
+                command
+                    .args(["list", "--all", "--verbose", "--smolfile"])
+                    .arg(&f.definition)
+                    .arg("--smolvm")
+                    .arg(env!("CARGO_BIN_EXE_smolvm-test-double"))
+                    .args([
+                        "--allow-host",
+                        "extra.example",
+                        "--allow-host=extra.example",
+                    ]);
+                if workspace_first {
+                    command.arg(&f.workspace);
+                }
+                if equals {
+                    command.arg(format!("--format={format}"));
+                } else {
+                    command.args(["--format", format]);
+                }
+                if !workspace_first {
+                    command.arg(&f.workspace);
+                }
+                assert_eq!(
+                    formatted_document(command.output().unwrap(), format),
+                    expected
+                );
+            }
+        }
+    }
+    let alias = success(f.list().arg("--json").output().unwrap());
+    let primary = success(f.list().args(["--format", "json"]).output().unwrap());
+    assert_eq!(alias.stdout, primary.stdout);
+    assert_eq!(primary.stdout.last(), Some(&b'\n'));
+    assert_eq!(
+        primary.stdout.iter().filter(|byte| **byte == b'\n').count(),
+        1
+    );
+    let yaml = success(f.list().arg("--format=yaml").output().unwrap());
+    let text = String::from_utf8(yaml.stdout.clone()).unwrap();
+    assert!(text.starts_with("version: 1\n"), "{text}");
+    assert!(text.contains("\nreference:\n  definition:"), "{text}");
+    assert!(text.ends_with("machines: []\n"), "{text}");
+    assert!(!text.contains("---") && !text.contains("..."));
+    assert!(!text.ends_with("\n\n"));
+    assert_eq!(
+        yaml.stdout,
+        success(f.list().arg("--format=yaml").output().unwrap()).stdout
+    );
+}
+
+#[test]
+fn structured_formats_keep_native_strings_nested_inputs_and_sorted_rows() {
+    let f = ListingFixture::new();
+    let values = [
+        "null",
+        "true",
+        "00123",
+        "with spaces λ",
+        r"C:\Users\name\a=b",
+        "colon: value # hash",
+        "quote\"single'",
+        "line\nnext\t\u{1b}\u{7}\u{2028}",
+    ];
+    let mut rows = Vec::new();
+    for (index, value) in values.into_iter().enumerate().rev() {
+        let name = format!("{index}-{}", value.replace('\n', "\\n"));
+        let mut machine = f.workspace_row(&name);
+        machine["state"] = json!(value.replace('\n', "\\n"));
+        let mut base = base_metadata(&f);
+        base["smolvm_version"] = json!(value);
+        base["definition_path"] = json!(format!("/recorded/{value}/definition.smlbx"));
+        rows.push(with_metadata(
+            machine,
+            Some(base),
+            Some(machine_metadata(&f)),
+        ));
+    }
+    f.inventory(&rows);
+    let json_output = success(f.list().args(["--all", "--format=json"]).output().unwrap());
+    let json_report: Value = serde_json::from_slice(&json_output.stdout).unwrap();
+    for format in ["yaml", "json"] {
+        let output = success(
+            f.list()
+                .args(["--all", "--format", format])
+                .output()
+                .unwrap(),
+        );
+        let report = formatted_document(output.clone(), format);
+        assert_eq!(report, json_report);
+        assert_eq!(report["version"], 1);
+        assert_eq!(report["workspace"], f.workspace.to_str().unwrap());
+        assert_eq!(
+            report["reference"]["definition"],
+            f.definition.to_str().unwrap()
+        );
+        assert_eq!(report["reference"]["revision"], "7");
+        let mut expected_names = Vec::new();
+        for (index, value) in values.into_iter().enumerate() {
+            let name = format!("{index}-{}", value.replace('\n', "\\n"));
+            expected_names.push(name.clone());
+            let machine = row(&report, &name);
+            assert_eq!(machine["state"], value.replace('\n', "\\n"));
+            assert_eq!(machine["metadata_status"], "complete", "{machine}");
+            assert_eq!(machine["base_inputs"]["version"], 1);
+            assert_eq!(machine["base_inputs"]["smolvm_version"], value);
+            assert_eq!(
+                machine["base_inputs"]["definition_path"],
+                format!("/recorded/{value}/definition.smlbx")
+            );
+            assert_eq!(machine["machine_inputs"], machine_metadata(&f));
+            assert_eq!(machine["metadata_reasons"], json!([]));
+        }
+        assert_eq!(names(&report), expected_names);
+        assert_eq!(
+            output.stdout,
+            success(
+                f.list()
+                    .args(["--all", "--format", format])
+                    .output()
+                    .unwrap()
+            )
+            .stdout
+        );
+        if format == "yaml" {
+            let text = String::from_utf8(output.stdout).unwrap();
+            assert!(text.contains("\nmachines:\n  - name:"), "{text}");
+            assert!(
+                text.contains("\n    base_inputs:\n      version: 1\n"),
+                "{text}"
+            );
+            assert!(text.contains("\n      options:\n        - "), "{text}");
+            assert!(!text.contains('\t') && !text.contains('\u{1b}') && !text.contains('\u{7}'));
+            assert!(!text.lines().any(|line| line == "---" || line == "..."));
+            assert!(text
+                .lines()
+                .all(|line| line.bytes().take_while(|byte| *byte == b' ').count() % 2 == 0));
+        }
+    }
+}
+
+fn human_reference(f: &ListingFixture) -> String {
+    format!("Reference workspace: {}\nSelected definition: {}\nDesired workspace machine: {}\nCurrent policy revision: 7\n", f.workspace.display(), f.definition.display(), f.selected_name())
+}
+
+const HUMAN_SUMMARY: &str = "Unassociated workspace candidates: 0 (missing or malformed path labels; association with the reference workspace is unknown).\nAssessments compare the current invocation only; no assessment authorizes deletion. An identity match does not establish artifact availability, port reconciliation, guest boot, or authentication.\n";
+
+#[test]
+fn human_output_has_exact_separators_for_zero_one_and_multiple_entries() {
+    let f = ListingFixture::new();
+    let empty = success(f.list().output().unwrap());
+    assert_eq!(
+        String::from_utf8(empty.stdout).unwrap(),
+        format!(
+            "{}\n{HUMAN_SUMMARY}\nNo matching machines.\n",
+            human_reference(&f)
+        )
+    );
+    let selected = f.selected_name();
+    let mut base = base_metadata(&f);
+    base["smolvm_version"] = json!("line\nnext\t\u{1b}");
+    let complete = with_metadata(
+        f.workspace_row(&selected),
+        Some(base.clone()),
+        Some(machine_metadata(&f)),
+    );
+    let detail = |name: &str, assessment: &str, reason: &str| {
+        let mut entry = format!("{name}\tstopped\tworkspace\t{}\t7\t{assessment}\t{}\tcodex\n{reason}  Workspace SHA-256: {}\n  Metadata: complete\n  Recorded SmolVM version: line\\nnext\\t\\u{{1b}}\n  Recorded definition: {}\n  Definition SHA-256: {}\n", f.base(), f.workspace.display(), f.hash(&[]), base["definition_path"].as_str().unwrap(), digest(DEFINITION.as_bytes()));
+        for option in f.immutable(&[]) {
+            entry.push_str(&format!("  Creation option: {option}\n"));
+        }
+        entry
+    };
+    let header = "NAME\tSTATE\tKIND\tBASE\tREVISION\tASSESSMENT\tWORKSPACE\tHARNESS\n";
+    f.inventory(std::slice::from_ref(&complete));
+    assert_eq!(
+        String::from_utf8(success(f.list().output().unwrap()).stdout).unwrap(),
+        format!(
+            "{}\n{HUMAN_SUMMARY}\n{header}{}",
+            human_reference(&f),
+            detail(&selected, "selected", "")
+        )
+    );
+    let mut other = complete.clone();
+    other["name"] = json!("zz-other");
+    f.inventory(&[other, complete]);
+    let reason = format!(
+        "  Machine name differs from the desired machine {selected} for the current invocation.\n"
+    );
+    assert_eq!(
+        String::from_utf8(success(f.list().output().unwrap()).stdout).unwrap(),
+        format!(
+            "{}\n{HUMAN_SUMMARY}\n{header}{}\n{}",
+            human_reference(&f),
+            detail(&selected, "selected", ""),
+            detail("zz-other", "different-configuration", &reason)
+        )
+    );
+}
+
+#[test]
+fn every_format_preserves_absent_state_and_query_only_calls() {
+    for selector in [
+        vec![],
+        vec!["--json"],
+        vec!["--format=json"],
+        vec!["--format=yaml"],
+    ] {
+        let f = ListingFixture::new();
+        let before = snapshot(&f.home);
+        success(f.list().args(&selector).output().unwrap());
+        assert_eq!(snapshot(&f.home), before);
+        assert!(!f.home.join(".smolsandbox").exists());
+        for directory in ["state/ports", "artifacts", "locks", "codex-home"] {
+            fs::create_dir_all(f.home.join(".smolsandbox").join(directory)).unwrap();
+        }
+        fs::write(
+            f.home.join(".smolsandbox/locks/artifacts.lock"),
+            "preserve-lock",
+        )
+        .unwrap();
+        fs::write(
+            f.home.join(".smolsandbox/state/generation.json"),
+            "invalid state",
+        )
+        .unwrap();
+        let before = snapshot(&f.home);
+        success(f.list().args(&selector).arg("--all").output().unwrap());
+        assert_eq!(snapshot(&f.home), before);
+        assert_eq!(
+            fs::read_to_string(f.root.join("calls.log")).unwrap(),
+            "--version\nmachine ls --json\n--version\nmachine ls --json\n"
+        );
+    }
+}
+
+#[test]
+fn both_structured_formats_preserve_failures_and_verbose_streams() {
+    for format in ["yaml", "json"] {
+        for verbose in [false, true] {
+            let f = ListingFixture::new();
+            let before = snapshot(&f.home);
+            let mut command = f.list();
+            command
+                .args(["--format", format])
+                .env("SMOLVM_TEST_OUTPUT", "1");
+            if verbose {
+                command.arg("--verbose");
+            }
+            let output = success(command.output().unwrap());
+            let report: Value = if format == "yaml" {
+                serde_saphyr::from_slice(&output.stdout).unwrap()
+            } else {
+                serde_json::from_slice(&output.stdout).unwrap()
+            };
+            assert_eq!(report["machines"], json!([]));
+            let errors = String::from_utf8_lossy(&output.stderr);
+            assert_eq!(errors.contains("query-version-stderr"), verbose);
+            assert_eq!(errors.contains("query-inventory-stderr"), verbose);
+            for inventory in [
+                json!({"wrong":"shape"}),
+                json!([{"state":"stopped"}]),
+                json!([{"name":"same"},{"name":"same"}]),
+                json!([{"name":"bad", "labels":[]}]),
+            ] {
+                fs::write(
+                    f.root.join("inventory.json"),
+                    serde_json::to_vec(&inventory).unwrap(),
+                )
+                .unwrap();
+                let mut command = f.list();
+                command.args(["--format", format]);
+                if verbose {
+                    command.arg("--verbose");
+                }
+                let output = command.output().unwrap();
+                assert!(!output.status.success());
+                assert!(output.stdout.is_empty());
+                assert!(!output.stderr.is_empty());
+            }
+            for failure in ["inventory", "runtime", "workspace", "definition"] {
+                let mut command = f.list();
+                command.args(["--format", format]);
+                if verbose {
+                    command.arg("--verbose");
+                }
+                match failure {
+                    "inventory" => {
+                        command.env("SMOLVM_TEST_INVENTORY_FAIL", "1");
+                    }
+                    "runtime" => {
+                        command.arg("--smolvm").arg(f.root.join("missing-runtime"));
+                    }
+                    "workspace" => {
+                        command.arg(f.root.join("missing-workspace"));
+                    }
+                    "definition" => {
+                        fs::write(&f.definition, "invalid TOML").unwrap();
+                    }
+                    _ => unreachable!(),
+                }
+                let output = command.output().unwrap();
+                assert!(!output.status.success(), "{failure}");
+                assert!(output.stdout.is_empty(), "{failure}");
+                assert!(!output.stderr.is_empty(), "{failure}");
+            }
+            assert_eq!(snapshot(&f.home), before);
+        }
+    }
+}
+
+#[cfg(feature = "test-adapter")]
+#[test]
+fn missing_default_preserves_nulls_and_exact_human_warning_blocks() {
+    let f = ListingFixture::new();
+    let reference = format!("Reference workspace: {}\nSelected definition: unavailable\nDesired workspace machine: unavailable\nCurrent policy revision: 7\n", f.workspace.display());
+    let warning = "WARNING: No automatic default definition is available. Select a definition with --smolfile to compare launch identity.\n";
+    let prefix = format!("{reference}\n{warning}\n{HUMAN_SUMMARY}\n");
+    for count in 0..=2 {
+        let rows: Vec<_> = (0..count)
+            .map(|index| {
+                with_metadata(
+                    f.workspace_row(&format!("machine-{index}")),
+                    Some(base_metadata(&f)),
+                    Some(machine_metadata(&f)),
+                )
+            })
+            .collect();
+        f.inventory(&rows);
+        for format in ["yaml", "json"] {
+            let report = formatted_document(
+                f.command()
+                    .args(["list", "--format", format])
+                    .output()
+                    .unwrap(),
+                format,
+            );
+            assert_eq!(
+                report["reference"],
+                json!({"definition":null, "base_id":null, "revision":"7", "workspace_sha256":null, "desired_machine":null})
+            );
+            assert_eq!(report["warnings"], json!(["No automatic default definition is available. Select a definition with --smolfile to compare launch identity."]));
+            assert_eq!(report["machines"].as_array().unwrap().len(), count);
+            for machine in report["machines"].as_array().unwrap() {
+                assert_eq!(machine["assessment"], "unassessed");
+                assert_eq!(machine["metadata_status"], "complete");
+            }
+        }
+        let mut expected = prefix.clone();
+        if count == 0 {
+            expected.push_str("No matching machines.\n");
+        } else {
+            expected
+                .push_str("NAME\tSTATE\tKIND\tBASE\tREVISION\tASSESSMENT\tWORKSPACE\tHARNESS\n");
+            for index in 0..count {
+                if index > 0 {
+                    expected.push('\n');
+                }
+                expected.push_str(&format!("machine-{index}\tstopped\tworkspace\t{}\t7\tunassessed\t{}\tcodex\n  Reference definition is unavailable; launch identity cannot be assessed.\n  Workspace SHA-256: {}\n  Metadata: complete\n  Recorded SmolVM version: {VERSION}\n  Recorded definition: {}\n  Definition SHA-256: {}\n", f.base(), f.workspace.display(), f.hash(&[]), base_metadata(&f)["definition_path"].as_str().unwrap(), digest(DEFINITION.as_bytes())));
+                for option in f.immutable(&[]) {
+                    expected.push_str(&format!("  Creation option: {option}\n"));
+                }
+            }
+        }
+        let human = success(f.command().arg("list").output().unwrap());
+        assert_eq!(String::from_utf8(human.stdout).unwrap(), expected);
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn structured_stdout_write_failures_return_nonzero() {
+    for format in ["yaml", "json"] {
+        let f = ListingFixture::new();
+        let output = f
+            .list()
+            .args(["--format", format])
+            .stdout(
+                fs::OpenOptions::new()
+                    .write(true)
+                    .open("/dev/full")
+                    .unwrap(),
+            )
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        assert!(!output.stderr.is_empty());
+    }
+}
+
+#[test]
+fn invalid_format_selectors_do_not_query_an_available_runtime() {
+    let f = ListingFixture::new();
+    for arguments in [
+        vec!["--format"],
+        vec!["--format="],
+        vec!["--format", ""],
+        vec!["--format=text"],
+        vec!["--format=JSON"],
+        vec!["--format=xml"],
+        vec!["--format=yaml", "--format=yaml"],
+        vec!["--format=json", "--format=yaml"],
+        vec!["--json", "--format=json"],
+        vec!["--format=json", "--json"],
+        vec!["--json", "--format=yaml"],
+        vec!["--format=yaml", "--json"],
+    ] {
+        let output = f.list().args(&arguments).output().unwrap();
+        assert_eq!(output.status.code(), Some(2), "{arguments:?}");
+        assert!(output.stdout.is_empty(), "{arguments:?}");
+        assert!(!output.stderr.is_empty(), "{arguments:?}");
+    }
+    assert!(!f.root.join("calls.log").exists());
+    assert!(!f.home.join(".smolsandbox").exists());
 }

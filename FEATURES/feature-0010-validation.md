@@ -821,3 +821,39 @@ and no user definition or harness home was migrated. Preserve the previous
 audits and source revisions. Final cutover acceptance remains pending the
 outstanding native and real guest evidence; these mocked checks establish no
 new real SmolVM result.
+
+## Feature 0020 list output formats audit: 2026-11-22
+
+Source revision `c78944ac68b2b1cac35521c4aadf9a3d943dae51` plus the local
+[Feature 0020](feature-0020-list-output-formats.md) implementation uses package
+version `0.14.0` in both Cargo files. Machine policy revision remains `7`;
+report schema version remains `1`. The software diff SHA-256 is
+`a171253a6a33756d56ba8b67769445a58c27935040828bd32f75e73125aee515`;
+[Feature 0020 validation](feature-0020-validation.md) records the exact
+fingerprint command, commands, and criterion evidence.
+
+`list --format yaml` and `list --format json` serialize the existing report.
+`--json` remains a supported alias with byte-identical JSON output. Invalid,
+repeated, or conflicting selectors fail before runtime access. Human output
+separates the reference, optional warnings, summary, and complete machine
+entries with blank lines. Formatting preserves inspection, assessments,
+metadata diagnostics, and read-only behavior. Templates, user definitions,
+identity hashing, labels, and lifecycle policy have no production changes.
+
+The following results were observed on native `x86_64-unknown-linux-gnu`
+with Rust and Cargo `1.100.0`.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Formatting and both Clippy configurations | passed | All three required commands exited 0 after the regression files were frozen |
+| Both complete Rust test configurations | passed | Exit 0; 147 default tests and 223 tests with `test-adapter` |
+| Production release build and offline help/version | passed | Exit 0; default features; executable reports `smolsbx 0.14.0`; list help explains formats, default text, alias, and conflicts |
+| Baseline independence | passed | Required command exited 0; isolated formatting, both lint and test configurations, production release build, and ten compiled test executables per configuration with empty `PATH` |
+| Independent output-format regressions and review | passed | Both formats, typed metadata, scalar escaping, exact human spacing, argument errors, failure streams, state snapshots, query-only calls, and Linux write failures passed; reviewer found no actionable defects |
+| Other native targets and hosted CI | not_run | No new Linux ARM64, macOS ARM64, Windows x86-64, or hosted execution evidence was collected |
+| Real SmolVM and real guests | not_run | No new runtime, provisioning, authentication, terminal, or real guest result was collected |
+
+Feature 0020 AC-01 through AC-10 passed locally. Preserve all previous
+observations and source revisions. Final cutover acceptance remains pending
+the outstanding native and real guest evidence; output-format fixtures
+establish no new real SmolVM result.

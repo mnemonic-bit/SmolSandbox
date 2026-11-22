@@ -342,6 +342,15 @@ fn every_profile_records_exact_inputs_for_all_machine_kinds() {
         }
         let listing: Value =
             serde_json::from_slice(&f.run("list", &["--all", "--json"]).stdout).unwrap();
+        for format in ["yaml", "json"] {
+            let output = f.run("list", &["--all", "--format", format]);
+            let formatted: Value = if format == "yaml" {
+                serde_saphyr::from_slice(&output.stdout).unwrap()
+            } else {
+                serde_json::from_slice(&output.stdout).unwrap()
+            };
+            assert_eq!(formatted, listing, "{profile}: {format}");
+        }
         assert_eq!(listing["machines"].as_array().unwrap().len(), 2);
         for machine in listing["machines"].as_array().unwrap() {
             assert_eq!(machine["metadata_status"], "complete", "{machine}");

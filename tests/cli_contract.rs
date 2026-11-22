@@ -588,7 +588,7 @@ fn verbose_is_global_idempotent_and_stops_at_the_guest_boundary() {
             assert_eq!(options.workspace, original.workspace);
             assert_eq!(options.harness, original.harness);
             assert_eq!(options.all, original.all);
-            assert_eq!(options.json, original.json);
+            assert_eq!(options.format, original.format);
             assert_eq!(options.global, original.global);
             assert_eq!(options.dry_run, original.dry_run);
             assert_eq!(options.force, original.force);
@@ -713,5 +713,54 @@ fn remove_rejects_launch_cleanup_and_guest_arguments_before_runtime_access() {
         vec!["remove", "--smolvm"],
     ] {
         invocation.usage_error(&arguments);
+    }
+}
+
+#[test]
+fn list_format_argument_errors_are_offline_and_specific_to_list() {
+    let invocation = OfflineInvocation::new();
+    for arguments in [
+        vec!["list", "--format"],
+        vec!["list", "--format="],
+        vec!["list", "--format", ""],
+        vec!["list", "--format", "text"],
+        vec!["list", "--format", "JSON"],
+        vec!["list", "--format", "YAML"],
+        vec!["list", "--format", "xml"],
+        vec!["list", "--format", "json", "--format", "json"],
+        vec!["list", "--format=yaml", "--format=yaml"],
+        vec!["list", "--format=json", "--format=yaml"],
+        vec!["list", "--json", "--format=json"],
+        vec!["list", "--format=json", "--json"],
+        vec!["list", "--json", "--format=yaml"],
+        vec!["list", "--format=yaml", "--json"],
+        vec!["list", "--format=yaml", "--port=3000"],
+        vec!["list", "--format=yaml", "--force"],
+        vec!["list", "--format=yaml", ".", "--", "guest"],
+    ] {
+        invocation.usage_error(&arguments);
+    }
+    for command in [
+        "build",
+        "start",
+        "login",
+        "repair",
+        "remove",
+        "clean",
+        "purge",
+        "create-config",
+    ] {
+        invocation.usage_error(&[command, "--format=json"]);
+    }
+    let output = invocation.run(&["list", "missing-workspace", "--help"]);
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stderr.is_empty());
+    let help = String::from_utf8(output.stdout)
+        .unwrap()
+        .to_ascii_lowercase();
+    for phrase in [
+        "--format", "yaml", "json", "text", "default", "--json", "alias", "conflict",
+    ] {
+        assert!(help.contains(phrase), "missing {phrase}: {help}");
     }
 }

@@ -276,7 +276,7 @@ directory is the default workspace. `remove --global` rejects a workspace.
 | `login` | Run the selected profile's authentication workflow in its prepared login machine. |
 | `repair --check [WORKSPACE]` | Inspect workspace reconciliation without writing state or taking lifecycle locks. |
 | `repair --replace-stale [WORKSPACE]` | Prepare and verify the desired machine before deleting eligible stale machines. |
-| `list [WORKSPACE] [--all] [--json]` | Inspect managed machines and compare identities without lifecycle locks or application writes. |
+| `list [WORKSPACE] [--all] [--format yaml\|json]` | Inspect managed machines and compare identities without lifecycle locks or application writes. |
 | `clean [--workspace [WORKSPACE]]` | Delete the selected generation or one workspace's managed machines. |
 | `remove [WORKSPACE] [--global] [--all] [--force] [--dry-run]` | Delete eligible older-policy machines, with independent scope, revision, running-state, and preview options. |
 | `purge [--force \| --force-all]` | Delete eligible stopped machines and unprotected superseded artifacts. |
@@ -296,15 +296,16 @@ results, selection information, warnings, and errors remain visible. Failures
 identify the operation and explain how to enable runtime diagnostics.
 With `--verbose`, management stdout and stderr stream live to application
 stderr. Version, inventory, and capability query stdout remains internal;
-verbose mode exposes query stderr. `list --json` writes the same single JSON
-object to stdout in either mode, with no partial JSON on inventory failure.
+verbose mode exposes query stderr. Structured `list` output writes the same
+single YAML document or JSON object to stdout in either mode, with empty
+stdout on inventory failure.
 
 ```text
 smolsbx build /path/to/project
 smolsbx --verbose build /path/to/project
 smolsbx build --verbose /path/to/project
 smolsbx start /path/to/project --verbose
-smolsbx list --all --json --verbose
+smolsbx list --all --format json --verbose
 smolsbx start /path/to/project -- --verbose
 ```
 
@@ -367,6 +368,8 @@ associated with the canonical current directory or an explicit workspace:
 smolsbx list
 smolsbx list /path/to/project
 smolsbx list --all
+smolsbx list --all --format yaml
+smolsbx list /path/to/project --format=json
 smolsbx list --all --json
 smolsbx list --smolfile ./codex.smlbx --allow-host packages.example.com /path/to/project
 ```
@@ -397,8 +400,23 @@ including `BASE_SMOLFILE`, and invalid or unreadable selected definitions
 remain errors. `--allow-host` requires an available definition. Listing never
 falls back past an invalid nearer definition.
 
+With neither output selector, `list` prints human-readable text. The default
+does not depend on terminal detection, redirection, or environment variables.
+Use `--format yaml` or `--format json` before or after WORKSPACE; equals-sign
+syntax such as `--format=yaml` is also supported. Acceptable values are exactly
+the lowercase strings `yaml` and `json`; `--format text` is invalid.
+`--json` remains a supported compatibility alias for `--format json` without
+a deprecation warning. Combining `--json` with any `--format`, or repeating
+`--format`, is an argument error regardless of order or value. Argument errors
+exit 2 with empty stdout before any SmolVM query. `--format` is specific to
+`list`; it does not configure other commands or persist a setting.
+
 Human output prints the reference, full machine identities, `WORKSPACE`, and
-`HARNESS`. New machines record their full canonical workspace path and profile.
+`HARNESS`. One blank line separates the reference, optional warnings, summary,
+and machine table. One blank line separates complete machine entries; their
+reason and metadata lines stay adjacent. Empty scopes print `No matching
+machines.` in place of the table. New machines record their full canonical
+workspace path and profile.
 Builders and login machines display `shared`. For older workspace machines,
 a matching reference association hash permits a path display with source
 `reference`; other unknown paths display `unknown`. Listing does not search
@@ -427,8 +445,15 @@ labels when reused. There is no metadata backfill or automatic replacement.
 Definition, artifact, harness-home, and workspace paths must be UTF-8;
 unsupported path bytes fail before lifecycle writes.
 
-`--json`
-writes one object with schema `version: 1`, `scope`, canonical `workspace`,
+`--format json` writes one compact object followed by a newline, byte-for-byte
+equivalent to `--json`. `--format yaml` writes one YAML 1.2 mapping document
+with two-space indentation, block mappings and nonempty sequences, and no
+tags, anchors, or document markers. Both formats preserve native string
+values, nested metadata, integer types, `null` values, and empty arrays (`[]`).
+YAML quotes and escapes strings where required to preserve their values.
+Both outputs end with one newline and retain schema `version: 1`.
+
+The report contains `version`, `scope`, canonical `workspace`,
 `reference`, `unassociated_workspace_count`, `warnings`, and sorted `machines`.
 The reference contains `definition`, `base_id`, `revision`,
 `workspace_sha256`, and `desired_machine`; unavailable values are null.
@@ -443,18 +468,25 @@ Metadata status precedence is `invalid`, `unsupported`, `complete`, `partial`,
 then `unavailable`. Invalid or future components remain null while an
 independently valid component remains visible. Descriptive metadata never
 changes ownership, association scope, identity assessments, or deletion
-authorization. Malformed inventory is fatal and produces no partial JSON;
+authorization. Malformed inventory is fatal and leaves structured stdout empty;
 invalid descriptive JSON strings remain per-row diagnostics.
+Warnings belong to the report's `warnings` array. Verbose diagnostics and
+external query stderr remain on stderr. Serialization completes before any
+structured stdout write; a write failure returns a nonzero exit status and
+may leave bytes already written. Empty scopes succeed with `machines: []`.
+Format selection does not change discovery, sorting, assessments, or metadata
+validation. YAML mapping order is deterministic; consumers should use field
+names rather than depend on mapping order.
 
 Filter recorded paths by exact equality or hosts by exact array membership
 with the optional user tool `jq`:
 
 ```bash
-smolsbx list --all --json |
+smolsbx list --all --format json |
   jq --arg path '/home/me/projects/myrepo' \
     '.machines[] | select(.workspace_path == $path)'
 
-smolsbx list --all --json |
+smolsbx list --all --format json |
   jq --arg option '--allow-host=packages.example.com' \
     '.machines[] | select((.machine_inputs.options // []) | index($option))'
 ```
