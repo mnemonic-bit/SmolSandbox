@@ -3,6 +3,19 @@
 [![Release](https://img.shields.io/github/v/release/mnemonic-bit/SmolSandbox?label=Release)](https://github.com/mnemonic-bit/SmolSandbox/releases/latest)
 [![Pre-release](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmnemonic-bit%2FSmolSandbox%2Fdevelop%2FCargo.toml&query=%24.package.version&label=Pre-release&prefix=v&color=blue)](https://github.com/mnemonic-bit/SmolSandbox/blob/develop/Cargo.toml)
 [![Build and tests (develop)](https://github.com/mnemonic-bit/SmolSandbox/actions/workflows/rust.yml/badge.svg?branch=develop&event=push)](https://github.com/mnemonic-bit/SmolSandbox/actions/workflows/rust.yml?query=branch%3Adevelop+event%3Apush)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+[![Download smolsbx for Linux x86-64 (ZIP)](assets/badges/download-linux-x86-64.svg)](https://github.com/mnemonic-bit/SmolSandbox/releases/latest/download/smolsbx-x86_64-unknown-linux-gnu.zip)
+[![Download smolsbx for Linux ARM64 (ZIP)](assets/badges/download-linux-arm64.svg)](https://github.com/mnemonic-bit/SmolSandbox/releases/latest/download/smolsbx-aarch64-unknown-linux-gnu.zip)
+[![Download smolsbx for macOS Apple Silicon (ARM64, ZIP)](assets/badges/download-macos-arm64.svg)](https://github.com/mnemonic-bit/SmolSandbox/releases/latest/download/smolsbx-aarch64-apple-darwin.zip)
+[![Download smolsbx for Windows x86-64 (ZIP)](assets/badges/download-windows-x86-64.svg)](https://github.com/mnemonic-bit/SmolSandbox/releases/latest/download/smolsbx-x86_64-pc-windows-msvc.zip)
+
+Open the [latest release](https://github.com/mnemonic-bit/SmolSandbox/releases/latest)
+to see available binaries. Extract the ZIP for your operating system and
+architecture, then copy `smolsbx` or `smolsbx.exe` to a directory on `PATH`.
+The direct download buttons require the first normal release with stable
+asset names, introduced in version `0.13.0`. Earlier releases use versioned
+filenames; download those ZIPs from the release page.
 
 Release shows the latest published normal GitHub Release. Pre-release shows
 the committed version on `develop`, even while validation is pending or failed;

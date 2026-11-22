@@ -92,7 +92,7 @@ class PackageReleaseTests(unittest.TestCase):
                     self.assertTrue(options['text'])
                     return SimpleNamespace(returncode=0, stdout='smolsbx 1.2.3\n')
                 archive = self.package(target, run)
-                self.assertEqual(archive.name, f'smolsbx-v1.2.3-{target}.zip')
+                self.assertEqual(archive.name, f'smolsbx-{target}.zip')
                 with zipfile.ZipFile(archive) as zipped:
                     self.assertEqual(zipped.namelist(), [name])
                     self.assertEqual(zipped.read(name), source.read_bytes())
@@ -116,6 +116,23 @@ class PackageReleaseTests(unittest.TestCase):
                 source.write_bytes(b'source archive or wrong architecture')
                 with self.assertRaisesRegex(package_release.ReleaseError, target + ':.*header'):
                     self.package(target)
+
+    def test_two_versions_keep_stable_names_and_check_the_selected_executable_version(self):
+        for version in ('1.2.3', '2.0.0'):
+            (self.root / 'Cargo.toml').write_text(f'[package]\nname = "smolsandbox"\nversion = "{version}"\n')
+            (self.root / 'Cargo.lock').write_text(f'version = 4\n[[package]]\nname = "smolsandbox"\nversion = "{version}"\n')
+            for target in package_release.TARGETS:
+                with self.subTest(version=version, target=target):
+                    self.executable(target)
+                    runner = mock.Mock(return_value=SimpleNamespace(returncode=0, stdout=f'smolsbx {version}\n'))
+                    archive = self.package(target, runner)
+                    self.assertEqual(archive.name, f'smolsbx-{target}.zip')
+                    runner.assert_called_once()
+                    wrong_version = mock.Mock(return_value=SimpleNamespace(returncode=0, stdout='smolsbx 0.0.0\n'))
+                    with self.assertRaisesRegex(package_release.ReleaseError, f'expected.*{version}'):
+                        self.package(target, wrong_version)
+            self.assertEqual({path.name for path in self.output.iterdir()},
+                             {f'smolsbx-{target}.zip' for target in package_release.TARGETS})
 
     def test_permission_denied_read_fails_with_target(self):
         target = 'x86_64-unknown-linux-gnu'
