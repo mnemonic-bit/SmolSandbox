@@ -21,6 +21,7 @@ TARGETS = (
     "aarch64-unknown-linux-gnu",
     "aarch64-apple-darwin",
     "x86_64-pc-windows-msvc",
+    "aarch64-pc-windows-msvc",
 )
 
 
@@ -110,10 +111,11 @@ class BinaryReleaseTests(unittest.TestCase):
         before = copy.deepcopy(item)
         self.assertEqual(self.run_release(), "already-published")
         self.assertEqual({asset["name"] for asset in self.api.assets.get(item["id"], [])}, set(self.packages))
-        self.assertEqual(len(self.api.uploads), 4)
+        self.assertEqual(len(self.api.uploads), 5)
         self.assertEqual(item, before)
 
-    def test_new_release_uploads_exact_four_packages_after_verification(self):
+    def test_new_release_uploads_exact_five_packages_after_verification(self):
+        self.assertEqual(set(release.BINARY_TARGETS), set(TARGETS))
         self.assertEqual(self.run_release(), "published")
         self.assertEqual(len(self.api.releases), 1)
         self.assertEqual({name: data for _, name, data in self.api.uploads}, self.packages)
@@ -136,9 +138,28 @@ class BinaryReleaseTests(unittest.TestCase):
         self.assertEqual((self.api.releases[0], self.api.assets[1]), previous[:2])
         self.assertTrue(all(self.api.asset_bytes[asset_id] == data for asset_id, data in previous[2].items()))
 
+    def test_five_target_release_preserves_historical_four_target_release(self):
+        previous_tag = "v0.13.0"
+        previous_sha = "3" * 40
+        self.api.tags[previous_tag] = {"type": "commit", "sha": previous_sha}
+        previous_release = self.api.add_release(tag=previous_tag, body="Original four-target notes")
+        for target in (
+            "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu",
+            "aarch64-apple-darwin", "x86_64-pc-windows-msvc",
+        ):
+            self.api.add_asset(previous_release["id"], f"smolsbx-{target}.zip", archive(target))
+        previous_assets = self.api.assets[previous_release["id"]]
+        previous_bytes = {asset["id"]: self.api.asset_bytes[asset["id"]] for asset in previous_assets}
+        before = copy.deepcopy((previous_release, previous_assets, previous_bytes, self.api.tags[previous_tag]))
+        self.assertEqual(self.run_release(), "published")
+        self.assertEqual(len(self.api.uploads), 5)
+        self.assertTrue(all(release_id != previous_release["id"] for release_id, _, _ in self.api.uploads))
+        after_bytes = {asset["id"]: self.api.asset_bytes[asset["id"]] for asset in previous_assets}
+        self.assertEqual((previous_release, previous_assets, after_bytes, self.api.tags[previous_tag]), before)
+
     def test_historical_versioned_assets_are_preserved_without_upload_or_metadata_writes(self):
         item = self.matching_release()
-        for target in TARGETS:
+        for target in TARGETS[:-1]:
             self.api.add_asset(item["id"], f"smolsbx-{TAG}-{target}.zip", archive(target))
         before = copy.deepcopy((item, self.api.assets, self.api.asset_bytes, self.api.tags))
         with self.assertRaisesRegex(release.ReleaseError, "Unexpected release assets are preserved.*smolsbx-v"):
@@ -168,7 +189,7 @@ class BinaryReleaseTests(unittest.TestCase):
         self.api.upload_failure = None
         self.assertEqual(self.run_release(), "already-published")
         self.assertEqual(self.api.assets[item["id"]][:2], first)
-        self.assertEqual(len(self.api.uploads), 4)
+        self.assertEqual(len(self.api.uploads), 5)
 
     def test_complete_rerun_preserves_ids_bytes_notes_tag_and_performs_no_upload(self):
         item = self.matching_release()
@@ -180,6 +201,25 @@ class BinaryReleaseTests(unittest.TestCase):
         self.assertEqual((item, self.api.assets, self.api.asset_bytes, self.api.tags), before)
         self.assertEqual(self.api.uploads, [])
         self.assertEqual(self.api.writes, [])
+
+    def test_windows_arm64_last_upload_recovers_after_interruption(self):
+        item = self.matching_release()
+        name = "smolsbx-aarch64-pc-windows-msvc.zip"
+        self.api.upload_failure = name
+        with self.assertRaisesRegex(release.ReleaseError, name):
+            self.run_release()
+        self.assertEqual(len(self.api.assets[item["id"]]), 4)
+        first_assets = copy.deepcopy(self.api.assets[item["id"]])
+        first_bytes = copy.deepcopy(self.api.asset_bytes)
+        first_metadata = copy.deepcopy((item, self.api.tags))
+        self.api.uploads.clear()
+        self.api.upload_failure = None
+        self.assertEqual(self.run_release(), "already-published")
+        self.assertEqual(self.api.assets[item["id"]][:4], first_assets)
+        self.assertTrue(all(self.api.asset_bytes[asset_id] == data for asset_id, data in first_bytes.items()))
+        self.assertEqual((item, self.api.tags), first_metadata)
+        self.assertEqual(self.api.uploads, [(item["id"], name, self.packages[name])])
+        self.assertEqual(len(self.api.assets[item["id"]]), 5)
 
     def test_each_missing_package_fails_before_any_publication_write(self):
         for name, data in self.packages.items():
@@ -244,16 +284,18 @@ class BinaryReleaseTests(unittest.TestCase):
         self.assertEqual(self.api.writes, [])
 
     def test_conflicting_bytes_fail_before_upload_and_preserve_existing_asset(self):
-        item = self.matching_release()
-        name = next(iter(self.packages))
-        data = self.packages[name]
-        asset = self.api.add_asset(item["id"], name, b"x" * len(data))
-        before = copy.deepcopy((item, self.api.assets, self.api.asset_bytes))
-        with self.assertRaisesRegex(release.ReleaseError, "conflicting contents"):
-            self.run_release()
-        self.assertEqual((item, self.api.assets, self.api.asset_bytes), before)
-        self.assertEqual(self.api.uploads, [])
-        self.assertEqual(self.api.asset_bytes[asset["id"]], b"x" * len(data))
+        for name, data in self.packages.items():
+            with self.subTest(name=name):
+                self.api = AssetAPI()
+                item = self.matching_release()
+                asset = self.api.add_asset(item["id"], name, b"x" * len(data))
+                before = copy.deepcopy((item, self.api.assets, self.api.asset_bytes, self.api.tags))
+                with self.assertRaisesRegex(release.ReleaseError, name + ".*conflicting contents"):
+                    self.run_release()
+                self.assertEqual((item, self.api.assets, self.api.asset_bytes, self.api.tags), before)
+                self.assertEqual(self.api.uploads, [])
+                self.assertEqual(self.api.writes, [])
+                self.assertEqual(self.api.asset_bytes[asset["id"]], b"x" * len(data))
 
     def test_conflicting_size_state_and_id_fail_without_replacement(self):
         for fields in ({"size": 1}, {"state": "starter"}, {"id": 0}, {"id": True}):
@@ -329,7 +371,7 @@ class BinaryReleaseTests(unittest.TestCase):
                         self.run_release()
                 else:
                     self.assertEqual(self.run_release(), "already-published")
-                    self.assertEqual(len(self.api.assets[1]), 4)
+                    self.assertEqual(len(self.api.assets[1]), 5)
 
     def test_changed_tag_before_upload_fails_without_upload(self):
         self.matching_release()
@@ -364,7 +406,7 @@ class BinaryReleaseTests(unittest.TestCase):
         self.api.request = missing_request
         with self.assertRaisesRegex(release.ReleaseError, name):
             self.run_release()
-        self.assertEqual(len(self.api.assets[item["id"]]), 4)
+        self.assertEqual(len(self.api.assets[item["id"]]), 5)
 
 
 class BinaryTransportTests(unittest.TestCase):

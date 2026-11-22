@@ -857,3 +857,45 @@ Feature 0020 AC-01 through AC-10 passed locally. Preserve all previous
 observations and source revisions. Final cutover acceptance remains pending
 the outstanding native and real guest evidence; output-format fixtures
 establish no new real SmolVM result.
+
+## Feature 0021 Windows ARM64 distribution audit: 2026-11-22
+
+Source revision `dcc72bec291736a225633e3afe5694bb793ee92f` plus the local
+[Feature 0021](feature-0021-windows-arm64-release-target.md) implementation
+uses package version `0.15.0` in both Cargo files. Lifecycle policy revision
+remains `7`. The tracked implementation diff SHA-256 is
+`7235a599224e400471d608c9ef2d307139c63702336a89771947b17dcba255d1`;
+[Feature 0021 validation](feature-0021-validation.md) records the exact
+fingerprint command, new badge fingerprint, environment, and AC-01 through
+AC-10 results.
+
+The native workflow adds `windows-11-arm` / `aarch64-pc-windows-msvc` to the
+existing four targets. Packaging validates ARM64 PE machine `0xAA64` and
+retains x86-64 validation. Publication requires five executable-only ZIPs
+from the same workflow run and immutable commit. Download guidance separates
+Windows ARM64 CLI distribution from unsupported virtualization. Production
+runtime policy, template bytes, user definitions, state paths, and machine
+identity remain unchanged.
+
+The following local results were observed on native
+`x86_64-unknown-linux-gnu` with Rust/Cargo `1.100.0` and Python `3.11.2`.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Formatting and both Clippy configurations | passed | All three required commands exited 0 after the example changes were frozen |
+| Both complete Rust test configurations | passed | Exit 0; 147 default tests and 223 tests with `test-adapter` |
+| Production release build and offline CLI | passed | Exit 0; default features; `smolsbx 0.15.0`; help, version, and explicit configuration generation passed with empty `PATH` and nonexistent SmolVM |
+| Baseline independence | passed | Exit 0; compiler/Cargo native hosts verified; isolated checks and production build passed; ten compiled test executables per feature configuration passed with empty `PATH` |
+| Complete release regressions | passed | Exit 0; 96 Python tests covering five-target missing/conflicting assets, interrupted fifth upload, recovery, complete rerun, historical four-target preservation, PE substitutions/truncation, workflow guards, and inline/canonical equality |
+| Workflow syntax and independent review | passed | actionlint `1.7.12` exited 0; optional external ShellCheck/Pyflakes checks disabled; independent agents found no concrete defects in packaging/publication or workflow/example changes |
+| README download rendering | passed | All five SVGs loaded in local Chromium at desktop and mobile widths; ARM64 label, alternative text, and stable URL checked |
+| Five-target hosted validation and native Windows ARM64 | not_run | No hosted runner image, workflow URL, native ARM64 execution, action compatibility, or Windows ACL result was collected |
+| Disposable publication and public ARM64 download | not_run | No disposable repository was configured; hosted failure gates, release/asset IDs, recovery, and first eligible public ZIP remain pending; no production test release was created |
+| Real SmolVM and real guests | not_run | No new runtime, provisioning, authentication, interactive terminal, or real guest evidence was collected; Windows ARM64 virtualization remains unsupported |
+
+Feature 0021 remains In progress. AC-01, AC-03, and AC-07 passed locally;
+the other criteria require the hosted or native evidence identified in the
+feature validation record. Preserve all prior observations and source
+revisions. Final cutover acceptance remains pending the existing native and
+real guest gates for supported virtualization hosts. The fifth CLI target
+does not enable Windows ARM64 sandbox creation or close those gates.
