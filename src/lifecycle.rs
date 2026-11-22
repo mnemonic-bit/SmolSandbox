@@ -1118,7 +1118,7 @@ fn list(options: &Options) -> Result<i32> {
         reference.desired_machine = Some(lifecycle.identity.desired_name);
     }
     let inventory = smolvm.inventory()?;
-    crate::listing::report(&inventory, &workspace, reference, options.all).print(options.json)?;
+    crate::listing::report(&inventory, &workspace, reference, options.all).print(options.format)?;
     Ok(0)
 }
 

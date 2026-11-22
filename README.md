@@ -137,14 +137,15 @@ stdout and stderr live to application stderr:
 smolsbx build /path/to/project
 smolsbx --verbose build /path/to/project
 smolsbx start /path/to/project --verbose
-smolsbx list --all --json --verbose
+smolsbx list --all --format json --verbose
 ```
 
 Interactive shell, harness, and login sessions always inherit terminal input
 and output, including prompts and authentication instructions. Preparations
 and cleanup follow the management output policy. Query stdout remains
-internal, so `list --json` keeps its single JSON object on stdout in both
-modes. Failures include application diagnostics even without `--verbose`.
+internal, so structured `list` output keeps its single YAML document or JSON
+object on stdout in both modes. Failures include application diagnostics even
+without `--verbose`.
 `start --verbose` configures smolsandbox output; `start -- --verbose` passes
 `--verbose` unchanged to the guest harness. Repeating the application flag
 has the same effect as specifying it once.
@@ -158,8 +159,19 @@ machine including shared builders and login machines:
 smolsbx list
 smolsbx list /path/to/project
 smolsbx list --all
+smolsbx list --all --format yaml
+smolsbx list --all --format=json
 smolsbx list --all --json
 ```
+
+With no output selector, `list` prints human-readable text with blank lines
+between the reference, warnings, summary, and machine entries. Use
+`--format yaml` or `--format json` for one structured report; both formats
+retain the same schema and values. `--json` remains a supported alias for
+`--format json`. Do not combine `--json` with `--format` or repeat `--format`.
+Only the lowercase values `yaml` and `json` are accepted. Place the option
+before or after the workspace; both `--format VALUE` and `--format=VALUE`
+are supported.
 
 Listing compares each machine's identity with the current invocation and
 shows runtime state separately. Repeat the selected definition and any
@@ -170,7 +182,7 @@ state. Assessments do not authorize deletion or guarantee a successful start.
 
 New machines retain readable workspace paths, harness profiles, definition
 fingerprints, runtime versions, and creation options in structured SmolVM
-labels. Human output shows the full inputs; JSON exposes decoded objects for
+labels. Human output shows the full inputs; YAML and JSON expose decoded objects for
 path and host filtering. Shared machines display `shared`. Older machines
 can display the reference path when its association hash matches; other
 missing paths remain `unknown`. Recorded inputs describe creation requests,

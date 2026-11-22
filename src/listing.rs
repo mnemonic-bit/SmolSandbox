@@ -1,3 +1,4 @@
+use crate::cli::OutputFormat;
 use crate::domain::{hash_bytes, Inventory, Machine, MANAGED_KEYS};
 use crate::metadata::{BaseInputs, MachineInputs, Metadata};
 use anyhow::Result;
@@ -430,14 +431,27 @@ fn human_text(value: &str) -> String {
 }
 
 impl Report {
-    pub fn print(&self, json: bool) -> Result<()> {
-        let output = if json {
-            format!("{}\n", serde_json::to_string(self)?)
-        } else {
-            self.human()
-        };
+    pub fn print(&self, format: OutputFormat) -> Result<()> {
+        let output = self.render(format)?;
         io::stdout().lock().write_all(output.as_bytes())?;
         Ok(())
+    }
+
+    fn render(&self, format: OutputFormat) -> Result<String> {
+        Ok(match format {
+            OutputFormat::Json => format!("{}\n", serde_json::to_string(self)?),
+            OutputFormat::Yaml => serde_saphyr::to_string_with_options(
+                self,
+                serde_saphyr::ser_options! {
+                    indent_step: 2,
+                    compact_list_indent: false,
+                    prefer_block_scalars: false,
+                    yaml_12: true,
+                    no_lang_directive: true,
+                },
+            )?,
+            OutputFormat::Human => self.human(),
+        })
     }
 
     fn human(&self) -> String {
@@ -465,11 +479,16 @@ impl Report {
             human_text(&self.reference.revision)
         )
         .unwrap();
+        if !self.warnings.is_empty() {
+            output.push('\n');
+        }
         for warning in &self.warnings {
             writeln!(output, "WARNING: {}", human_text(warning)).unwrap();
         }
+        output.push('\n');
         writeln!(output, "Unassociated workspace candidates: {} (missing or malformed path labels; association with the reference workspace is unknown).", self.unassociated_workspace_count).unwrap();
         output.push_str("Assessments compare the current invocation only; no assessment authorizes deletion. An identity match does not establish artifact availability, port reconciliation, guest boot, or authentication.\n");
+        output.push('\n');
         if self.machines.is_empty() {
             output.push_str("No matching machines.\n");
             return output;
@@ -479,7 +498,10 @@ impl Report {
             output.push_str("\tASSOCIATION");
         }
         output.push('\n');
-        for row in &self.machines {
+        for (index, row) in self.machines.iter().enumerate() {
+            if index > 0 {
+                output.push('\n');
+            }
             write!(
                 output,
                 "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
@@ -581,6 +603,62 @@ mod tests {
 
     fn inventory(rows: Vec<Value>) -> Inventory {
         parse_inventory(&serde_json::to_vec(&rows).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn structured_reference_and_warning_strings_preserve_types_and_controls() {
+        let workspace = "C:\\work tree\\日本語=one: #two\nnext\t\u{1b}\u{0}\u{2028}\u{2029}";
+        let definition = "C:\\definitions\\'quoted' \"name\".smlbx\r\nnext";
+        let warnings = ["null", "true", "00123", "a: b # c", "line\nnext\t\u{7}"];
+        let report = Report {
+            version: 1,
+            scope: "workspace",
+            workspace: PathBuf::from(workspace),
+            reference: Reference {
+                definition: Some(PathBuf::from(definition)),
+                base_id: Some("true".into()),
+                revision: "00123".into(),
+                workspace_sha256: None,
+                desired_machine: Some("null".into()),
+            },
+            unassociated_workspace_count: 0,
+            warnings: warnings.iter().map(|warning| (*warning).into()).collect(),
+            machines: vec![],
+        };
+        let expected = json!({
+            "version": 1,
+            "scope": "workspace",
+            "workspace": workspace,
+            "reference": {
+                "definition": definition,
+                "base_id": "true",
+                "revision": "00123",
+                "workspace_sha256": null,
+                "desired_machine": "null"
+            },
+            "unassociated_workspace_count": 0,
+            "warnings": warnings,
+            "machines": []
+        });
+        let json = report.render(OutputFormat::Json).unwrap();
+        let yaml = report.render(OutputFormat::Yaml).unwrap();
+        assert_eq!(serde_json::from_str::<Value>(&json).unwrap(), expected);
+        assert_eq!(serde_saphyr::from_str::<Value>(&yaml).unwrap(), expected);
+        assert_eq!(json.lines().count(), 1);
+        assert!(json.ends_with('\n'));
+        assert_eq!(report.render(OutputFormat::Yaml).unwrap(), yaml);
+        assert!(yaml.starts_with("version: 1\nscope: workspace\n"));
+        assert!(yaml.contains("  workspace_sha256: null\n"));
+        assert!(yaml.ends_with("machines: []\n"));
+        assert!(!yaml.ends_with("\n\n"));
+        assert!(!yaml.contains("\n---\n"));
+        assert!(!yaml.contains("\n...\n"));
+        assert!(!yaml.contains('\u{0}'));
+        assert!(!yaml.contains('\u{1b}'));
+        let human = report.render(OutputFormat::Human).unwrap();
+        assert!(!human.contains('\u{0}'));
+        assert!(!human.contains('\u{1b}'));
+        assert!(!human.contains("\nnext"));
     }
 
     #[test]

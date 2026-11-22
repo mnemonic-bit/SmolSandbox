@@ -1,4 +1,4 @@
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::{ffi::OsString, path::PathBuf};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -13,6 +13,15 @@ pub enum Command {
     Repair,
     Clean,
     Purge,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum OutputFormat {
+    #[default]
+    #[value(skip)]
+    Human,
+    Json,
+    Yaml,
 }
 
 #[derive(Debug, Default)]
@@ -33,7 +42,7 @@ pub struct Options {
     pub harness: Option<String>,
     pub file: Option<PathBuf>,
     pub all: bool,
-    pub json: bool,
+    pub format: OutputFormat,
     pub global: bool,
     pub dry_run: bool,
 }
@@ -112,7 +121,7 @@ enum ParsedCommand {
     },
     /// List workspace machines across profiles and generations without changing application state or taking lifecycle locks.
     #[command(
-        long_about = "List managed machines associated with the canonical workspace (the current directory by default), across profiles, generations, policy revisions, and configurations. Use --all to include other workspaces and shared builder/login machines. WORKSPACE still selects the comparison context with --all. Legacy workspace names cannot establish a path association; unassociated candidates are counted and appear only with --all. Assessments compare identity with this invocation, separately from runtime state; they do not authorize deletion or guarantee a successful start. Human output shows full readable workspace paths and harness profiles, plus recorded base inputs and creation options from structured JSON labels. Shared machines display shared. Older machines may show only the reference path inferred from their association hash, or unknown. Metadata records creation requests, not current guest state; malformed or future metadata does not change ownership assessments. Use list --all --json to filter workspace_path by exact equality or machine_inputs.options by exact array membership. This command takes one inventory snapshot without lifecycle locks, virtualization preflight, or application writes. SmolVM may maintain its own registry while answering queries."
+        long_about = "List managed machines associated with the canonical workspace (the current directory by default), across profiles, generations, policy revisions, and configurations. Use --all to include other workspaces and shared builder/login machines. WORKSPACE still selects the comparison context with --all. Legacy workspace names cannot establish a path association; unassociated candidates are counted and appear only with --all. Assessments compare identity with this invocation, separately from runtime state; they do not authorize deletion or guarantee a successful start. Human output shows full readable workspace paths and harness profiles, plus recorded base inputs and creation options from structured JSON labels. Shared machines display shared. Older machines may show only the reference path inferred from their association hash, or unknown. Metadata records creation requests, not current guest state; malformed or future metadata does not change ownership assessments. Use list --all --format json to filter workspace_path by exact equality or machine_inputs.options by exact array membership. This command takes one inventory snapshot without lifecycle locks, virtualization preflight, or application writes. SmolVM may maintain its own registry while answering queries."
     )]
     List {
         #[command(flatten)]
@@ -120,8 +129,11 @@ enum ParsedCommand {
         /// Include all managed machines, including shared machines and unassociated legacy workspaces.
         #[arg(long)]
         all: bool,
-        /// Write one schema-versioned JSON report.
-        #[arg(long)]
+        /// Write one structured report as yaml or json. Human-readable text is the default. Conflicts with --json.
+        #[arg(long, value_enum, value_name = "FORMAT", conflicts_with = "json")]
+        format: Option<OutputFormat>,
+        /// Compatibility alias for --format json. Conflicts with --format.
+        #[arg(long, conflicts_with = "format")]
         json: bool,
         /// Extend the reference launch allowlist. Repeat the same additions used by start.
         #[arg(long = "allow-host", value_parser = parse_host)]
@@ -298,13 +310,18 @@ impl Cli {
                 workspace,
                 allow_hosts,
                 all,
+                format,
                 json,
             } => {
                 result.command = Command::List;
                 result.workspace = workspace;
                 result.allow_hosts = allow_hosts;
                 result.all = all;
-                result.json = json;
+                result.format = if json {
+                    OutputFormat::Json
+                } else {
+                    format.unwrap_or_default()
+                };
                 Some(selection)
             }
             ParsedCommand::Remove {
