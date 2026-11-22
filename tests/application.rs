@@ -1550,34 +1550,55 @@ mod lifecycle {
 
     #[cfg(unix)]
     #[test]
-    fn metadata_paths_reject_non_utf8_before_lifecycle_writes() {
+    fn metadata_artifact_path_rejects_non_utf8_before_lifecycle_writes() {
         use std::{ffi::OsString, os::unix::ffi::OsStringExt};
-        for definition in [false, true] {
-            let f = Fixture::new();
-            f.configure("codex");
-            let invalid = f
-                .root
-                .path()
-                .join(OsString::from_vec(b"path-\xff".to_vec()));
-            let mut command = f.command();
-            if definition {
-                fs::copy(f.definition(), &invalid).unwrap();
-                command.env("BASE_SMOLFILE", &invalid);
-            } else {
-                command.env("ARTIFACTS_DIR", &invalid);
-            }
-            let output = command.arg("build").output().unwrap();
-            assert!(!output.status.success());
-            assert!(String::from_utf8_lossy(&output.stderr).contains("path is not UTF-8"));
-            assert_no_mutations(&f);
-            assert!(!f.home.join(".smolsandbox/artifacts").exists());
-            assert!(!f.home.join(".smolsandbox/locks").exists());
-            assert!(!f.home.join(".smolsandbox/codex-home").exists());
-            if !definition {
-                assert!(!invalid.exists());
-            }
-            assert!(f.inventory().is_empty());
-        }
+        let f = Fixture::new();
+        f.configure("codex");
+        let invalid = f
+            .root
+            .path()
+            .join(OsString::from_vec(b"path-\xff".to_vec()));
+        let output = f
+            .command()
+            .env("ARTIFACTS_DIR", &invalid)
+            .arg("build")
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("artifact path is not UTF-8"));
+        assert_no_mutations(&f);
+        assert!(!f.home.join(".smolsandbox/artifacts").exists());
+        assert!(!f.home.join(".smolsandbox/locks").exists());
+        assert!(!f.home.join(".smolsandbox/codex-home").exists());
+        assert!(!invalid.exists());
+        assert!(f.inventory().is_empty());
+    }
+
+    // APFS requires UTF-8 filenames; the constructor regression covers the guard on macOS.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn metadata_definition_path_rejects_non_utf8_before_lifecycle_writes() {
+        use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+        let f = Fixture::new();
+        f.configure("codex");
+        let invalid = f
+            .root
+            .path()
+            .join(OsString::from_vec(b"path-\xff".to_vec()));
+        fs::copy(f.definition(), &invalid).unwrap();
+        let output = f
+            .command()
+            .env("BASE_SMOLFILE", &invalid)
+            .arg("build")
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("definition path is not UTF-8"));
+        assert_no_mutations(&f);
+        assert!(!f.home.join(".smolsandbox/artifacts").exists());
+        assert!(!f.home.join(".smolsandbox/locks").exists());
+        assert!(!f.home.join(".smolsandbox/codex-home").exists());
+        assert!(f.inventory().is_empty());
     }
     #[test]
     fn inventory_command_failure_preserves_machines_and_caches() {
