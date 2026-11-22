@@ -156,15 +156,15 @@ a separate destination with `create-config --harness <profile> --smolfile
 file. Existing edits and harness state are preserved. Changing definition
 bytes selects a new base generation on the next lifecycle operation.
 
-For the Feature 0016 Codex update, generate a separate file and compare it
+For the Feature 0018 Codex update, generate a separate file and compare it
 with the definition currently selected for the workspace:
 
 ```text
-smolsbx create-config --harness codex --smolfile ./codex-0.169.0.smlbx
-git diff --no-index ./codex-current.smlbx ./codex-0.169.0.smlbx
-smolsbx build --smolfile ./codex-0.169.0.smlbx /path/to/project
-smolsbx login --smolfile ./codex-0.169.0.smlbx
-smolsbx start --smolfile ./codex-0.169.0.smlbx /path/to/project
+smolsbx create-config --harness codex --smolfile ./codex-0.171.0.smlbx
+git diff --no-index ./codex-current.smlbx ./codex-0.171.0.smlbx
+smolsbx build --smolfile ./codex-0.171.0.smlbx /path/to/project
+smolsbx login --smolfile ./codex-0.171.0.smlbx
+smolsbx start --smolfile ./codex-0.171.0.smlbx /path/to/project
 ```
 
 Replace `./codex-current.smlbx` with the existing selected definition.
@@ -189,7 +189,7 @@ The templates install no additional .NET 8 runtime. Validate restore, build,
 migrations, and diagnostics against each project's runtime after adopting a
 definition.
 
-The Codex template selects Codex 0.169.0, skills CLI 1.8.1, and
+The Codex template selects Codex 0.171.0, skills CLI 1.8.1, and
 codebase-memory-mcp v0.12.1. Upstream MCP release guidance calls for a
 one-time rebuild of existing project indexes after the update. Reindex the
 project before checking MCP queries, while retaining the persistent Codex
