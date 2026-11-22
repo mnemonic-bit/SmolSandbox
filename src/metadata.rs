@@ -2,8 +2,8 @@ use crate::domain::{hash_bytes, hash_set, Machine};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const BASE_INPUTS: &str = "codex-sandbox.base-inputs";
-pub const MACHINE_INPUTS: &str = "codex-sandbox.machine-inputs";
+pub const BASE_INPUTS: &str = "SmolSandbox.base-inputs";
+pub const MACHINE_INPUTS: &str = "SmolSandbox.machine-inputs";
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BaseInputs {
@@ -33,6 +33,23 @@ enum Component<T> {
     Valid(T),
     Invalid(&'static str),
     Unsupported,
+}
+
+fn decode_label<T: serde::de::DeserializeOwned>(
+    machine: &Machine,
+    key: &str,
+    legacy_key: &str,
+    require_workspace_path: bool,
+) -> Component<T> {
+    let current = machine.labels.get(key);
+    let legacy = machine.labels.get(legacy_key);
+    if current
+        .zip(legacy)
+        .is_some_and(|(current, old)| current != old)
+    {
+        return Component::Invalid("descriptive labels contradict across namespaces");
+    }
+    decode(current.or(legacy), require_workspace_path)
 }
 
 fn decode<T: serde::de::DeserializeOwned>(
@@ -231,13 +248,19 @@ fn validate_machine(
 
 impl Metadata {
     pub fn inspect(machine: &Machine, kind: Option<&str>) -> Self {
-        let mut base = decode::<BaseInputs>(machine.labels.get(BASE_INPUTS), false);
+        let mut base =
+            decode_label::<BaseInputs>(machine, BASE_INPUTS, "codex-sandbox.base-inputs", false);
         if let Component::Valid(value) = &base {
             if let Err(reason) = validate_base(value) {
                 base = Component::Invalid(reason);
             }
         }
-        let mut inputs = decode::<MachineInputs>(machine.labels.get(MACHINE_INPUTS), true);
+        let mut inputs = decode_label::<MachineInputs>(
+            machine,
+            MACHINE_INPUTS,
+            "codex-sandbox.machine-inputs",
+            true,
+        );
         if let Component::Valid(value) = &inputs {
             let valid_base = match &base {
                 Component::Valid(value) => Some(value),
@@ -321,14 +344,14 @@ mod tests {
             name: "windows-workspace".into(),
             state: "stopped".into(),
             labels: BTreeMap::from([
-                ("codex-sandbox.kind".into(), "workspace".into()),
-                ("codex-sandbox.base-id".into(), "123456789abc".into()),
+                ("SmolSandbox.kind".into(), "workspace".into()),
+                ("SmolSandbox.base-id".into(), "123456789abc".into()),
                 (
-                    "codex-sandbox.workspace-path-sha256".into(),
+                    "SmolSandbox.workspace-path-sha256".into(),
                     "72756f14626225c584893bc09cfb5d9122a1f53829f6c7e8766b6d469a16c69d".into(),
                 ),
                 (
-                    "codex-sandbox.workspace-sha256".into(),
+                    "SmolSandbox.workspace-sha256".into(),
                     "2e9431a3e4003b22636b160643ab28ae0edb59e636f7042e72f5d6e500946dd7".into(),
                 ),
                 (
@@ -371,6 +394,49 @@ mod tests {
             serde_json::to_value(inputs).unwrap()["options"][0],
             "--allow-host=host=例.example"
         );
+    }
+
+    #[test]
+    fn descriptive_namespaces_accept_old_and_agreeing_values_and_reject_conflicts() {
+        for mode in ["old", "dual", "split"] {
+            let mut machine = windows_workspace();
+            let current = machine.labels.clone();
+            for (index, (key, value)) in current.into_iter().enumerate() {
+                if mode == "old" || mode == "dual" || index % 2 == 0 {
+                    let suffix = key.strip_prefix("SmolSandbox.").unwrap();
+                    machine
+                        .labels
+                        .insert(format!("codex-sandbox.{suffix}"), value);
+                    if mode != "dual" {
+                        machine.labels.remove(&key);
+                    }
+                }
+            }
+            let metadata = Metadata::inspect(&machine, Some("workspace"));
+            assert_eq!(
+                metadata.status, "complete",
+                "{mode}: {:?}",
+                metadata.reasons
+            );
+        }
+        for (key, legacy) in [
+            (BASE_INPUTS, "codex-sandbox.base-inputs"),
+            (MACHINE_INPUTS, "codex-sandbox.machine-inputs"),
+        ] {
+            let mut machine = windows_workspace();
+            machine
+                .labels
+                .insert(legacy.into(), "{different JSON".into());
+            let metadata = Metadata::inspect(&machine, Some("workspace"));
+            assert_eq!(metadata.status, "invalid");
+            assert_eq!(metadata.base.is_none(), key == BASE_INPUTS);
+            assert_eq!(metadata.machine.is_none(), key == MACHINE_INPUTS);
+            assert!(metadata
+                .reasons
+                .iter()
+                .any(|reason| reason.contains("contradict across namespaces")));
+            assert!(!machine.ownership_conflicts());
+        }
     }
 
     #[test]
@@ -445,9 +511,9 @@ mod tests {
             let mut machine = windows_workspace();
             machine
                 .labels
-                .insert("codex-sandbox.kind".into(), kind.into());
-            machine.labels.remove("codex-sandbox.workspace-sha256");
-            machine.labels.remove("codex-sandbox.workspace-path-sha256");
+                .insert("SmolSandbox.kind".into(), kind.into());
+            machine.labels.remove("SmolSandbox.workspace-sha256");
+            machine.labels.remove("SmolSandbox.workspace-path-sha256");
             options.sort();
             machine.labels.insert(
                 MACHINE_INPUTS.into(),
@@ -492,7 +558,7 @@ mod tests {
             strings.sort();
             machine
                 .labels
-                .insert("codex-sandbox.workspace-sha256".into(), hash_set(&strings));
+                .insert("SmolSandbox.workspace-sha256".into(), hash_set(&strings));
             value["options"] = json!(strings);
             machine
                 .labels

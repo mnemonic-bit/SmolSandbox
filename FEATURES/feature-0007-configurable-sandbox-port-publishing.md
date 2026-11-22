@@ -241,7 +241,7 @@ ports leaves all of the following unchanged:
 - `WORKSPACE_SHA256`;
 - `WORKSPACE_ID`;
 - `DESIRED_CODEX_MACHINE`;
-- `codex-sandbox.workspace-sha256`;
+- `SmolSandbox.workspace-sha256`;
 - configuration classification; and
 - stale-machine classification.
 

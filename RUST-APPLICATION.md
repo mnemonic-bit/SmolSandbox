@@ -112,10 +112,37 @@ smolsbx start --smolfile ./claude.smlbx /path/to/project
 ```
 
 Inspect and edit the generated file. Preserve its single
-`# codex-sandbox-harness: <identifier>` metadata line. That marker and the
-`codex-sandbox.` managed-label namespace are retained compatibility
-identifiers. Moving or updating the executable does not rewrite existing
-definitions, credentials, or machine metadata.
+`# codex-sandbox-harness: <identifier>` metadata line. The definition marker
+remains a compatibility identifier. New machines use the `SmolSandbox.`
+managed-label namespace for every profile and machine kind. Updating the
+executable does not rewrite existing definitions, credentials, or machine
+metadata.
+
+### Machine label namespace transition
+
+The Bug 0007 correction replaces `codex-sandbox.` with `SmolSandbox.` for
+new creation labels. Existing old-prefix machines remain readable without
+relabeling. Ownership readers accept either prefix and combine fields from
+both prefixes. If both prefixes contain the same ownership key, their values
+must agree exactly. Any unequal duplicate ownership value makes the machine
+ambiguous and blocks lifecycle mutation; `--force` does not override the
+contradiction. Inspect the raw SmolVM inventory and resolve the conflicting
+labels or remove the affected machine through SmolVM before retrying.
+
+Descriptive labels alone never establish ownership. Descriptive readers use
+the new key with old-key fallback. Unequal duplicate descriptive values mark
+the metadata invalid without changing ownership authority. The raw query
+below uses the new creation key; for an old-only machine, query
+`codex-sandbox.machine-inputs` instead.
+
+Existing machines retain their creation-time policy revision. The policy
+revision increment selects new login and workspace machine names under the
+normal stale-machine rules. Use `smolsbx repair --check` to inspect workspace
+selection and `smolsbx repair --replace-stale` for an eligible stale
+replacement; the existing definition and harness home remain user-owned. The label
+namespace is not a base-generation or workspace-hash input. Base artifacts
+and base-generation cache paths retain their identity for unchanged
+definition bytes and SmolVM version.
 
 ### Whole-file selection
 
@@ -378,7 +405,7 @@ a matching reference association hash permits a path display with source
 other workspace directories or read historical definition paths.
 
 New builders, login machines, and workspace machines carry two compact JSON
-labels: `codex-sandbox.base-inputs` and `codex-sandbox.machine-inputs`, each
+labels: `SmolSandbox.base-inputs` and `SmolSandbox.machine-inputs`, each
 with label schema version `1`. Base inputs record the normalized SmolVM
 version, selected definition path, full SHA-256 of the exact definition bytes,
 and harness profile. Machine inputs record the workspace path (`null` for
@@ -438,7 +465,7 @@ SmolVM retains the same metadata independently of the listing formatter:
 smolvm machine ls --json |
   jq --arg path '/home/me/projects/myrepo' '
     .[] |
-    (.labels["codex-sandbox.machine-inputs"]? | fromjson?) as $inputs |
+    (.labels["SmolSandbox.machine-inputs"]? | fromjson?) as $inputs |
     select($inputs.workspace_path == $path)
   '
 ```
@@ -455,7 +482,7 @@ SmolVM itself may maintain its own registry while answering inventory queries.
 
 `remove` deletes guest writable state without an interactive confirmation.
 By default, removal selects managed workspace machines whose policy revision
-is older than the executable's current revision (`6`), across profiles,
+is older than the executable's current revision (`7`), across profiles,
 bases, and configurations. Package version changes, different definitions,
 and different configurations alone do not make a machine stale. Revisions
 compare numerically, including leading zeros and values too large for native
@@ -720,8 +747,9 @@ rename. Returning users can map historical shell actions to Rust commands:
 | `purge-sandbox.sh` | `purge` |
 
 The table maps actions; the former shell names are not Rust compatibility
-commands. The metadata marker, managed resource names, and label namespace
-retain their historical spelling to preserve identity and ownership.
+commands. The metadata marker and managed resource names retain their
+historical spelling. New labels use `SmolSandbox.`; compatible readers
+continue to recognize old-prefix ownership labels.
 [Feature 0008](FEATURES/feature-0008-provisioning-download-integrity.md) tracks
 additional provisioning-download integrity independently of migration and
 documentation completion.

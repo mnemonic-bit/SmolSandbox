@@ -146,6 +146,10 @@ fn inspect(machine: &Machine, name: Option<&NameIdentity>, labels: bool) -> Row 
         metadata_reasons: Vec::new(),
     };
     if labels {
+        if machine.ownership_conflicts() {
+            row.reasons
+                .push("Managed ownership labels contradict across namespaces.".into());
+        }
         row.kind = scalar(
             machine.label(0),
             ["builder", "login", "workspace"].contains(&machine.label(0)),
@@ -209,8 +213,8 @@ fn inspect(machine: &Machine, name: Option<&NameIdentity>, labels: bool) -> Row 
                     );
                     3
                 };
-                for key in &MANAGED_KEYS[first_forbidden..] {
-                    if machine.labels.contains_key(*key) {
+                for (index, key) in MANAGED_KEYS.iter().enumerate().skip(first_forbidden) {
+                    if machine.has_label(index) {
                         row.reasons.push(format!(
                             "Managed {} metadata contradicts the shared {} kind.",
                             key,
@@ -566,12 +570,12 @@ mod tests {
 
     fn workspace_row(name: &str, path: &Path) -> Value {
         json!({"name":name,"state":"stopped","labels":{
-            "codex-sandbox.kind":"workspace",
-            "codex-sandbox.base-id":BASE,
-            "codex-sandbox.revision":"7",
-            "codex-sandbox.workspace-sha256":HASH,
-            "codex-sandbox.workspace-path-sha256":hash_bytes(path.to_str().unwrap().as_bytes()),
-            "codex-sandbox.configuration":"default"
+            "SmolSandbox.kind":"workspace",
+            "SmolSandbox.base-id":BASE,
+            "SmolSandbox.revision":"7",
+            "SmolSandbox.workspace-sha256":HASH,
+            "SmolSandbox.workspace-path-sha256":hash_bytes(path.to_str().unwrap().as_bytes()),
+            "SmolSandbox.configuration":"default"
         }})
     }
 
@@ -584,15 +588,15 @@ mod tests {
         let path = Path::new("reference");
         let selected = workspace_row(NAME, path);
         let mut old = workspace_row("old-custom-name", path);
-        old["labels"]["codex-sandbox.base-id"] = json!(OTHER_BASE);
-        old["labels"]["codex-sandbox.revision"] = json!("6");
-        old["labels"]["codex-sandbox.workspace-sha256"] = json!(OTHER_HASH);
-        old["labels"]["codex-sandbox.configuration"] = json!("custom");
+        old["labels"]["SmolSandbox.base-id"] = json!(OTHER_BASE);
+        old["labels"]["SmolSandbox.revision"] = json!("6");
+        old["labels"]["SmolSandbox.workspace-sha256"] = json!(OTHER_HASH);
+        old["labels"]["SmolSandbox.configuration"] = json!("custom");
         old["state"] = json!("paused-by-future-runtime");
         let contradictory_name =
             workspace_row("codex-workspace-abcdef123456-r7-0123456789ab", path);
         let mut contradictory_kind = workspace_row("kind-contradiction", path);
-        contradictory_kind["labels"]["codex-sandbox.kind"] = json!("login");
+        contradictory_kind["labels"]["SmolSandbox.kind"] = json!("login");
         let rows = inventory(vec![
             selected,
             old,
@@ -628,18 +632,18 @@ mod tests {
     fn all_scope_accepts_labelled_shared_overrides_and_complete_legacy_names() {
         let path = Path::new("reference");
         let mut other = workspace_row("another-workspace", Path::new("elsewhere"));
-        other["labels"]["codex-sandbox.revision"] = json!("6");
+        other["labels"]["SmolSandbox.revision"] = json!("6");
         let rows = inventory(vec![
             other,
             json!({"name":"custom-builder","state":"stopped","labels":{
-                "codex-sandbox.kind":"builder","codex-sandbox.base-id":BASE}}),
+                "SmolSandbox.kind":"builder","SmolSandbox.base-id":BASE}}),
             json!({"name":"custom-login","state":"stopped","labels":{
-                "codex-sandbox.kind":"login","codex-sandbox.base-id":OTHER_BASE,
-                "codex-sandbox.revision":"6"}}),
+                "SmolSandbox.kind":"login","SmolSandbox.base-id":OTHER_BASE,
+                "SmolSandbox.revision":"6"}}),
             json!({"name":"codex-builder-abcdef123456","state":"created"}),
             json!({"name":"codex-login-abcdef123456-r6","state":"stopped"}),
             json!({"name":"codex-workspace-abcdef123456-r6-abcdef012345","state":"stopped"}),
-            json!({"name":"namespace-only","labels":{"codex-sandbox.extra":"yes"}}),
+            json!({"name":"namespace-only","labels":{"SmolSandbox.extra":"yes"}}),
             json!({"name":"codex-builder-abcdef123456-extra"}),
             json!({"name":"codex-workspace-abcdef123456-r6-abcdef012345-extra"}),
         ]);
@@ -665,9 +669,9 @@ mod tests {
         missing["labels"]
             .as_object_mut()
             .unwrap()
-            .remove("codex-sandbox.workspace-path-sha256");
+            .remove("SmolSandbox.workspace-path-sha256");
         let mut malformed = workspace_row("custom-name", path);
-        malformed["labels"]["codex-sandbox.workspace-path-sha256"] = json!("not-a-hash");
+        malformed["labels"]["SmolSandbox.workspace-path-sha256"] = json!("not-a-hash");
         let rows = inventory(vec![missing, malformed]);
         let scoped = report(&rows, path, reference(true), false);
         assert!(scoped.machines.is_empty());
@@ -689,7 +693,7 @@ mod tests {
     fn unavailable_reference_does_not_hide_valid_ownership_or_override_unknown() {
         let path = Path::new("reference");
         let mut bad = workspace_row("bad", path);
-        bad["labels"]["codex-sandbox.configuration"] = json!("invalid");
+        bad["labels"]["SmolSandbox.configuration"] = json!("invalid");
         let rows = inventory(vec![
             workspace_row(NAME, path),
             workspace_row("elsewhere", Path::new("elsewhere")),
@@ -714,10 +718,10 @@ mod tests {
     fn policy_base_configuration_and_name_have_separate_assessments() {
         let path = Path::new("reference");
         for (field, value, expected) in [
-            ("codex-sandbox.revision", "6", "different-policy"),
-            ("codex-sandbox.base-id", OTHER_BASE, "different-base"),
+            ("SmolSandbox.revision", "6", "different-policy"),
+            ("SmolSandbox.base-id", OTHER_BASE, "different-base"),
             (
-                "codex-sandbox.workspace-sha256",
+                "SmolSandbox.workspace-sha256",
                 OTHER_HASH,
                 "different-configuration",
             ),

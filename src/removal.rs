@@ -137,6 +137,7 @@ impl Names {
     }
 
     fn ownership(&self, machine: &Machine) -> Result<Option<Ownership>> {
+        machine.ensure_ownership_consistent()?;
         let legacy = self.legacy(&machine.name);
         if !machine.has_ownership_labels() {
             return Ok(legacy);
@@ -147,9 +148,7 @@ impl Names {
             "{}: managed base ID is missing or malformed",
             machine.name
         );
-        let no_workspace_fields = !MANAGED_KEYS[3..]
-            .iter()
-            .any(|key| machine.labels.contains_key(*key));
+        let no_workspace_fields = !(3..MANAGED_KEYS.len()).any(|index| machine.has_label(index));
         match kind {
             "workspace" => {
                 ensure!(
@@ -167,7 +166,7 @@ impl Names {
                 machine.name
             ),
             "builder" => ensure!(
-                !machine.labels.contains_key(MANAGED_KEYS[2]) && no_workspace_fields,
+                !machine.has_label(2) && no_workspace_fields,
                 "{}: builder labels are incomplete or contradictory",
                 machine.name
             ),

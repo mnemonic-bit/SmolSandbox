@@ -8,6 +8,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub const MANAGED_KEYS: [&str; 6] = [
+    "SmolSandbox.kind",
+    "SmolSandbox.base-id",
+    "SmolSandbox.revision",
+    "SmolSandbox.workspace-sha256",
+    "SmolSandbox.workspace-path-sha256",
+    "SmolSandbox.configuration",
+];
+const LEGACY_MANAGED_KEYS: [&str; 6] = [
     "codex-sandbox.kind",
     "codex-sandbox.base-id",
     "codex-sandbox.revision",
@@ -69,17 +77,42 @@ pub type Inventory = Vec<Machine>;
 impl Machine {
     pub fn has_ownership_labels(&self) -> bool {
         self.labels.keys().any(|key| {
-            key.starts_with("codex-sandbox.")
-                && !matches!(
-                    key.as_str(),
-                    "codex-sandbox.base-inputs" | "codex-sandbox.machine-inputs"
-                )
+            key.strip_prefix("SmolSandbox.")
+                .or_else(|| key.strip_prefix("codex-sandbox."))
+                .is_some_and(|suffix| !matches!(suffix, "base-inputs" | "machine-inputs"))
         })
+    }
+
+    pub fn has_label(&self, index: usize) -> bool {
+        self.labels.contains_key(MANAGED_KEYS[index])
+            || self.labels.contains_key(LEGACY_MANAGED_KEYS[index])
+    }
+
+    pub fn ownership_conflicts(&self) -> bool {
+        MANAGED_KEYS
+            .iter()
+            .zip(LEGACY_MANAGED_KEYS)
+            .any(|(key, legacy)| {
+                self.labels
+                    .get(*key)
+                    .zip(self.labels.get(legacy))
+                    .is_some_and(|(current, old)| current != old)
+            })
+    }
+
+    pub fn ensure_ownership_consistent(&self) -> Result<()> {
+        ensure!(
+            !self.ownership_conflicts(),
+            "{}: ownership labels contradict across SmolSandbox. and codex-sandbox. namespaces",
+            self.name
+        );
+        Ok(())
     }
 
     pub fn label(&self, index: usize) -> &str {
         self.labels
             .get(MANAGED_KEYS[index])
+            .or_else(|| self.labels.get(LEGACY_MANAGED_KEYS[index]))
             .map(String::as_str)
             .unwrap_or("")
     }
@@ -184,61 +217,64 @@ pub fn classify(inventory: &Inventory, identity: &Identity) -> Vec<Classified> {
     inventory
         .iter()
         .map(|machine| {
-            let has_labels = MANAGED_KEYS
-                .iter()
-                .any(|key| machine.labels.contains_key(*key));
+            let has_labels = machine.has_ownership_labels();
             let owned =
                 machine.label(0) == "workspace" && machine.label(3) == identity.workspace_hash;
             let legacy_match = legacy.is_match(&machine.name);
             let mut source = if has_labels { "labels" } else { "legacy-name" };
-            let (category, reason) =
-                if identity.override_name && machine.name == identity.desired_name {
-                    source = "override";
-                    (Category::Desired, "")
-                } else if owned {
-                    if !base_valid(machine.label(1)) || !revision_valid(machine.label(2)) {
-                        (
-                            Category::Ambiguous,
-                            "managed workspace labels are incomplete or malformed",
-                        )
-                    } else if identity.override_name {
-                        (Category::Stale, "")
-                    } else if machine.name == identity.desired_name
-                        && machine.label(1) == identity.base_id
-                        && machine.label(2) == identity.revision
-                    {
-                        (Category::Desired, "")
-                    } else if machine.label(1) != identity.base_id
-                        || machine.label(2) != identity.revision
-                    {
-                        (Category::Stale, "")
-                    } else {
-                        (
-                            Category::Ambiguous,
-                            "managed identity matches but the deterministic name does not",
-                        )
-                    }
-                } else if has_labels {
-                    if machine.name == identity.desired_name
-                        || legacy_match
-                        || machine.label(3) == identity.workspace_hash
-                    {
-                        (
-                            Category::Ambiguous,
-                            "managed labels are missing or contradict the requested workspace",
-                        )
-                    } else {
-                        (Category::Unrelated, "")
-                    }
+            let (category, reason) = if machine.ownership_conflicts() {
+                source = "labels";
+                (
+                    Category::Ambiguous,
+                    "managed ownership labels contradict across namespaces",
+                )
+            } else if identity.override_name && machine.name == identity.desired_name {
+                source = "override";
+                (Category::Desired, "")
+            } else if owned {
+                if !base_valid(machine.label(1)) || !revision_valid(machine.label(2)) {
+                    (
+                        Category::Ambiguous,
+                        "managed workspace labels are incomplete or malformed",
+                    )
                 } else if identity.override_name {
-                    (Category::Unrelated, "")
-                } else if machine.name == identity.desired_name {
+                    (Category::Stale, "")
+                } else if machine.name == identity.desired_name
+                    && machine.label(1) == identity.base_id
+                    && machine.label(2) == identity.revision
+                {
                     (Category::Desired, "")
-                } else if legacy_match {
+                } else if machine.label(1) != identity.base_id
+                    || machine.label(2) != identity.revision
+                {
                     (Category::Stale, "")
                 } else {
+                    (
+                        Category::Ambiguous,
+                        "managed identity matches but the deterministic name does not",
+                    )
+                }
+            } else if has_labels {
+                if machine.name == identity.desired_name
+                    || legacy_match
+                    || machine.label(3) == identity.workspace_hash
+                {
+                    (
+                        Category::Ambiguous,
+                        "managed labels are missing or contradict the requested workspace",
+                    )
+                } else {
                     (Category::Unrelated, "")
-                };
+                }
+            } else if identity.override_name {
+                (Category::Unrelated, "")
+            } else if machine.name == identity.desired_name {
+                (Category::Desired, "")
+            } else if legacy_match {
+                (Category::Stale, "")
+            } else {
+                (Category::Unrelated, "")
+            };
             Classified {
                 machine: machine.clone(),
                 category,
@@ -262,10 +298,8 @@ pub fn verify_readiness<'a>(inventory: &'a Inventory, identity: &Identity) -> Re
         "multiple machines match the desired identity"
     );
     let machine = matches[0];
-    if MANAGED_KEYS
-        .iter()
-        .any(|key| machine.labels.contains_key(*key))
-    {
+    machine.ensure_ownership_consistent()?;
+    if machine.has_ownership_labels() {
         ensure!(
             machine.label(0) == "workspace"
                 && machine.label(1) == identity.base_id
@@ -312,6 +346,13 @@ pub fn managed_inventory(inventory: &Inventory, current_base: &str) -> Result<Ve
     let mut result = Vec::new();
     let mut ambiguous = Vec::new();
     for machine in inventory {
+        if machine.ownership_conflicts() {
+            ambiguous.push(format!(
+                "{}: managed ownership labels contradict across namespaces",
+                machine.name
+            ));
+            continue;
+        }
         let has_labels = machine.has_ownership_labels();
         let b = builder.captures(&machine.name);
         let l = login.captures(&machine.name);
@@ -347,9 +388,7 @@ pub fn managed_inventory(inventory: &Inventory, current_base: &str) -> Result<Ve
             (has_labels
                 && !(machine.label(0) == "builder"
                     && machine.label(1) == managed.base_id
-                    && !MANAGED_KEYS[2..]
-                        .iter()
-                        .any(|key| machine.labels.contains_key(*key))))
+                    && !(2..MANAGED_KEYS.len()).any(|index| machine.has_label(index))))
             .then_some("builder labels are incomplete or contradictory")
         } else if let Some(capture) = l {
             managed.kind = "login".into();
@@ -359,9 +398,7 @@ pub fn managed_inventory(inventory: &Inventory, current_base: &str) -> Result<Ve
                 && !(machine.label(0) == "login"
                     && machine.label(1) == managed.base_id
                     && machine.label(2) == managed.revision
-                    && !MANAGED_KEYS[3..]
-                        .iter()
-                        .any(|key| machine.labels.contains_key(*key))))
+                    && !(3..MANAGED_KEYS.len()).any(|index| machine.has_label(index))))
             .then_some("login labels are incomplete or contradictory")
         } else if let Some(capture) = w {
             managed.kind = "workspace".into();
@@ -629,9 +666,9 @@ mod tests {
         for machine in &mut described {
             machine
                 .labels
-                .insert("codex-sandbox.base-inputs".into(), "invalid JSON".into());
+                .insert("SmolSandbox.base-inputs".into(), "invalid JSON".into());
             machine.labels.insert(
-                "codex-sandbox.machine-inputs".into(),
+                "SmolSandbox.machine-inputs".into(),
                 r#"{"version":999}"#.into(),
             );
             assert!(!machine.has_ownership_labels());
@@ -648,10 +685,80 @@ mod tests {
         }
         described[3]
             .labels
-            .insert("codex-sandbox.unknown".into(), "value".into());
+            .insert("SmolSandbox.unknown".into(), "value".into());
         assert!(described[3].has_ownership_labels());
         assert!(managed_inventory(&described, "aaaaaaaaaaaa").is_err());
     }
+    #[test]
+    fn ownership_namespaces_share_fields_and_reject_every_conflicting_pair() {
+        let mut id = identity();
+        let current = workspace(&id.base_id, &id.workspace_hash, "default", "stopped");
+        for mode in ["old", "dual", "split"] {
+            let mut machine = current.clone();
+            for (index, key) in MANAGED_KEYS.iter().enumerate() {
+                if mode == "old" || mode == "dual" || index % 2 == 0 {
+                    let value = machine.labels[*key].clone();
+                    machine
+                        .labels
+                        .insert(LEGACY_MANAGED_KEYS[index].into(), value);
+                    if mode != "dual" {
+                        machine.labels.remove(*key);
+                    }
+                }
+            }
+            let inventory = vec![machine];
+            assert_eq!(
+                classify(&inventory, &id)[0].category,
+                Category::Desired,
+                "{mode}"
+            );
+            assert!(verify_readiness(&inventory, &id).is_ok(), "{mode}");
+            assert_eq!(
+                managed_inventory(&inventory, &id.base_id).unwrap().len(),
+                1,
+                "{mode}"
+            );
+        }
+        for key in LEGACY_MANAGED_KEYS {
+            let mut machine = current.clone();
+            machine.labels.insert(key.into(), "contradiction".into());
+            let inventory = vec![machine];
+            for override_name in [false, true] {
+                id.override_name = override_name;
+                assert_eq!(
+                    classify(&inventory, &id)[0].category,
+                    Category::Ambiguous,
+                    "{key}"
+                );
+                assert!(verify_readiness(&inventory, &id).is_err(), "{key}");
+            }
+            assert!(managed_inventory(&inventory, &id.base_id).is_err(), "{key}");
+        }
+    }
+
+    #[test]
+    fn descriptive_labels_in_both_namespaces_never_establish_ownership() {
+        let mut machine = workspace("aaaaaaaaaaaa", &"b".repeat(64), "default", "stopped");
+        machine.name = "unrelated".into();
+        machine.labels.clear();
+        for prefix in ["SmolSandbox", "codex-sandbox"] {
+            for suffix in ["base-inputs", "machine-inputs"] {
+                machine
+                    .labels
+                    .insert(format!("{prefix}.{suffix}"), "invalid JSON".into());
+            }
+        }
+        assert!(!machine.has_ownership_labels());
+        assert!(!machine.ownership_conflicts());
+        assert!(managed_inventory(&vec![machine.clone()], "aaaaaaaaaaaa")
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            classify(&vec![machine], &identity())[0].category,
+            Category::Unrelated
+        );
+    }
+
     #[test]
     fn malformed_inventory_never_becomes_empty() {
         for bytes in [
@@ -939,7 +1046,7 @@ mod parity_tests {
         let m = machine(
             "unrelated",
             "stopped",
-            json!({"codex-sandbox.future":"value"}),
+            json!({"SmolSandbox.future":"value"}),
         );
         assert!(managed_inventory(&vec![m], "aaaaaaaaaaaa").is_err());
         let m = machine(
