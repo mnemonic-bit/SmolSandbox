@@ -2,10 +2,12 @@
 
 ## Status
 
-Proposed. This change adds a specification and supporting research only.
-Implementation, native Windows ARM64 execution, and hosted publication checks
-are pending. No workflow, release asset, runtime policy, or package version
-changes during specification preparation.
+In progress. Version `0.15.0` adds the Windows ARM64 workflow, packaging,
+publication requirements, and download guidance. Local validation is recorded
+in [Feature 0021 validation](feature-0021-validation.md). Native Windows ARM64
+execution and hosted publication checks remain pending; implementation
+acceptance requires those results. Specification preparation changed no
+workflow, release asset, runtime policy, or package version.
 
 ## Outcome and baseline
 

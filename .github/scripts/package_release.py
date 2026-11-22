@@ -19,6 +19,7 @@ TARGETS = {
     'aarch64-unknown-linux-gnu': ('smolsbx', 'ELF ARM64'),
     'aarch64-apple-darwin': ('smolsbx', 'Mach-O ARM64'),
     'x86_64-pc-windows-msvc': ('smolsbx.exe', 'PE x86-64'),
+    'aarch64-pc-windows-msvc': ('smolsbx.exe', 'PE ARM64'),
 }
 
 
@@ -31,10 +32,12 @@ def check_architecture(content, target):
     elif target == 'aarch64-apple-darwin':
         valid = (len(content) >= 8 and content[:4] == b'\xcf\xfa\xed\xfe'
                  and int.from_bytes(content[4:8], 'little') == 0x0100000C)
-    elif target == 'x86_64-pc-windows-msvc' and len(content) >= 64:
+    elif target.endswith('-pc-windows-msvc') and len(content) >= 64:
         offset = int.from_bytes(content[60:64], 'little')
-        valid = (content[:2] == b'MZ' and content[offset:offset + 4] == b'PE\x00\x00'
-                 and int.from_bytes(content[offset + 4:offset + 6], 'little') == 0x8664)
+        machine = 0xAA64 if target == 'aarch64-pc-windows-msvc' else 0x8664
+        valid = (content[:2] == b'MZ' and 64 <= offset <= len(content) - 24
+                 and content[offset:offset + 4] == b'PE\x00\x00'
+                 and int.from_bytes(content[offset + 4:offset + 6], 'little') == machine)
     if not valid:
         raise ReleaseError(f'{target}: executable does not have the expected {TARGETS[target][1]} header')
 

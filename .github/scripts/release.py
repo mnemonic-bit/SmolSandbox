@@ -27,6 +27,7 @@ BINARY_TARGETS = (
     "aarch64-unknown-linux-gnu",
     "aarch64-apple-darwin",
     "x86_64-pc-windows-msvc",
+    "aarch64-pc-windows-msvc",
 )
 
 
@@ -129,7 +130,7 @@ class GitHubAPI:
 def load_binary_assets():
     directory = os.environ.get("RELEASE_ASSET_DIR")
     if not directory:
-        raise ReleaseError("RELEASE_ASSET_DIR is required for all four binary targets")
+        raise ReleaseError(f"RELEASE_ASSET_DIR is required for all {len(BINARY_TARGETS)} binary targets")
     root = Path(directory)
     assets = {}
     for target in BINARY_TARGETS:
@@ -226,7 +227,7 @@ def ensure_binary_assets(api, release, tag, sha, expected, report):
         missing = ", ".join(sorted(set(expected) - set(final))) or "none"
         unexpected = ", ".join(sorted(set(final) - set(expected))) or "none"
         raise ReleaseError(
-            f"Binary release {tag} does not contain exactly the four required ZIPs; "
+            f"Binary release {tag} does not contain exactly the {len(expected)} required ZIPs; "
             f"missing: {missing}; unexpected: {unexpected}; rerun the original workflow"
         )
     for name, data in expected.items():
@@ -235,7 +236,7 @@ def ensure_binary_assets(api, release, tag, sha, expected, report):
         verify_binary_asset(api, final[name], name, data)
     if resolve_tag(api, tag) != sha:
         raise ReleaseError(f"Tag {tag} changed during binary release verification")
-    report(f"Verified complete binary release {tag}: all four target ZIPs")
+    report(f"Verified complete binary release {tag}: all {len(expected)} target ZIPs")
 
 
 def parse_version(manifest_text, lock_text):
