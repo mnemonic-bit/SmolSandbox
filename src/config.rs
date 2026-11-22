@@ -719,12 +719,13 @@ mod tests {
             .collect();
         for command in [
             "npm install -g @openai/codex@0.171.0",
-            "npx -y skills@1.8.1 add mattpocock/skills --skill=grill-me --skill=grilling --agent codex --global --yes",
-            "mkdir -p /root/.codex/skills && cp -aL /root/.agents/skills/grill-me /root/.agents/skills/grilling /root/.codex/skills/",
             "/root/.local/bin/codebase-memory-mcp --version",
             "ln -sf /root/.local/bin/codebase-memory-mcp /usr/local/bin/",
         ] {
-            assert!(commands.contains(&command), "missing init command: {command}");
+            assert!(
+                commands.contains(&command),
+                "missing init command: {command}"
+            );
         }
         assert!(!commands
             .iter()
@@ -743,13 +744,55 @@ mod tests {
         assert!(codex_index < cbm_index);
         let skills_index = commands
             .iter()
-            .position(|command| command.starts_with("npx -y skills@1.8.1 "))
+            .position(|command| command.contains("npx -y skills@1.8.1 "))
             .unwrap();
+        let skills_install = commands[skills_index];
+        for fragment in [
+            "set -eu;",
+            "npx -y skills@1.8.1 add mattpocock/skills --skill '*' --agent codex --global --yes",
+            r#"cat "$skills_log""#,
+            r#"test "$skills_status" -eq 0"#,
+            "Failed to install |SKILLS_CATEGORY_DIR_CONFLICT|SKILLS_LOCK_WRITE_FAILED",
+            "then exit 1;",
+        ] {
+            assert!(
+                skills_install.contains(fragment),
+                "missing skill installation fragment: {fragment}"
+            );
+        }
+        let skills_reset_index = commands
+            .iter()
+            .position(|command| command.contains(".skills |= with_entries"))
+            .unwrap();
+        let skills_reset = commands[skills_reset_index];
+        assert!(skills_reset.starts_with("set -eu;"));
+        assert!(skills_reset.contains(r#"select(.value.source != "mattpocock/skills")"#));
+        assert!(skills_reset.contains("mv \"$skills_lock\" /root/.agents/.skill-lock.json"));
         let skills_copy_index = commands
             .iter()
-            .position(|command| command.contains("cp -aL /root/.agents/skills/grill-me"))
+            .position(|command| command.contains("cp -aL \"/root/.agents/skills/$skill\""))
             .unwrap();
+        let skills_copy = commands[skills_copy_index];
+        for fragment in [
+            "set -eu;",
+            r#"entry.source === "mattpocock/skills""#,
+            "/root/.agents/.skill-lock.json",
+            "if (entries.length === 0) throw new Error(",
+            r#"test -f "/root/.agents/skills/$skill/SKILL.md""#,
+            r#"test ! -L "/root/.codex/skills/$skill""#,
+            r#"cp -aL "/root/.agents/skills/$skill" /root/.codex/skills/"#,
+        ] {
+            assert!(
+                skills_copy.contains(fragment),
+                "missing skill copy fragment: {fragment}"
+            );
+        }
+        assert!(!commands[skills_index].contains("--all"));
+        assert!(!skills_copy.contains("grill-me"));
+        assert!(!skills_copy.contains("grilling"));
+        assert!(skills_reset_index < skills_index);
         assert!(skills_index < skills_copy_index);
+        assert!(skills_copy_index < cbm_index);
         assert!(skills_copy_index < commands.len() - 1);
         assert!(commands.last().unwrap().contains(
             "mkdir -p /workspace/myrepo /opt/codex-home && cp -a /root/.codex/. /opt/codex-home/"

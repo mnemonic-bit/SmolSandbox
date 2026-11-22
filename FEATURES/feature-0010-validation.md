@@ -899,3 +899,48 @@ feature validation record. Preserve all prior observations and source
 revisions. Final cutover acceptance remains pending the existing native and
 real guest gates for supported virtualization hosts. The fifth CLI target
 does not enable Windows ARM64 sandbox creation or close those gates.
+
+
+## Feature 0022 complete Codex skills audit: 2026-11-22
+
+Source revision `3c78d81117623ee2ac97471f089772bc1ecebe73` plus the local
+[Feature 0022](feature-0022-install-all-matt-pocock-skills.md) implementation
+uses package version `0.16.0` in both Cargo files. Lifecycle policy revision
+remains `7`. The tracked software diff SHA-256 is
+`8f8a7ac8ea00d8ff8d97ac1108b628a44c3643bb93e6a56ebf1caefa6efacf51`;
+[Feature 0022 validation](feature-0022-validation.md) records the fingerprint
+command, separate fixture-script fingerprint, environments, complete observed
+upstream inventory, commands, exit codes, and AC-01 through AC-09 results.
+
+New Codex definitions select every installable `mattpocock/skills` skill
+through the quoted wildcard with skills CLI `1.8.1`. Provisioning clears only
+prior source metadata, rejects reported partial installation failures, and
+copies complete source-filtered skill trees with symlinks dereferenced before
+the prepared-home snapshot. Existing user-owned definitions and persistent
+home seeding retain their current behavior. Other templates, allowlists,
+Codex and tool pins, and Rust lifecycle policy have no changes.
+
+The following results were observed on native
+`x86_64-unknown-linux-gnu` with Rust/Cargo `1.100.0`. Provisioning evidence
+comes from a separate disposable x86-64 Debian trixie container with GNU cp
+`9.7`; the real installer used supported Node `22.23.5` rather than the
+complete template's Node 26 provisioning sequence.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Formatting and both Clippy configurations | passed | All three required commands exited 0 |
+| Both complete Rust test configurations | passed | Exit 0; 148 default tests and 225 tests with `test-adapter` |
+| Production release build and offline generation | passed | Exit 0; default features; `smolsbx 0.16.0`; generated definition equals template bytes with empty `PATH` and absent SmolVM; repeated generation exits 1 and preserves existing bytes |
+| Baseline independence | passed | Exit 0; isolated formatting, both lint/test configurations, production build, and ten compiled test executables per configuration with empty `PATH` |
+| Deterministic skill and persistent-home fixtures | passed | Both template and generated-definition runs exited 0; 12 checks cover literal wildcard arguments, a third skill, complete trees, executable permissions, symlink removal, injected failures, source isolation, and empty/retained/repeated seeding |
+| Real upstream skill commands in a disposable container | passed | Source reset, pinned installer, copy, snapshot prefix, and pinned discovery exited 0; actual checkout `abeeaf95660ba9e8b7c753eb38f441ca707a8823`; all 39 discovered skills and 109 files matched paths, bytes, and modes across source/install/prepared/snapshot trees; prepared copies remained readable after source removal |
+| Independent implementation review | passed | Separate agents reviewed pinned CLI failure behavior, source selection, template/config regressions, and evidence limits; no required code correction remained |
+| Other native targets and hosted CI | not_run | No new Linux ARM64, macOS ARM64, Windows x86-64/ARM64, or hosted execution evidence was collected |
+| Real SmolVM guests and Codex discovery | not_run | SmolVM and `/dev/kvm` are absent; fresh x64/ARM64 guests, Codex discovery after persistent mounting, and retained-home guest restarts remain pending |
+
+Feature 0022 remains In progress. AC-01 through AC-05 and AC-07 through
+AC-09 passed locally; AC-06 remains `not_run`. Container file evidence does
+not establish complete guest provisioning or Codex discovery. Preserve all
+previous observations and source revisions. Final cutover acceptance remains
+pending the existing native and real guest gates for every required profile
+and supported virtualization host.

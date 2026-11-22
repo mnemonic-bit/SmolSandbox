@@ -1,7 +1,7 @@
 # codex-sandbox-harness: codex
 # Smolfile — Dev tools base image for smolvm (smol-machines/smolvm)
 # One declarative microVM: Debian 13 slim + Node 26 + Python 3 + Rust + .NET 10 SDK,
-# OpenAI Codex CLI, Matt Pocock's grill-me/grilling skills,
+# OpenAI Codex CLI, all installable Matt Pocock skills,
 # DeusData's codebase-memory-mcp, Podman + Buildah for nested containers,
 # and Playwright + per-stack dev/debug tooling for live web-app testing.
 #
@@ -152,12 +152,19 @@ init = [
   # first use.
   "mkdir -p /root/.codex && printf 'model = \"gpt-5.6-sol\"\\nmodel_reasoning_effort = \"high\"\\nmodel_context_window = 1000000\\nmodel_auto_compact_token_limit = 900000\\nsandbox_mode = \"danger-full-access\"\\napproval_policy = \"never\"\\n\\n[tui]\\nstatus_line = [\\n  \"model-with-reasoning\",\\n  \"current-dir\",\\n  \"context-remaining\",\\n  \"used-tokens\",\\n  \"five-hour-limit\",\\n  \"weekly-limit\",\\n]\\nstatus_line_use_colors = true\\n\\n[projects.\"/workspace/myrepo\"]\\ntrust_level = \"trusted\"\\n' > /root/.codex/config.toml",
 
-  # Matt Pocock's grill-me + grilling skills — noninteractive global install.
-  # skills 1.8.1 uses /root/.agents/skills for Codex. Copy the selected files
-  # into the prepared Codex home so the persistent-home snapshot contains
-  # the skills without symlinks to a separate, unmounted home directory.
-  "npx -y skills@1.8.1 add mattpocock/skills --skill=grill-me --skill=grilling --agent codex --global --yes",
-  "mkdir -p /root/.codex/skills && cp -aL /root/.agents/skills/grill-me /root/.agents/skills/grilling /root/.codex/skills/",
+  # Install every upstream Matt Pocock skill for Codex without prompting.
+  # skills 1.8.1 records source ownership in the global lock file and uses
+  # sanitized names under /root/.agents/skills. Match the installer's name
+  # normalization when reading the lock. Copy only this source's
+  # complete skill trees into the prepared Codex home, dereferencing links.
+  # Reject an empty inventory, missing SKILL.md files, and copy failures.
+  # Drop prior source records so an empty install cannot reuse stale metadata.
+  # Preserve unrelated lock entries and installed skill files.
+  "set -eu; if test -f /root/.agents/.skill-lock.json; then skills_lock=$(mktemp /root/.agents/.skill-lock.XXXXXX); trap 'rm -f \"$skills_lock\"' EXIT; jq '.skills |= with_entries(select(.value.source != \"mattpocock/skills\"))' /root/.agents/.skill-lock.json > \"$skills_lock\"; mv \"$skills_lock\" /root/.agents/.skill-lock.json; fi",
+  # skills 1.8.1 can report partial failures with exit status zero. Preserve
+  # installer output and reject installation, skipped-skill, and lock errors.
+  "set -eu; skills_log=$(mktemp); trap 'rm -f \"$skills_log\"' EXIT; skills_status=0; npx -y skills@1.8.1 add mattpocock/skills --skill '*' --agent codex --global --yes > \"$skills_log\" 2>&1 || skills_status=$?; cat \"$skills_log\"; test \"$skills_status\" -eq 0; if grep -Eq 'Failed to install |SKILLS_CATEGORY_DIR_CONFLICT|SKILLS_LOCK_WRITE_FAILED' \"$skills_log\"; then exit 1; else test \"$?\" -eq 1; fi",
+  "set -eu; skills=$(node -e 'const fs = require(\"node:fs\"); const entries = Object.entries(JSON.parse(fs.readFileSync(\"/root/.agents/.skill-lock.json\", \"utf8\")).skills).filter(([, entry]) => entry.source === \"mattpocock/skills\"); if (entries.length === 0) throw new Error(\"No Matt Pocock skills installed\"); for (const [name] of entries) console.log(name.toLowerCase().replace(/[^a-z0-9._]+/g, \"-\").replace(/^[.-]+|[.-]+$/g, \"\").substring(0, 255) || \"unnamed-skill\");'); mkdir -p /root/.codex/skills; printf '%s\\n' \"$skills\" | while IFS= read -r skill; do test -f \"/root/.agents/skills/$skill/SKILL.md\"; test ! -L \"/root/.codex/skills/$skill\"; cp -aL \"/root/.agents/skills/$skill\" /root/.codex/skills/; done",
 
   # DeusData codebase-memory-mcp. The maintained installer selects the fully
   # static Linux "-portable" artifact for both x64 and Arm64.
@@ -215,7 +222,7 @@ init = [
   "docker run --rm docker.io/library/alpine echo nested-podman-via-docker-ok",
 
   # Derived machines mount persistent state over /root/.codex. Preserve the
-  # prepared defaults elsewhere in the artifact so start-login/start-codex
-  # can copy missing config, skills, and MCP registration into that mount.
+  # complete prepared home elsewhere in the artifact so login/start can
+  # copy missing config, all installed skills, and MCP registration into it.
   "mkdir -p /workspace/myrepo /opt/codex-home && cp -a /root/.codex/. /opt/codex-home/ && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/node-setup.sh"
 ]
