@@ -718,7 +718,7 @@ mod tests {
             .map(|command| command.as_str().unwrap())
             .collect();
         for command in [
-            "npm install -g @openai/codex@0.169.0",
+            "npm install -g @openai/codex@0.171.0",
             "npx -y skills@1.8.1 add mattpocock/skills --skill=grill-me --skill=grilling --agent codex --global --yes",
             "mkdir -p /root/.codex/skills && cp -aL /root/.agents/skills/grill-me /root/.agents/skills/grilling /root/.codex/skills/",
             "/root/.local/bin/codebase-memory-mcp --version",

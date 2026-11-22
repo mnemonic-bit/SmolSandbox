@@ -700,3 +700,35 @@ IDs and archive listings, native version results, and recovery observations.
 Preserve the earlier main publication and Bug 0005 observations above.
 Final cutover acceptance remains pending the outstanding native and real
 guest evidence.
+
+## Feature 0018 local Codex pin audit: 2026-11-22
+
+The [Feature 0018 validation record](feature-0018-validation.md) identifies
+source revision `7151713dcf703e02bcca772994243bf2b8e0ae92` plus the local
+Codex pin, exact-command regression, matching `0.12.0` package versions,
+and adoption guidance. The record retains the tested software diff SHA-256,
+official upstream sources, commands, exit codes, and architecture limits.
+The pin change preserves the other templates, tool versions, settings,
+allowlists, persistent-home policy, and lifecycle revision `5`.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Exact upstream version and Linux packages | passed | Official npm metadata and main/x64/ARM64 tarball probes returned HTTP 200; tagged upstream source retains launch, device-auth, and MCP interfaces |
+| Formatting and both Clippy configurations | passed | All three required commands exited 0 on native `x86_64-unknown-linux-gnu`, Rust/Cargo `1.100.0` |
+| Both complete Rust test configurations | passed | Exit 0; 118 default tests and 185 tests with `test-adapter` |
+| Production release build | passed | Exit 0; default features; executable reports `smolsbx 0.12.0` |
+| Baseline independence | passed | Required command exited 0; isolated source checks and compiled tests in both configurations passed with empty `PATH` |
+| Fresh generation and retained-file fixtures | passed | All four production definitions match embedded templates; parsed Codex pin/order, repeated-generation refusal, retained definition/home hashes, and distinct base IDs passed; adapter starts record unchanged seed commands |
+| Independent implementation and evidence review | passed | No actionable findings; reviewer verified scope, fingerprints, test totals, fixture comparisons, and validation limits |
+| Other native targets and hosted CI | not_run | No new Linux ARM64, macOS ARM64, Windows x86-64, or hosted run evidence was collected |
+| Real Linux x64 and ARM64 Codex guests | not_run | SmolVM and `/dev/kvm` are absent; provisioning, version, launch, device authentication, MCP query, and retained-home restart remain pending |
+
+Feature 0018 remains `In progress`; AC-01 through AC-03 and AC-05 through
+AC-07 passed locally, while AC-04 is `not_run`. The local fixtures record
+host file retention and adapter invocation policy, without executing guest seeding or Codex state
+migration. On compatible native hosts, record both guest architectures,
+SmolVM and Codex versions, commands, exit codes, authentication/MCP results,
+and retained-home restart observations. Preserve previous audit observations
+and source revisions. Final cutover acceptance remains pending the required
+native, artifact, and real guest evidence; this local audit establishes no
+new hosted release or cross-platform guest result.
