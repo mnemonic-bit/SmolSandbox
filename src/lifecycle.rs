@@ -1126,6 +1126,38 @@ fn list(options: &Options) -> Result<i32> {
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
+    #[test]
+    fn non_utf8_definition_path_is_rejected_without_filesystem_setup_or_writes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let definition_path = root
+            .path()
+            .join(OsString::from_vec(b"definition-\xff.smlbx".to_vec()));
+        let config = Config {
+            artifacts_dir: home.join("artifacts"),
+            state_root: home.join("state"),
+            locks_dir: home.join("locks"),
+            harness_home: home.join("codex-home"),
+            home,
+            definition: crate::config::Definition::parse(
+                definition_path,
+                b"# codex-sandbox-harness: codex\nimage='debian'\n".to_vec(),
+            )
+            .unwrap(),
+            workspace: root.path().join("workspace"),
+        };
+        let smolvm = Smolvm::for_test();
+        let error = match Lifecycle::new(&config, &smolvm, &Options::default()) {
+            Err(error) => error,
+            Ok(_) => panic!("Lifecycle::new accepted a non-UTF-8 definition path"),
+        };
+        assert_eq!(error.to_string(), "definition path is not UTF-8");
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 0);
+    }
+
     #[test]
     fn resolved_creation_options_share_arguments_metadata_and_fixed_resource_hashes() {
         let expected = [

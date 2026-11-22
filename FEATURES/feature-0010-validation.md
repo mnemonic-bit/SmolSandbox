@@ -857,3 +857,138 @@ Feature 0020 AC-01 through AC-10 passed locally. Preserve all previous
 observations and source revisions. Final cutover acceptance remains pending
 the outstanding native and real guest evidence; output-format fixtures
 establish no new real SmolVM result.
+
+## Bug 0008 non-UTF-8 fixture investigation: 2026-11-22
+
+Source revision `dcc72bec291736a225633e3afe5694bb793ee92f`, package
+`smolsandbox 0.14.0`. [Bug 0008](../BUGS/bug-0008-non-utf8-path-fixture-on-apfs.md)
+records the user-supplied CI failure at `tests/application.rs:1564:52`,
+where an invalid-UTF-8 definition filename is created by `fs::copy`.
+The supplied execution failed with OS error `92`, `Illegal byte sequence`,
+and 69 passing application tests. The source confirms the fixture operation;
+macOS/APFS is inferred from the error and Apple's documented filename
+restriction. The original run URL, target, filesystem, and SHA remain
+unverified. The other two reported build errors are outside this report.
+
+On native `x86_64-unknown-linux-gnu` with Rust and Cargo `1.100.0`, this
+command was `passed`, exit `0`, with one passing test and 69 filtered out:
+
+```sh
+cargo test --locked --features test-adapter --test application lifecycle::metadata_paths_reject_non_utf8_before_lifecycle_writes -- --exact --nocapture
+```
+
+A disposable Rust probe using the same invalid path bytes returned
+`valid_copy=Ok(6)`, `invalid_copy=Ok(6)`, and `invalid_write=Ok(())`.
+Local reproduction of the reported OS error: `inconclusive`. The probe
+was removed. Native macOS/APFS reproduction and verification of a fix:
+`not_run`. The seven full Rust checks, new hosted executions, other native
+targets, and real SmolVM checks: `not_run` for this report-only change.
+No software, test, template, workflow, or package-version change was applied.
+Final cutover acceptance remains pending the previously recorded execution
+gates.
+
+## Bug 0009 Windows identity metadata fixture investigation: 2026-11-22
+
+Source revision `dcc72bec291736a225633e3afe5694bb793ee92f`, package
+`smolsandbox 0.14.0`.
+[Bug 0009](../BUGS/bug-0009-windows-identity-metadata-path-separators.md)
+records two user-supplied Windows failures in `tests/identity_metadata.rs`,
+at lines 310 and 567, with one passing test. The first assertion compares
+native default paths with fixture expectations containing embedded `/`
+characters. The second compares mixed-separator explicit overrides with
+the original native defaults in the `mutable` branch. Exact creation-input
+strings and identity hashes differ. The original CI run URL and SHA remain
+unverified.
+
+On native `x86_64-unknown-linux-gnu` with Rust and Cargo `1.100.0`, this
+command was `passed`, exit `0`, with three passing tests in 7.79 seconds:
+
+```text
+cargo test --locked --features test-adapter --test identity_metadata -- --nocapture
+```
+
+The same command without `--features test-adapter` was `passed`, exit `0`,
+with zero tests because the test file requires that feature. A disposable
+fixed-string replay was `failed` at exact object equality; JSON round trips
+preserved both separator spellings and the option arrays had different
+SHA-256 values. The replay did not execute Windows paths or the application.
+No replay file was retained.
+
+Native Windows reproduction and verification of a correction: `not_run`.
+The seven full Rust checks, new hosted executions, other native targets,
+and real SmolVM checks: `not_run` for this report-only change. No software,
+test, template, workflow, or package-version change was applied. Preserve
+previous observations and source revisions. Final cutover acceptance remains
+pending the previously recorded execution gates.
+
+### Bug 0009 additional user-reported Windows ARM failure: 2026-11-22
+
+The user supplied a second `identity_metadata` log identified as the Windows
+ARM pipeline. Result: `failed`, with one passing test, the same two failures
+at `tests/identity_metadata.rs:310:21` and `:567:13`, 8.72 seconds elapsed,
+and process exit `1`. The metadata differs at the same host path separators,
+with the same left/right direction in each assertion. The second execution
+is additional evidence for [Bug 0009](../BUGS/bug-0009-windows-identity-metadata-path-separators.md);
+no separate defect was identified in the supplied excerpt.
+
+The second job's runner architecture, Rust target, run URL, and source SHA
+remain unverified. The inspected workflow configures Windows x86-64 only;
+ARM is the user's description of the second execution. Independent native
+reproduction and post-correction verification for that job: `not_run`.
+No additional software tests were run for this log comparison. No software
+or package-version change was applied. Previous observations and pending
+cutover gates remain in effect.
+
+## Bugs 0008 and 0009 corrections: 2026-11-22
+
+Source: uncommitted working-tree corrections based on
+`dcc72bec291736a225633e3afe5694bb793ee92f`, package `smolsandbox 0.14.1`.
+Execution host: native `x86_64-unknown-linux-gnu`, Rust and Cargo `1.100.0`;
+temporary fixtures used the local overlay filesystem. The results below
+describe local execution, with no new hosted CI run or CI URL.
+
+[Bug 0008](../BUGS/bug-0008-non-utf8-path-fixture-on-apfs.md) separates Unix
+artifact-path integration coverage from Linux definition-path integration
+coverage. The Linux-only case retains its invalid-filename fixture and
+no-mutation assertions. A Unix `Lifecycle::new` unit regression passes an
+invalid definition path without creating a file under that name and checks
+that the temporary root remains empty. Its test runtime constructor is
+excluded from non-Unix and production builds.
+
+[Bug 0009](../BUGS/bug-0009-windows-identity-metadata-path-separators.md)
+changes five host-path fixture constructions to join one directory component
+at a time. All four profiles, all three machine kinds, all five input
+variants, and exact metadata, argument, and identity-hash assertions remain
+covered. Production policy revision `7`, templates, path spelling, and
+identity behavior did not change. Both Cargo versions changed from
+`0.14.0` to `0.14.1`.
+
+Focused checks:
+
+| Command or probe | Result | Evidence |
+| --- | --- | --- |
+| `cargo test --locked --lib non_utf8_definition_path_is_rejected_without_filesystem_setup_or_writes -- --nocapture` | passed | One test; exit `0`, before and after the guard-bypass probe. |
+| Same unit command with only the definition-path encoding guard temporarily removed | failed | Exit `101`; the regression reported `Lifecycle::new accepted a non-UTF-8 definition path`. The diff was inspected before the probe, and the guard was restored afterward. |
+| `cargo test --locked --features test-adapter --test application metadata_ -- --nocapture` | passed | Three tests; exit `0`, including both split rejection cases and the existing malformed-metadata case. |
+| `cargo test --locked --features test-adapter --test identity_metadata -- --nocapture` | passed | Three tests; exit `0`. |
+
+Independent source review found no remaining issues in the two corrections.
+The following repository-root checks were `passed`, each with exit `0`:
+
+| Command | Evidence |
+| --- | --- |
+| `cargo fmt --all -- --check` | Formatting accepted. |
+| `cargo clippy --locked --all-targets -- -D warnings` | Default-feature targets accepted without warnings. |
+| `cargo clippy --locked --features test-adapter --all-targets -- -D warnings` | Adapter targets accepted without warnings. |
+| `cargo test --locked --all-targets` | 148 tests passed, including the new constructor regression. |
+| `cargo test --locked --features test-adapter --all-targets` | 225 tests passed, including 71 application tests and all three identity-metadata tests. |
+| `cargo build --locked --release --bin smolsbx` | Production release executable built; `target/release/smolsbx --version` printed `smolsbx 0.14.1`. |
+| `cargo run --locked --example check_baseline_independence` | Isolated formatting, both Clippy configurations, both full test configurations, and release build passed; 10 compiled test executables per feature configuration passed with an empty `PATH`. |
+
+Native macOS ARM64/APFS, Linux ARM64, and Windows x86-64 post-correction
+execution remain `not_run`: this environment supplies Linux x86-64 only.
+Verification of the user-reported Windows ARM execution remains `not_run`;
+its runner architecture, Rust target, source SHA, and CI URL remain
+unverified. Real SmolVM, provisioning, authentication, and interactive guest
+checks remain `not_run`. Previous observations and final cutover gates remain
+in effect.
