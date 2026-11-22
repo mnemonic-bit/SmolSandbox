@@ -80,6 +80,29 @@ fn check(root: &Path, arguments: &[&str]) -> Result<()> {
     Ok(())
 }
 
+fn verify_native_toolchain(root: &Path) -> Result<()> {
+    let expected = env::var("SMOLSBX_EXPECTED_RUST_HOST").ok();
+    let mut compiler = Command::new(env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()));
+    compiler.arg("-vV");
+    for (name, mut command) in [("Cargo", cargo(root, &["-vV"])), ("rustc", compiler)] {
+        let output = command
+            .output()
+            .with_context(|| format!("cannot inspect {name}"))?;
+        ensure!(output.status.success(), "{name} -vV failed");
+        let details = String::from_utf8(output.stdout)?;
+        println!("Baseline-independence {name}:\n{details}");
+        if let Some(expected) = &expected {
+            ensure!(
+                details
+                    .lines()
+                    .any(|line| line == format!("host: {expected}")),
+                "baseline-independence {name} must use native host {expected}"
+            );
+        }
+    }
+    Ok(())
+}
+
 fn run_without_host_tools(root: &Path, adapter: bool) -> Result<()> {
     let mut arguments = vec![
         "test",
@@ -134,6 +157,7 @@ fn run_without_host_tools(root: &Path, adapter: bool) -> Result<()> {
 
 fn main() -> Result<()> {
     let source = Path::new(env!("CARGO_MANIFEST_DIR"));
+    verify_native_toolchain(source)?;
     let copy = tempfile::tempdir().context("cannot create isolated source copy")?;
     copy_source(source, copy.path(), Path::new(""))?;
     for name in BASELINE {

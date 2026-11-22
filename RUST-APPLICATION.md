@@ -9,7 +9,7 @@ complete user-owned Smolfile definitions and a separately installed SmolVM.
 The Rust documentation reflects source removal in commit
 `28087885c2b84077c62ee92c5560a2cab1b68997`. Final cutover acceptance remains
 pending because real guest validation has not been established for every
-required profile and release target. The
+required profile and supported virtualization host. The
 [Feature 0010 validation record](FEATURES/feature-0010-validation.md) separates
 observed checks from outstanding gates. The historical completion decisions
 for Features 0004 and 0009 remain recorded in their validation records.
@@ -44,18 +44,27 @@ silently selected. Capability preflight checks the required SmolVM operations,
 inventory JSON, and native virtualization prerequisites before lifecycle
 mutation. Help, version, and configuration generation require no SmolVM.
 
-The [native CI matrix](.github/workflows/rust.yml) defines these release targets:
+The [native CI matrix](.github/workflows/rust.yml) defines five CLI distribution
+targets. The sandbox prerequisites distinguish compatible virtualization hosts
+from the Windows ARM64 CLI-only target:
 
-| Host | Architecture | Native prerequisite | Rust target |
+| Host | Architecture | Sandbox prerequisite | Rust target |
 | --- | --- | --- | --- |
 | Linux | x86-64 | Read/write access to `/dev/kvm` | `x86_64-unknown-linux-gnu` |
 | Linux | ARM64 | Read/write access to `/dev/kvm` | `aarch64-unknown-linux-gnu` |
 | macOS | ARM64 | Hypervisor.framework | `aarch64-apple-darwin` |
 | Windows | x86-64 | Windows Hypervisor Platform | `x86_64-pc-windows-msvc` |
+| Windows 11 | ARM64 | Unsupported sandbox runtime | `aarch64-pc-windows-msvc` |
 
-macOS Intel and Windows ARM64 are outside this release matrix. A configured
-CI job or successful cross-compilation does not establish native execution or
-real guest compatibility. Recorded native mocked results and real guest
+Windows ARM64 supports help, version, and configuration generation without
+SmolVM. Sandbox creation and guest execution remain unsupported on Windows
+ARM64; production virtualization preflight rejects that host before lifecycle
+mutation. A compatible upstream runtime and real guest evidence are required
+before enabling Windows ARM64 virtualization in a separate feature.
+
+macOS Intel remains outside this release matrix. A configured CI job or
+successful cross-compilation does not establish native execution or real guest
+compatibility. Recorded native mocked results and real guest
 procedures have separate evidence requirements under
 [validation and cutover gates](#validation-and-cutover-gates).
 
@@ -112,10 +121,37 @@ smolsbx start --smolfile ./claude.smlbx /path/to/project
 ```
 
 Inspect and edit the generated file. Preserve its single
-`# codex-sandbox-harness: <identifier>` metadata line. That marker and the
-`codex-sandbox.` managed-label namespace are retained compatibility
-identifiers. Moving or updating the executable does not rewrite existing
-definitions, credentials, or machine metadata.
+`# codex-sandbox-harness: <identifier>` metadata line. The definition marker
+remains a compatibility identifier. New machines use the `SmolSandbox.`
+managed-label namespace for every profile and machine kind. Updating the
+executable does not rewrite existing definitions, credentials, or machine
+metadata.
+
+### Machine label namespace transition
+
+The Bug 0007 correction replaces `codex-sandbox.` with `SmolSandbox.` for
+new creation labels. Existing old-prefix machines remain readable without
+relabeling. Ownership readers accept either prefix and combine fields from
+both prefixes. If both prefixes contain the same ownership key, their values
+must agree exactly. Any unequal duplicate ownership value makes the machine
+ambiguous and blocks lifecycle mutation; `--force` does not override the
+contradiction. Inspect the raw SmolVM inventory and resolve the conflicting
+labels or remove the affected machine through SmolVM before retrying.
+
+Descriptive labels alone never establish ownership. Descriptive readers use
+the new key with old-key fallback. Unequal duplicate descriptive values mark
+the metadata invalid without changing ownership authority. The raw query
+below uses the new creation key; for an old-only machine, query
+`codex-sandbox.machine-inputs` instead.
+
+Existing machines retain their creation-time policy revision. The policy
+revision increment selects new login and workspace machine names under the
+normal stale-machine rules. Use `smolsbx repair --check` to inspect workspace
+selection and `smolsbx repair --replace-stale` for an eligible stale
+replacement; the existing definition and harness home remain user-owned. The label
+namespace is not a base-generation or workspace-hash input. Base artifacts
+and base-generation cache paths retain their identity for unchanged
+definition bytes and SmolVM version.
 
 ### Whole-file selection
 
@@ -249,7 +285,7 @@ directory is the default workspace. `remove --global` rejects a workspace.
 | `login` | Run the selected profile's authentication workflow in its prepared login machine. |
 | `repair --check [WORKSPACE]` | Inspect workspace reconciliation without writing state or taking lifecycle locks. |
 | `repair --replace-stale [WORKSPACE]` | Prepare and verify the desired machine before deleting eligible stale machines. |
-| `list [WORKSPACE] [--all] [--json]` | Inspect managed machines and compare identities without lifecycle locks or application writes. |
+| `list [WORKSPACE] [--all] [--format yaml\|json]` | Inspect managed machines and compare identities without lifecycle locks or application writes. |
 | `clean [--workspace [WORKSPACE]]` | Delete the selected generation or one workspace's managed machines. |
 | `remove [WORKSPACE] [--global] [--all] [--force] [--dry-run]` | Delete eligible older-policy machines, with independent scope, revision, running-state, and preview options. |
 | `purge [--force \| --force-all]` | Delete eligible stopped machines and unprotected superseded artifacts. |
@@ -269,15 +305,16 @@ results, selection information, warnings, and errors remain visible. Failures
 identify the operation and explain how to enable runtime diagnostics.
 With `--verbose`, management stdout and stderr stream live to application
 stderr. Version, inventory, and capability query stdout remains internal;
-verbose mode exposes query stderr. `list --json` writes the same single JSON
-object to stdout in either mode, with no partial JSON on inventory failure.
+verbose mode exposes query stderr. Structured `list` output writes the same
+single YAML document or JSON object to stdout in either mode, with empty
+stdout on inventory failure.
 
 ```text
 smolsbx build /path/to/project
 smolsbx --verbose build /path/to/project
 smolsbx build --verbose /path/to/project
 smolsbx start /path/to/project --verbose
-smolsbx list --all --json --verbose
+smolsbx list --all --format json --verbose
 smolsbx start /path/to/project -- --verbose
 ```
 
@@ -340,6 +377,8 @@ associated with the canonical current directory or an explicit workspace:
 smolsbx list
 smolsbx list /path/to/project
 smolsbx list --all
+smolsbx list --all --format yaml
+smolsbx list /path/to/project --format=json
 smolsbx list --all --json
 smolsbx list --smolfile ./codex.smlbx --allow-host packages.example.com /path/to/project
 ```
@@ -370,15 +409,30 @@ including `BASE_SMOLFILE`, and invalid or unreadable selected definitions
 remain errors. `--allow-host` requires an available definition. Listing never
 falls back past an invalid nearer definition.
 
+With neither output selector, `list` prints human-readable text. The default
+does not depend on terminal detection, redirection, or environment variables.
+Use `--format yaml` or `--format json` before or after WORKSPACE; equals-sign
+syntax such as `--format=yaml` is also supported. Acceptable values are exactly
+the lowercase strings `yaml` and `json`; `--format text` is invalid.
+`--json` remains a supported compatibility alias for `--format json` without
+a deprecation warning. Combining `--json` with any `--format`, or repeating
+`--format`, is an argument error regardless of order or value. Argument errors
+exit 2 with empty stdout before any SmolVM query. `--format` is specific to
+`list`; it does not configure other commands or persist a setting.
+
 Human output prints the reference, full machine identities, `WORKSPACE`, and
-`HARNESS`. New machines record their full canonical workspace path and profile.
+`HARNESS`. One blank line separates the reference, optional warnings, summary,
+and machine table. One blank line separates complete machine entries; their
+reason and metadata lines stay adjacent. Empty scopes print `No matching
+machines.` in place of the table. New machines record their full canonical
+workspace path and profile.
 Builders and login machines display `shared`. For older workspace machines,
 a matching reference association hash permits a path display with source
 `reference`; other unknown paths display `unknown`. Listing does not search
 other workspace directories or read historical definition paths.
 
 New builders, login machines, and workspace machines carry two compact JSON
-labels: `codex-sandbox.base-inputs` and `codex-sandbox.machine-inputs`, each
+labels: `SmolSandbox.base-inputs` and `SmolSandbox.machine-inputs`, each
 with label schema version `1`. Base inputs record the normalized SmolVM
 version, selected definition path, full SHA-256 of the exact definition bytes,
 and harness profile. Machine inputs record the workspace path (`null` for
@@ -400,8 +454,15 @@ labels when reused. There is no metadata backfill or automatic replacement.
 Definition, artifact, harness-home, and workspace paths must be UTF-8;
 unsupported path bytes fail before lifecycle writes.
 
-`--json`
-writes one object with schema `version: 1`, `scope`, canonical `workspace`,
+`--format json` writes one compact object followed by a newline, byte-for-byte
+equivalent to `--json`. `--format yaml` writes one YAML 1.2 mapping document
+with two-space indentation, block mappings and nonempty sequences, and no
+tags, anchors, or document markers. Both formats preserve native string
+values, nested metadata, integer types, `null` values, and empty arrays (`[]`).
+YAML quotes and escapes strings where required to preserve their values.
+Both outputs end with one newline and retain schema `version: 1`.
+
+The report contains `version`, `scope`, canonical `workspace`,
 `reference`, `unassociated_workspace_count`, `warnings`, and sorted `machines`.
 The reference contains `definition`, `base_id`, `revision`,
 `workspace_sha256`, and `desired_machine`; unavailable values are null.
@@ -416,18 +477,25 @@ Metadata status precedence is `invalid`, `unsupported`, `complete`, `partial`,
 then `unavailable`. Invalid or future components remain null while an
 independently valid component remains visible. Descriptive metadata never
 changes ownership, association scope, identity assessments, or deletion
-authorization. Malformed inventory is fatal and produces no partial JSON;
+authorization. Malformed inventory is fatal and leaves structured stdout empty;
 invalid descriptive JSON strings remain per-row diagnostics.
+Warnings belong to the report's `warnings` array. Verbose diagnostics and
+external query stderr remain on stderr. Serialization completes before any
+structured stdout write; a write failure returns a nonzero exit status and
+may leave bytes already written. Empty scopes succeed with `machines: []`.
+Format selection does not change discovery, sorting, assessments, or metadata
+validation. YAML mapping order is deterministic; consumers should use field
+names rather than depend on mapping order.
 
 Filter recorded paths by exact equality or hosts by exact array membership
 with the optional user tool `jq`:
 
 ```bash
-smolsbx list --all --json |
+smolsbx list --all --format json |
   jq --arg path '/home/me/projects/myrepo' \
     '.machines[] | select(.workspace_path == $path)'
 
-smolsbx list --all --json |
+smolsbx list --all --format json |
   jq --arg option '--allow-host=packages.example.com' \
     '.machines[] | select((.machine_inputs.options // []) | index($option))'
 ```
@@ -438,7 +506,7 @@ SmolVM retains the same metadata independently of the listing formatter:
 smolvm machine ls --json |
   jq --arg path '/home/me/projects/myrepo' '
     .[] |
-    (.labels["codex-sandbox.machine-inputs"]? | fromjson?) as $inputs |
+    (.labels["SmolSandbox.machine-inputs"]? | fromjson?) as $inputs |
     select($inputs.workspace_path == $path)
   '
 ```
@@ -455,7 +523,7 @@ SmolVM itself may maintain its own registry while answering inventory queries.
 
 `remove` deletes guest writable state without an interactive confirmation.
 By default, removal selects managed workspace machines whose policy revision
-is older than the executable's current revision (`6`), across profiles,
+is older than the executable's current revision (`7`), across profiles,
 bases, and configurations. Package version changes, different definitions,
 and different configurations alone do not make a machine stale. Revisions
 compare numerically, including leading zeros and values too large for native
@@ -720,8 +788,9 @@ rename. Returning users can map historical shell actions to Rust commands:
 | `purge-sandbox.sh` | `purge` |
 
 The table maps actions; the former shell names are not Rust compatibility
-commands. The metadata marker, managed resource names, and label namespace
-retain their historical spelling to preserve identity and ownership.
+commands. The metadata marker and managed resource names retain their
+historical spelling. New labels use `SmolSandbox.`; compatible readers
+continue to recognize old-prefix ownership labels.
 [Feature 0008](FEATURES/feature-0008-provisioning-download-integrity.md) tracks
 additional provisioning-download integrity independently of migration and
 documentation completion.
@@ -738,7 +807,7 @@ and pull requests that leave both version files unchanged. The check parses
 the proposed merge commit's `Cargo.toml` and `Cargo.lock` without building
 code, running repository scripts, or installing project dependencies.
 
-After a merge reaches `develop`, all four native matrix jobs validate the
+After a merge reaches `develop`, all five native matrix jobs validate the
 committed source. After a merge reaches `main`, an early eligibility check
 validates the actual push commit before the native matrix starts. Publication
 requires that check and every native job to succeed in the same run. Failed,
@@ -790,14 +859,14 @@ does not weaken rules, change repository access, or commit version changes.
    rejects an existing tag or release, including a draft. Resolve merge
    conflicts before expecting the proposed merge metadata check to pass.
 5. If eligibility passes and other branch rules permit merging, merge the
-   pull request. Wait for main eligibility and all four native jobs.
+   pull request. Wait for main eligibility and all five native jobs.
 6. Find the resulting `v<version>` tag and normal GitHub Release in
    [repository releases](https://github.com/mnemonic-bit/SmolSandbox/releases).
    The release title is `v<version>` and the release has GitHub-generated
    notes. The tag identifies the validated push SHA, even if `main` advances
    before publication finishes.
 7. Wait for the release job to succeed before treating the binary release as
-   complete. Verify that the release page lists all four binary ZIP assets.
+   complete. Verify that the release page lists all five binary ZIP assets.
 
 A successful PR eligibility check records GitHub state at check time; the
 check does not reserve the version. Another tag or release can appear later.
@@ -806,9 +875,10 @@ failure. The workflow repeats eligibility after merging and immediately
 before publication. API errors fail eligibility instead of treating an
 unverifiable version as unused.
 
-Starting with version `0.13.0`, release automation attaches four executable-only
-binary ZIPs with stable filenames alongside the generated notes. The required
-uploaded assets are:
+Version `0.13.0` introduced four executable-only binary ZIPs with stable
+filenames alongside the generated notes. Version `0.15.0` adds Windows ARM64
+as the fifth ZIP. Releases using the Feature 0021 workflow require these five
+uploaded assets:
 
 | Operating system and architecture | Release asset name | Sole ZIP entry |
 | --- | --- | --- |
@@ -816,11 +886,14 @@ uploaded assets are:
 | Linux ARM64 | `smolsbx-aarch64-unknown-linux-gnu.zip` | `smolsbx` |
 | macOS ARM64 | `smolsbx-aarch64-apple-darwin.zip` | `smolsbx` |
 | Windows x86-64 | `smolsbx-x86_64-pc-windows-msvc.zip` | `smolsbx.exe` |
+| Windows ARM64 | `smolsbx-aarch64-pc-windows-msvc.zip` | `smolsbx.exe` |
 
 The README buttons use GitHub's `releases/latest/download/<asset-name>` route.
-Direct downloads require the first normal release containing all four stable
-names. Until that release is published, use the release-page link to select
-an available binary. Later releases reuse the same filenames; the tag, title,
+The Windows ARM64 button requires the first normal release containing the
+fifth stable asset name. Until that release is published, the latest release
+may contain only the original four ZIPs; use the release-page link to select
+an available binary. The other buttons require the stable names introduced
+in `0.13.0`. Later releases reuse the same filenames; the tag, title,
 and executable version still identify `v<version>`. A version-specific URL uses
 `releases/download/v<version>/<asset-name>`.
 
@@ -828,6 +901,11 @@ Earlier releases used `smolsbx-v<version>-<target>.zip`. Preserve those publishe
 names, asset IDs, bytes, and tags. No duplicate versioned aliases are uploaded
 for new releases. This transition supersedes Feature 0017's filename rule for
 new releases while preserving its historical observations.
+
+Feature 0021 supersedes the four-target counts in Features 0017 and 0019 for
+releases using the new workflow. Their previous acceptance evidence remains
+historical; the fifth distribution target does not establish Windows ARM64
+sandbox support.
 
 Each archive contains one regular file at the archive root. Templates are
 embedded in the executable; the ZIPs contain no separate resources, source,
@@ -838,7 +916,7 @@ the extracted executables with `--version`. Distributed builds exclude
 `test-adapter`.
 
 The publication job downloads packaged artifacts from its own workflow run.
-All four executables therefore come from successful native builds of the exact
+All five executables therefore come from successful native builds of the exact
 validated release commit, rather than a moving branch or another run. The
 release job validates every local ZIP before release writes and verifies
 uploaded bytes before reporting completion. Missing artifacts, packaging
@@ -854,8 +932,11 @@ finishing later does not explicitly replace a newer release as latest.
 
 After a transient validation or API failure, rerun the original workflow for
 the original main push commit. Recovery uses that workflow revision and its
-original filename scheme: versioned names for releases before this transition,
-stable names for new releases. A manual dispatch performs validation only
+original filename scheme and required target set: versioned names for releases
+before the stable-name transition, four stable ZIPs before Feature 0021, and
+five stable ZIPs for releases using the Feature 0021 workflow. Do not backfill
+older releases or recover them with the new five-target requirements.
+A manual dispatch performs validation only
 and cannot replace that publication attempt. Inspect the failed job output
 before rerunning; ruleset rejection requires the owner to resolve the tag
 creation policy while preserving branch requirements.
@@ -874,7 +955,8 @@ uploaded. A complete matching release succeeds without duplicate uploads or
 metadata edits. Conflicting asset contents or unexpected uploaded assets fail
 explicitly without silent replacement or deletion. Inspect the named target
 and conflict diagnostic before deciding on a reviewed version change. The
-release job reports completion only after all four required assets verify.
+release job reports completion only after every asset required by the original
+workflow revision verifies; the Feature 0021 workflow requires all five.
 
 After a successful release creation or draft publication, recovery retains
 the returned release ID and verifies that release through direct reads.
@@ -950,9 +1032,9 @@ removal is now recorded separately in the
 [current Feature 0010 audit](FEATURES/feature-0010-validation.md#source-removal-and-documentation-audit-2026-11-04).
 
 Final cutover acceptance requires recorded native mocked execution, real
-guest validation for every profile and release target, and physical baseline
-removal. Source removal has passed. Keep final acceptance pending until the
-remaining execution evidence is recorded. The configured CI workflow runs
+guest validation for every profile and supported virtualization host, and
+physical baseline removal. Source removal has passed. Keep final acceptance
+pending until the remaining execution evidence is recorded. The configured CI workflow runs
 mocked checks; real guest authentication and terminal checks require separate
 native execution.
 

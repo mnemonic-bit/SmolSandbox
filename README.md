@@ -9,13 +9,22 @@
 [![Download smolsbx for Linux ARM64 (ZIP)](assets/badges/download-linux-arm64.svg)](https://github.com/mnemonic-bit/SmolSandbox/releases/latest/download/smolsbx-aarch64-unknown-linux-gnu.zip)
 [![Download smolsbx for macOS Apple Silicon (ARM64, ZIP)](assets/badges/download-macos-arm64.svg)](https://github.com/mnemonic-bit/SmolSandbox/releases/latest/download/smolsbx-aarch64-apple-darwin.zip)
 [![Download smolsbx for Windows x86-64 (ZIP)](assets/badges/download-windows-x86-64.svg)](https://github.com/mnemonic-bit/SmolSandbox/releases/latest/download/smolsbx-x86_64-pc-windows-msvc.zip)
+[![Download smolsbx for Windows ARM64 (ZIP)](assets/badges/download-windows-arm64.svg)](https://github.com/mnemonic-bit/SmolSandbox/releases/latest/download/smolsbx-aarch64-pc-windows-msvc.zip)
 
 Open the [latest release](https://github.com/mnemonic-bit/SmolSandbox/releases/latest)
 to see available binaries. Extract the ZIP for your operating system and
 architecture, then copy `smolsbx` or `smolsbx.exe` to a directory on `PATH`.
 The direct download buttons require the first normal release with stable
-asset names, introduced in version `0.13.0`. Earlier releases use versioned
-filenames; download those ZIPs from the release page.
+asset names, introduced in version `0.13.0`. The Windows ARM64 button requires
+the first normal release containing the fifth ZIP, introduced in version
+`0.15.0`; until publication, the latest release may contain only four ZIPs.
+Earlier releases use versioned filenames; download those ZIPs from the release
+page.
+
+The Windows ARM64 executable supports help, version, and configuration
+generation without SmolVM. Windows ARM64 sandbox creation and guest execution
+remain unsupported; virtualization preflight rejects that host before lifecycle
+mutation.
 
 Release shows the latest published normal GitHub Release. Pre-release shows
 the committed version on `develop`, even while validation is pending or failed;
@@ -56,9 +65,11 @@ and machines remain available. See [command migration](RUST-APPLICATION.md#comma
 for the retained state paths and installation behavior.
 
 Install [SmolVM](https://github.com/smol-machines/smolvm#install) separately.
-The application does not install or bundle SmolVM. The configured release
-matrix covers Linux x86-64 and ARM64 with KVM, macOS ARM64 with
-Hypervisor.framework, and Windows x86-64 with Windows Hypervisor Platform.
+The application does not install or bundle SmolVM. CLI downloads cover Linux
+x86-64 and ARM64, macOS ARM64, and Windows x86-64 and ARM64. Sandbox hosts require
+Linux x86-64 or ARM64 with KVM, macOS ARM64 with Hypervisor.framework, or Windows
+x86-64 with Windows Hypervisor Platform. Windows ARM64 has no supported sandbox
+runtime.
 See [host requirements and validation scope](RUST-APPLICATION.md#executable-and-host-requirements)
 for native prerequisites and the distinction between mocked and real guest
 validation.
@@ -137,14 +148,15 @@ stdout and stderr live to application stderr:
 smolsbx build /path/to/project
 smolsbx --verbose build /path/to/project
 smolsbx start /path/to/project --verbose
-smolsbx list --all --json --verbose
+smolsbx list --all --format json --verbose
 ```
 
 Interactive shell, harness, and login sessions always inherit terminal input
 and output, including prompts and authentication instructions. Preparations
 and cleanup follow the management output policy. Query stdout remains
-internal, so `list --json` keeps its single JSON object on stdout in both
-modes. Failures include application diagnostics even without `--verbose`.
+internal, so structured `list` output keeps its single YAML document or JSON
+object on stdout in both modes. Failures include application diagnostics even
+without `--verbose`.
 `start --verbose` configures smolsandbox output; `start -- --verbose` passes
 `--verbose` unchanged to the guest harness. Repeating the application flag
 has the same effect as specifying it once.
@@ -158,8 +170,19 @@ machine including shared builders and login machines:
 smolsbx list
 smolsbx list /path/to/project
 smolsbx list --all
+smolsbx list --all --format yaml
+smolsbx list --all --format=json
 smolsbx list --all --json
 ```
+
+With no output selector, `list` prints human-readable text with blank lines
+between the reference, warnings, summary, and machine entries. Use
+`--format yaml` or `--format json` for one structured report; both formats
+retain the same schema and values. `--json` remains a supported alias for
+`--format json`. Do not combine `--json` with `--format` or repeat `--format`.
+Only the lowercase values `yaml` and `json` are accepted. Place the option
+before or after the workspace; both `--format VALUE` and `--format=VALUE`
+are supported.
 
 Listing compares each machine's identity with the current invocation and
 shows runtime state separately. Repeat the selected definition and any
@@ -170,7 +193,7 @@ state. Assessments do not authorize deletion or guarantee a successful start.
 
 New machines retain readable workspace paths, harness profiles, definition
 fingerprints, runtime versions, and creation options in structured SmolVM
-labels. Human output shows the full inputs; JSON exposes decoded objects for
+labels. Human output shows the full inputs; YAML and JSON expose decoded objects for
 path and host filtering. Shared machines display `shared`. Older machines
 can display the reference path when its association hash matches; other
 missing paths remain `unknown`. Recorded inputs describe creation requests,

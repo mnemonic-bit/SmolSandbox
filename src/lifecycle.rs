@@ -17,7 +17,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub(crate) const REVISION: &str = "6";
+pub(crate) const REVISION: &str = "7";
 const MEMORY: &str = "12288";
 const CPUS: &str = "4";
 
@@ -247,7 +247,7 @@ impl<'a> Lifecycle<'a> {
     }
 
     fn label(values: &mut Vec<OsString>, key: &str, value: &str) {
-        pair(values, "--label", format!("codex-sandbox.{key}={value}"));
+        pair(values, "--label", format!("SmolSandbox.{key}={value}"));
     }
 
     fn creation_arguments(
@@ -293,7 +293,12 @@ impl<'a> Lifecycle<'a> {
             self.identity.base_id,
             self.smolvm.version.trim()
         );
-        if !inventory.iter().any(|machine| machine.name == self.builder) {
+        if let Some(machine) = inventory
+            .iter()
+            .find(|machine| machine.name == self.builder)
+        {
+            machine.ensure_ownership_consistent()?;
+        } else {
             let mut values = args(&["machine", "create", "--name", &self.builder]);
             Self::label(&mut values, "kind", "builder");
             Self::label(&mut values, "base-id", &self.identity.base_id);
@@ -345,7 +350,8 @@ impl<'a> Lifecycle<'a> {
         if self.config.definition.profile.login().is_none() {
             return Ok(());
         }
-        if inventory.iter().any(|machine| machine.name == self.login) {
+        if let Some(machine) = inventory.iter().find(|machine| machine.name == self.login) {
+            machine.ensure_ownership_consistent()?;
             return Ok(());
         }
         let mut values = args(&["machine", "create", "--name", &self.login]);
@@ -411,6 +417,7 @@ impl<'a> Lifecycle<'a> {
         let inventory = self.smolvm.inventory()?;
         let pattern = Regex::new(r"^codex-builder-([0-9a-f]{12})$")?;
         for machine in inventory {
+            machine.ensure_ownership_consistent()?;
             let artifact = if machine.name == self.builder {
                 self.artifact.clone()
             } else if let Some(found) = pattern.captures(&machine.name) {
@@ -688,23 +695,14 @@ impl<'a> Lifecycle<'a> {
         let workspace = Regex::new(&format!(r"^codex-workspace-{base}-r[0-9]+-[0-9a-f]{{12}}$"))?;
         let mut selected = Vec::new();
         for machine in inventory {
-            let label = |name: &str| {
-                machine
-                    .labels
-                    .get(&format!("codex-sandbox.{name}"))
-                    .map(String::as_str)
-                    .unwrap_or("")
-            };
-            let kind = label("kind");
-            let label_base = label("base-id");
-            let revision = label("revision");
-            let hash = label("workspace-sha256");
-            let path = label("workspace-path-sha256");
-            let configuration = label("configuration");
-            let managed = machine
-                .labels
-                .keys()
-                .any(|key| domain::MANAGED_KEYS.contains(&key.as_str()));
+            machine.ensure_ownership_consistent()?;
+            let kind = machine.label(0);
+            let label_base = machine.label(1);
+            let revision = machine.label(2);
+            let hash = machine.label(3);
+            let path = machine.label(4);
+            let configuration = machine.label(5);
+            let managed = machine.has_ownership_labels();
             let valid_revision =
                 !revision.is_empty() && revision.bytes().all(|byte| byte.is_ascii_digit());
             let valid_hash = is_hex(hash, 64);
@@ -1047,10 +1045,8 @@ pub fn run(options: &Options) -> Result<i32> {
                         lifecycle.login
                     )
                 })?;
-            if machine
-                .labels
-                .keys()
-                .any(|key| domain::MANAGED_KEYS.contains(&key.as_str()))
+            machine.ensure_ownership_consistent()?;
+            if machine.has_ownership_labels()
                 && (machine.label(0) != "login"
                     || machine.label(1) != lifecycle.identity.base_id
                     || machine.label(2) != REVISION)
@@ -1122,7 +1118,7 @@ fn list(options: &Options) -> Result<i32> {
         reference.desired_machine = Some(lifecycle.identity.desired_name);
     }
     let inventory = smolvm.inventory()?;
-    crate::listing::report(&inventory, &workspace, reference, options.all).print(options.json)?;
+    crate::listing::report(&inventory, &workspace, reference, options.all).print(options.format)?;
     Ok(0)
 }
 

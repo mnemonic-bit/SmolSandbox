@@ -246,19 +246,31 @@ fn every_profile_records_exact_inputs_for_all_machine_kinds() {
         assert_eq!(creates.len(), 3, "{profile}");
         for args in creates {
             let actual_labels = labels(&args);
-            let kind = actual_labels["codex-sandbox.kind"].as_str();
+            assert!(
+                actual_labels
+                    .keys()
+                    .all(|key| key.starts_with("SmolSandbox.")),
+                "{profile}: {actual_labels:?}"
+            );
+            assert!(
+                !actual_labels
+                    .keys()
+                    .any(|key| key.starts_with("codex-sandbox.")),
+                "{profile}: {actual_labels:?}"
+            );
+            let kind = actual_labels["SmolSandbox.kind"].as_str();
             let mut expected_labels = BTreeMap::from([
-                ("codex-sandbox.kind".into(), kind.into()),
-                ("codex-sandbox.base-id".into(), base.clone()),
+                ("SmolSandbox.kind".into(), kind.into()),
+                ("SmolSandbox.base-id".into(), base.clone()),
                 (
-                    "codex-sandbox.base-inputs".into(),
+                    "SmolSandbox.base-inputs".into(),
                     serde_json::to_string(&expected_base).unwrap(),
                 ),
             ]);
             let options = match kind {
                 "builder" => vec![format!("--smolfile={}", f.definition.display())],
                 "login" => {
-                    expected_labels.insert("codex-sandbox.revision".into(), "6".into());
+                    expected_labels.insert("SmolSandbox.revision".into(), "7".into());
                     let mut options = vec![format!("--from={}", artifact.display()), mount.clone()];
                     options.extend(
                         login_hosts
@@ -269,7 +281,7 @@ fn every_profile_records_exact_inputs_for_all_machine_kinds() {
                 }
                 "workspace" => {
                     for (key, value) in [
-                        ("revision", "6".to_string()),
+                        ("revision", "7".to_string()),
                         ("workspace-sha256", workspace_hash.clone()),
                         (
                             "workspace-path-sha256",
@@ -277,7 +289,7 @@ fn every_profile_records_exact_inputs_for_all_machine_kinds() {
                         ),
                         ("configuration", "default".to_string()),
                     ] {
-                        expected_labels.insert(format!("codex-sandbox.{key}"), value);
+                        expected_labels.insert(format!("SmolSandbox.{key}"), value);
                     }
                     workspace_options.clone()
                 }
@@ -285,7 +297,7 @@ fn every_profile_records_exact_inputs_for_all_machine_kinds() {
             };
             let machine_inputs = json!({"version":1,"workspace_path":if kind=="workspace" {json!(f.workspace.to_str().unwrap())} else {Value::Null},"options":options});
             expected_labels.insert(
-                "codex-sandbox.machine-inputs".into(),
+                "SmolSandbox.machine-inputs".into(),
                 serde_json::to_string(&machine_inputs).unwrap(),
             );
             assert_eq!(
@@ -312,10 +324,10 @@ fn every_profile_records_exact_inputs_for_all_machine_kinds() {
             let name = &args[3];
             match kind {
                 "builder" => assert_eq!(name, &format!("codex-builder-{base}")),
-                "login" => assert_eq!(name, &format!("codex-login-{base}-r6")),
+                "login" => assert_eq!(name, &format!("codex-login-{base}-r7")),
                 _ => assert_eq!(
                     name,
-                    &format!("codex-workspace-{base}-r6-{}", &workspace_hash[..12])
+                    &format!("codex-workspace-{base}-r7-{}", &workspace_hash[..12])
                 ),
             }
             if let Some(machine) = f
@@ -330,6 +342,15 @@ fn every_profile_records_exact_inputs_for_all_machine_kinds() {
         }
         let listing: Value =
             serde_json::from_slice(&f.run("list", &["--all", "--json"]).stdout).unwrap();
+        for format in ["yaml", "json"] {
+            let output = f.run("list", &["--all", "--format", format]);
+            let formatted: Value = if format == "yaml" {
+                serde_saphyr::from_slice(&output.stdout).unwrap()
+            } else {
+                serde_json::from_slice(&output.stdout).unwrap()
+            };
+            assert_eq!(formatted, listing, "{profile}: {format}");
+        }
         assert_eq!(listing["machines"].as_array().unwrap().len(), 2);
         for machine in listing["machines"].as_array().unwrap() {
             assert_eq!(machine["metadata_status"], "complete", "{machine}");
@@ -344,7 +365,7 @@ fn byte_edits_change_fingerprint_and_reused_machines_keep_creation_provenance() 
     let original = f.inventory();
     let original_workspace = original
         .iter()
-        .find(|machine| machine["labels"]["codex-sandbox.kind"] == "workspace")
+        .find(|machine| machine["labels"]["SmolSandbox.kind"] == "workspace")
         .unwrap();
     let copy = f.root.join("moved definition.smlbx");
     fs::copy(&f.definition, &copy).unwrap();
@@ -372,7 +393,7 @@ fn byte_edits_change_fingerprint_and_reused_machines_keep_creation_provenance() 
         .find(|machine| machine["name"] == original_workspace["name"])
         .unwrap();
     assert_eq!(workspace["labels"], original_workspace["labels"]);
-    let inputs = workspace["labels"]["codex-sandbox.machine-inputs"]
+    let inputs = workspace["labels"]["SmolSandbox.machine-inputs"]
         .as_str()
         .unwrap();
     for excluded in [
@@ -395,18 +416,18 @@ fn byte_edits_change_fingerprint_and_reused_machines_keep_creation_provenance() 
     let new_workspace = current
         .iter()
         .find(|machine| {
-            machine["labels"]["codex-sandbox.kind"] == "workspace"
+            machine["labels"]["SmolSandbox.kind"] == "workspace"
                 && machine["name"] != original_workspace["name"]
         })
         .unwrap();
     let original_base: Value = serde_json::from_str(
-        original_workspace["labels"]["codex-sandbox.base-inputs"]
+        original_workspace["labels"]["SmolSandbox.base-inputs"]
             .as_str()
             .unwrap(),
     )
     .unwrap();
     let changed_base: Value = serde_json::from_str(
-        new_workspace["labels"]["codex-sandbox.base-inputs"]
+        new_workspace["labels"]["SmolSandbox.base-inputs"]
             .as_str()
             .unwrap(),
     )
@@ -414,8 +435,8 @@ fn byte_edits_change_fingerprint_and_reused_machines_keep_creation_provenance() 
     assert_eq!(original_base["definition_sha256"], digest(&original_bytes));
     assert_eq!(changed_base["definition_sha256"], digest(&changed));
     assert_ne!(
-        new_workspace["labels"]["codex-sandbox.base-id"],
-        original_workspace["labels"]["codex-sandbox.base-id"]
+        new_workspace["labels"]["SmolSandbox.base-id"],
+        original_workspace["labels"]["SmolSandbox.base-id"]
     );
     assert!(!fs::read_to_string(f.root.join("argv.jsonl"))
         .unwrap()
@@ -436,16 +457,16 @@ fn resolved_input_variants_record_exact_identity_changes_and_exclude_mutable_set
         let original = f.inventory();
         let original_workspace = original
             .iter()
-            .find(|machine| machine["labels"]["codex-sandbox.kind"] == "workspace")
+            .find(|machine| machine["labels"]["SmolSandbox.kind"] == "workspace")
             .unwrap();
         let original_inputs: Value = serde_json::from_str(
-            original_workspace["labels"]["codex-sandbox.machine-inputs"]
+            original_workspace["labels"]["SmolSandbox.machine-inputs"]
                 .as_str()
                 .unwrap(),
         )
         .unwrap();
         let original_base: Value = serde_json::from_str(
-            original_workspace["labels"]["codex-sandbox.base-inputs"]
+            original_workspace["labels"]["SmolSandbox.base-inputs"]
                 .as_str()
                 .unwrap(),
         )
@@ -503,11 +524,11 @@ fn resolved_input_variants_record_exact_identity_changes_and_exclude_mutable_set
         let create = f
             .calls()
             .into_iter()
-            .rfind(|args| args.iter().any(|arg| arg == "codex-sandbox.kind=workspace"))
+            .rfind(|args| args.iter().any(|arg| arg == "SmolSandbox.kind=workspace"))
             .unwrap();
         let actual = labels(&create);
-        let base: Value = serde_json::from_str(&actual["codex-sandbox.base-inputs"]).unwrap();
-        let inputs: Value = serde_json::from_str(&actual["codex-sandbox.machine-inputs"]).unwrap();
+        let base: Value = serde_json::from_str(&actual["SmolSandbox.base-inputs"]).unwrap();
+        let inputs: Value = serde_json::from_str(&actual["SmolSandbox.machine-inputs"]).unwrap();
         let bytes = fs::read(&f.definition).unwrap();
         let mut base_bytes = format!("{runtime}\n").into_bytes();
         base_bytes.extend(&bytes);
@@ -534,10 +555,10 @@ fn resolved_input_variants_record_exact_identity_changes_and_exclude_mutable_set
         );
         assert_eq!(creation_options(&create), expected_options, "{variant}");
         assert_eq!(
-            actual["codex-sandbox.workspace-sha256"], expected_hash,
+            actual["SmolSandbox.workspace-sha256"], expected_hash,
             "{variant}"
         );
-        assert_eq!(actual["codex-sandbox.base-id"], base_id, "{variant}");
+        assert_eq!(actual["SmolSandbox.base-id"], base_id, "{variant}");
         assert_eq!(base["smolvm_version"], runtime, "{variant}");
         for field in ["definition_sha256", "definition_path", "harness"] {
             assert_eq!(base[field], original_base[field], "{variant}: {field}");
@@ -545,16 +566,16 @@ fn resolved_input_variants_record_exact_identity_changes_and_exclude_mutable_set
         if variant == "mutable" {
             assert_eq!(inputs, original_inputs);
             assert_eq!(
-                actual["codex-sandbox.workspace-sha256"],
-                original_workspace["labels"]["codex-sandbox.workspace-sha256"]
+                actual["SmolSandbox.workspace-sha256"],
+                original_workspace["labels"]["SmolSandbox.workspace-sha256"]
                     .as_str()
                     .unwrap()
             );
         } else {
             assert_ne!(inputs, original_inputs, "{variant}");
             assert_ne!(
-                actual["codex-sandbox.workspace-sha256"],
-                original_workspace["labels"]["codex-sandbox.workspace-sha256"]
+                actual["SmolSandbox.workspace-sha256"],
+                original_workspace["labels"]["SmolSandbox.workspace-sha256"]
                     .as_str()
                     .unwrap(),
                 "{variant}"
@@ -570,7 +591,7 @@ fn resolved_input_variants_record_exact_identity_changes_and_exclude_mutable_set
             "--label",
         ] {
             assert!(
-                !actual["codex-sandbox.machine-inputs"].contains(excluded),
+                !actual["SmolSandbox.machine-inputs"].contains(excluded),
                 "{variant}: {excluded}"
             );
         }

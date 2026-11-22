@@ -768,3 +768,134 @@ Windows/UNC evidence; AC-13 is `not_run` for every profile. Preserve the
 previous audits and their source revisions. Final cutover acceptance remains
 pending the outstanding native, artifact, and real guest evidence; metadata
 fixtures and baseline-independent tests do not establish real SmolVM behavior.
+
+## Bug 0007 machine-label namespace audit: 2026-11-22
+
+Source revision `e9957bbee4816dc09ff5549fcbe3d5ae80793324` plus the local
+[Bug 0007](../BUGS/bug-0007-machine-label-prefix.md) implementation changes
+uses package version `0.13.1` in both Cargo files and machine policy revision
+`7`. The software diff SHA-256 is
+`7fbb957d02f83a81efd8a860ffaf74755e0d4526805c458be9144ee0ff3a381f`,
+computed from the exact output of:
+
+```sh
+git diff --binary e9957bbee4816dc09ff5549fcbe3d5ae80793324 -- Cargo.toml Cargo.lock src tests | sha256sum
+```
+
+New builders, login machines, and workspace machines emit only `SmolSandbox.`
+application labels. Readers accept old-prefix, matching dual-prefix, and
+disjoint ownership fields. Unequal duplicate values across any of the six
+ownership keys make ownership ambiguous and cannot authorize mutation,
+including explicit workspace overrides and unused shared-machine fields.
+Descriptive-only labels confer no ownership; contradictory descriptive
+duplicates invalidate the affected metadata component. Existing machines
+retain their labels and creation-time revision. Revision-6 replacement uses
+the normal prepare-and-verify-before-delete sequence.
+
+The following commands ran on native `x86_64-unknown-linux-gnu` with Rust and
+Cargo `1.100.0`. Each final command exited `0`.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| `cargo fmt --all -- --check` | passed | Exit 0; final isolated-source run also passed |
+| `cargo clippy --locked --all-targets -- -D warnings` | passed | Exit 0; final isolated-source run also passed |
+| `cargo clippy --locked --features test-adapter --all-targets -- -D warnings` | passed | Exit 0; final isolated-source run also passed |
+| `cargo test --locked --all-targets` | passed | Final exit 0; 138 tests |
+| `cargo test --locked --features test-adapter --all-targets` | passed | Exit 0; 213 tests |
+| `cargo build --locked --release --bin smolsbx` | passed | Exit 0; default features; executable reports `smolsbx 0.13.1` |
+| `cargo run --locked --example check_baseline_independence` | passed | Exit 0; isolated Rust checks and production build passed; ten compiled test executables per feature configuration passed with empty `PATH` |
+| Original namespace reproduction | passed | Exact all-profile creation regression exited 101 before the fix because `SmolSandbox.kind` was absent; the same regression passes after the fix |
+| Compatibility and independent metadata regressions | passed | All four profiles and three creation kinds have complete independent label/argument expectations; mixed inventories, revision-6 replacement, all six conflicting ownership pairs, actual removal refusal, cleanup, purge, descriptive neutrality, and published jq filters passed |
+| Independent implementation and literal inventory review | passed | Separate agents reviewed production paths and regressions; retained old-prefix literals serve compatibility or historical evidence; templates, definition markers, and historical executable names are unchanged |
+| Other native targets and hosted CI | not_run | No new Linux ARM64, macOS ARM64, Windows x86-64, or hosted execution evidence was collected |
+| Real SmolVM namespace and metadata round-trip | not_run | SmolVM and `/dev/kvm` are absent; real create/list, all-profile provisioning, authentication, interactive behavior, long labels, and stop/start retention remain pending |
+
+The first default-suite run exposed a new test fixture that repeated the
+existing `custom` configuration instead of supplying a conflicting value.
+The fixture now uses `default`; the focused regression, final default suite,
+and isolated-source suites passed. No production change was needed for that
+fixture correction.
+
+Bug 0007 AC-01 through AC-07 passed locally. No existing machine was relabeled
+and no user definition or harness home was migrated. Preserve the previous
+audits and source revisions. Final cutover acceptance remains pending the
+outstanding native and real guest evidence; these mocked checks establish no
+new real SmolVM result.
+
+## Feature 0020 list output formats audit: 2026-11-22
+
+Source revision `c78944ac68b2b1cac35521c4aadf9a3d943dae51` plus the local
+[Feature 0020](feature-0020-list-output-formats.md) implementation uses package
+version `0.14.0` in both Cargo files. Machine policy revision remains `7`;
+report schema version remains `1`. The software diff SHA-256 is
+`a171253a6a33756d56ba8b67769445a58c27935040828bd32f75e73125aee515`;
+[Feature 0020 validation](feature-0020-validation.md) records the exact
+fingerprint command, commands, and criterion evidence.
+
+`list --format yaml` and `list --format json` serialize the existing report.
+`--json` remains a supported alias with byte-identical JSON output. Invalid,
+repeated, or conflicting selectors fail before runtime access. Human output
+separates the reference, optional warnings, summary, and complete machine
+entries with blank lines. Formatting preserves inspection, assessments,
+metadata diagnostics, and read-only behavior. Templates, user definitions,
+identity hashing, labels, and lifecycle policy have no production changes.
+
+The following results were observed on native `x86_64-unknown-linux-gnu`
+with Rust and Cargo `1.100.0`.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Formatting and both Clippy configurations | passed | All three required commands exited 0 after the regression files were frozen |
+| Both complete Rust test configurations | passed | Exit 0; 147 default tests and 223 tests with `test-adapter` |
+| Production release build and offline help/version | passed | Exit 0; default features; executable reports `smolsbx 0.14.0`; list help explains formats, default text, alias, and conflicts |
+| Baseline independence | passed | Required command exited 0; isolated formatting, both lint and test configurations, production release build, and ten compiled test executables per configuration with empty `PATH` |
+| Independent output-format regressions and review | passed | Both formats, typed metadata, scalar escaping, exact human spacing, argument errors, failure streams, state snapshots, query-only calls, and Linux write failures passed; reviewer found no actionable defects |
+| Other native targets and hosted CI | not_run | No new Linux ARM64, macOS ARM64, Windows x86-64, or hosted execution evidence was collected |
+| Real SmolVM and real guests | not_run | No new runtime, provisioning, authentication, terminal, or real guest result was collected |
+
+Feature 0020 AC-01 through AC-10 passed locally. Preserve all previous
+observations and source revisions. Final cutover acceptance remains pending
+the outstanding native and real guest evidence; output-format fixtures
+establish no new real SmolVM result.
+
+## Feature 0021 Windows ARM64 distribution audit: 2026-11-22
+
+Source revision `dcc72bec291736a225633e3afe5694bb793ee92f` plus the local
+[Feature 0021](feature-0021-windows-arm64-release-target.md) implementation
+uses package version `0.15.0` in both Cargo files. Lifecycle policy revision
+remains `7`. The tracked implementation diff SHA-256 is
+`7235a599224e400471d608c9ef2d307139c63702336a89771947b17dcba255d1`;
+[Feature 0021 validation](feature-0021-validation.md) records the exact
+fingerprint command, new badge fingerprint, environment, and AC-01 through
+AC-10 results.
+
+The native workflow adds `windows-11-arm` / `aarch64-pc-windows-msvc` to the
+existing four targets. Packaging validates ARM64 PE machine `0xAA64` and
+retains x86-64 validation. Publication requires five executable-only ZIPs
+from the same workflow run and immutable commit. Download guidance separates
+Windows ARM64 CLI distribution from unsupported virtualization. Production
+runtime policy, template bytes, user definitions, state paths, and machine
+identity remain unchanged.
+
+The following local results were observed on native
+`x86_64-unknown-linux-gnu` with Rust/Cargo `1.100.0` and Python `3.11.2`.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Formatting and both Clippy configurations | passed | All three required commands exited 0 after the example changes were frozen |
+| Both complete Rust test configurations | passed | Exit 0; 147 default tests and 223 tests with `test-adapter` |
+| Production release build and offline CLI | passed | Exit 0; default features; `smolsbx 0.15.0`; help, version, and explicit configuration generation passed with empty `PATH` and nonexistent SmolVM |
+| Baseline independence | passed | Exit 0; compiler/Cargo native hosts verified; isolated checks and production build passed; ten compiled test executables per feature configuration passed with empty `PATH` |
+| Complete release regressions | passed | Exit 0; 96 Python tests covering five-target missing/conflicting assets, interrupted fifth upload, recovery, complete rerun, historical four-target preservation, PE substitutions/truncation, workflow guards, and inline/canonical equality |
+| Workflow syntax and independent review | passed | actionlint `1.7.12` exited 0; optional external ShellCheck/Pyflakes checks disabled; independent agents found no concrete defects in packaging/publication or workflow/example changes |
+| README download rendering | passed | All five SVGs loaded in local Chromium at desktop and mobile widths; ARM64 label, alternative text, and stable URL checked |
+| Five-target hosted validation and native Windows ARM64 | not_run | No hosted runner image, workflow URL, native ARM64 execution, action compatibility, or Windows ACL result was collected |
+| Disposable publication and public ARM64 download | not_run | No disposable repository was configured; hosted failure gates, release/asset IDs, recovery, and first eligible public ZIP remain pending; no production test release was created |
+| Real SmolVM and real guests | not_run | No new runtime, provisioning, authentication, interactive terminal, or real guest evidence was collected; Windows ARM64 virtualization remains unsupported |
+
+Feature 0021 remains In progress. AC-01, AC-03, and AC-07 passed locally;
+the other criteria require the hosted or native evidence identified in the
+feature validation record. Preserve all prior observations and source
+revisions. Final cutover acceptance remains pending the existing native and
+real guest gates for supported virtualization hosts. The fifth CLI target
+does not enable Windows ARM64 sandbox creation or close those gates.

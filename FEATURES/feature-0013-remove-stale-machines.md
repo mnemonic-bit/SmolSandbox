@@ -111,7 +111,7 @@ workspaces; users select the root explicitly or invoke the command there.
 Directories without Git metadata are valid workspaces.
 
 Associate workspace machines through a valid
-`codex-sandbox.workspace-path-sha256` label equal to the full SHA-256 of the
+`SmolSandbox.workspace-path-sha256` label equal to the full SHA-256 of the
 canonical workspace path's UTF-8 bytes. Include matching workspace machines
 across every profile, base generation, revision, and configuration. Do not use
 the immutable configuration hash as the association filter.
@@ -152,8 +152,11 @@ do not establish a workspace path. A legacy workspace row reported as
 `unknown` by listing because its path is unavailable requires this explicit
 global ownership rule before it can be removed.
 
-Any `codex-sandbox.` label makes a row a managed-metadata candidate. If managed
-labels are present, validate the labels rather than falling back to the name.
+An ownership label under `SmolSandbox.` or the compatible `codex-sandbox.`
+prefix makes a row a managed-metadata candidate. Descriptive-only labels do
+not establish ownership. If managed ownership labels are present, validate
+the labels rather than falling back to the name. Read ownership fields from
+either namespace; reject unequal duplicate ownership values before mutation.
 Recognized deterministic names must agree with their labels. Complete
 labelled workspace metadata requires kind, base ID, policy revision, full
 configuration hash, full workspace path hash, and `default` or `custom`

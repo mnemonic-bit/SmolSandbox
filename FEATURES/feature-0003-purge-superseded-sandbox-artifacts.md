@@ -156,21 +156,21 @@ without mapping the object to one of the classifications above.
 The inventory format shall add managed labels equivalent to:
 
 ```text
-codex-sandbox.workspace-path-sha256=<sha256-of-canonical-workspace-path>
-codex-sandbox.configuration=default|custom
+SmolSandbox.workspace-path-sha256=<sha256-of-canonical-workspace-path>
+SmolSandbox.configuration=default|custom
 ```
 
 The path-only digest groups configurations for the same canonical workspace
 without exposing the path in inventory output. It is distinct from the
-existing `codex-sandbox.workspace-sha256`, whose value identifies the complete
+existing `SmolSandbox.workspace-sha256`, whose value identifies the complete
 immutable creation specification.
 
-`codex-sandbox.configuration=default` is valid only when no additional
+`SmolSandbox.configuration=default` is valid only when no additional
 `--allow-host` was requested. `custom` means that at least one effective
 additional host remains after canonicalization and removal of duplicates of
 default hosts. The label describes how the configuration was requested; the
 effective default-plus-additional allowlist remains part of
-`codex-sandbox.workspace-sha256` as specified by Feature 0005.
+`SmolSandbox.workspace-sha256` as specified by Feature 0005.
 
 The purge command shall not guess that a current-base workspace machine is a
 default configuration merely from its name. A current-base machine with

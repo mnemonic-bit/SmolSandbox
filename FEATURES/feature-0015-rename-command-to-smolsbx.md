@@ -134,6 +134,11 @@ host Bash/Python.
 
 ### Configuration and existing resources
 
+The requirements below describe compatibility during this command rename.
+[Bug 0007](../BUGS/bug-0007-machine-label-prefix.md) supersedes retention of
+`codex-sandbox.` for new machine labels: new labels use `SmolSandbox.` and
+old labels remain readable. The definition marker remains unchanged.
+
 Preserve the following compatibility surfaces:
 
 - User and repository `.smolsandbox` discovery, definitions, credentials,

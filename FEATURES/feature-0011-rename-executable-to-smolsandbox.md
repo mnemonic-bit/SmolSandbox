@@ -189,6 +189,11 @@ instruction rewrite is required by this feature.
 
 ### Persisted metadata and identity
 
+The requirements below describe compatibility during this command rename.
+[Bug 0007](../BUGS/bug-0007-machine-label-prefix.md) supersedes retention of
+`codex-sandbox.` for new machine labels: new labels use `SmolSandbox.` and
+old labels remain readable. The definition marker remains unchanged.
+
 Preserve these identifiers and their readers and writers:
 
 - The `codex-sandbox.` managed-label namespace, including all six managed

@@ -110,10 +110,10 @@ codex-workspace-<base-id>-r<revision>-<workspace-id>
 All newly created workspace machines shall also have these SmolVM labels:
 
 ```text
-codex-sandbox.kind=workspace
-codex-sandbox.base-id=<base-id>
-codex-sandbox.revision=<revision>
-codex-sandbox.workspace-sha256=<full-workspace-hash>
+SmolSandbox.kind=workspace
+SmolSandbox.base-id=<base-id>
+SmolSandbox.revision=<revision>
+SmolSandbox.workspace-sha256=<full-workspace-hash>
 ```
 
 Labels are discovery metadata. The deterministic machine name remains useful
