@@ -16,7 +16,8 @@ for Features 0004 and 0009 remain recorded in their validation records.
 
 ## Executable and host requirements
 
-Open the README's [Release badge destination](https://github.com/mnemonic-bit/SmolSandbox/releases/latest).
+Use the README's platform download buttons or open the
+[latest release](https://github.com/mnemonic-bit/SmolSandbox/releases/latest).
 Select the binary ZIP for the host's operating system and architecture.
 Each binary ZIP contains only `smolsbx` (Windows: `smolsbx.exe`) at its root.
 Extract the executable to a directory on `PATH`; use an extractor that retains
@@ -741,15 +742,28 @@ failure. The workflow repeats eligibility after merging and immediately
 before publication. API errors fail eligibility instead of treating an
 unverifiable version as unused.
 
-Release automation attaches four executable-only binary ZIPs alongside the
-generated notes. For version `<version>`, the required uploaded assets are:
+Starting with version `0.13.0`, release automation attaches four executable-only
+binary ZIPs with stable filenames alongside the generated notes. The required
+uploaded assets are:
 
 | Operating system and architecture | Release asset name | Sole ZIP entry |
 | --- | --- | --- |
-| Linux x86-64 | `smolsbx-v<version>-x86_64-unknown-linux-gnu.zip` | `smolsbx` |
-| Linux ARM64 | `smolsbx-v<version>-aarch64-unknown-linux-gnu.zip` | `smolsbx` |
-| macOS ARM64 | `smolsbx-v<version>-aarch64-apple-darwin.zip` | `smolsbx` |
-| Windows x86-64 | `smolsbx-v<version>-x86_64-pc-windows-msvc.zip` | `smolsbx.exe` |
+| Linux x86-64 | `smolsbx-x86_64-unknown-linux-gnu.zip` | `smolsbx` |
+| Linux ARM64 | `smolsbx-aarch64-unknown-linux-gnu.zip` | `smolsbx` |
+| macOS ARM64 | `smolsbx-aarch64-apple-darwin.zip` | `smolsbx` |
+| Windows x86-64 | `smolsbx-x86_64-pc-windows-msvc.zip` | `smolsbx.exe` |
+
+The README buttons use GitHub's `releases/latest/download/<asset-name>` route.
+Direct downloads require the first normal release containing all four stable
+names. Until that release is published, use the release-page link to select
+an available binary. Later releases reuse the same filenames; the tag, title,
+and executable version still identify `v<version>`. A version-specific URL uses
+`releases/download/v<version>/<asset-name>`.
+
+Earlier releases used `smolsbx-v<version>-<target>.zip`. Preserve those published
+names, asset IDs, bytes, and tags. No duplicate versioned aliases are uploaded
+for new releases. This transition supersedes Feature 0017's filename rule for
+new releases while preserving its historical observations.
 
 Each archive contains one regular file at the archive root. Templates are
 embedded in the executable; the ZIPs contain no separate resources, source,
@@ -775,7 +789,9 @@ finishing later does not explicitly replace a newer release as latest.
 ### Recover a release attempt
 
 After a transient validation or API failure, rerun the original workflow for
-the original main push commit. A manual dispatch performs validation only
+the original main push commit. Recovery uses that workflow revision and its
+original filename scheme: versioned names for releases before this transition,
+stable names for new releases. A manual dispatch performs validation only
 and cannot replace that publication attempt. Inspect the failed job output
 before rerunning; ruleset rejection requires the owner to resolve the tag
 creation policy while preserving branch requirements.

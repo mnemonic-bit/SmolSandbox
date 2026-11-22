@@ -126,14 +126,14 @@ class GitHubAPI:
         return self.transfer_asset("GET", f"{self.base_url}/releases/assets/{asset_id}")
 
 
-def load_binary_assets(tag):
+def load_binary_assets():
     directory = os.environ.get("RELEASE_ASSET_DIR")
     if not directory:
         raise ReleaseError("RELEASE_ASSET_DIR is required for all four binary targets")
     root = Path(directory)
     assets = {}
     for target in BINARY_TARGETS:
-        name = f"smolsbx-{tag}-{target}.zip"
+        name = f"smolsbx-{target}.zip"
         executable = "smolsbx.exe" if "windows" in target else "smolsbx"
         try:
             path = root / name
@@ -376,7 +376,7 @@ def verify_publication(api, tag, sha, result, report, expected_id=None):
 
 
 def publish(api, tag, sha, report):
-    assets = load_binary_assets(tag)
+    assets = load_binary_assets()
     commit, release = checked_state(api, tag, sha, report)
     if commit is None:
         try:
