@@ -193,15 +193,15 @@ a separate destination with `create-config --harness <profile> --smolfile
 file. Existing edits and harness state are preserved. Changing definition
 bytes selects a new base generation on the next lifecycle operation.
 
-For the Feature 0018 Codex update, generate a separate file and compare it
+For the Feature 0022 Codex skills update, generate a separate file and compare it
 with the definition currently selected for the workspace:
 
 ```text
-smolsbx create-config --harness codex --smolfile ./codex-0.171.0.smlbx
-git diff --no-index ./codex-current.smlbx ./codex-0.171.0.smlbx
-smolsbx build --smolfile ./codex-0.171.0.smlbx /path/to/project
-smolsbx login --smolfile ./codex-0.171.0.smlbx
-smolsbx start --smolfile ./codex-0.171.0.smlbx /path/to/project
+smolsbx create-config --harness codex --smolfile ./codex-all-skills.smlbx
+git diff --no-index ./codex-current.smlbx ./codex-all-skills.smlbx
+smolsbx build --smolfile ./codex-all-skills.smlbx /path/to/project
+smolsbx login --smolfile ./codex-all-skills.smlbx
+smolsbx start --smolfile ./codex-all-skills.smlbx /path/to/project
 ```
 
 Replace `./codex-current.smlbx` with the existing selected definition.
@@ -213,6 +213,16 @@ Keep the persistent harness home: missing-files-only seeding preserves
 existing credentials, settings, skills, and sessions. Upstream Codex may
 migrate its own state; compatibility of migrated state with older Codex
 releases requires separate validation.
+
+New Codex definitions install every installable skill discovered by skills CLI
+`1.8.1` in `mattpocock/skills`, including `grill-me` and `grilling` while those
+skills remain upstream. Provisioning resolves the unpinned upstream repository;
+reusing an existing base does not fetch newer skills. The prepared Codex home
+contains complete skill directories and supporting files without depending on
+the installer source directories. Missing-files-only seeding adds missing skill
+resources to an empty or retained persistent home. Existing skill files,
+including user edits, remain byte-for-byte unchanged across repeated seeding.
+Seeding does not force skill updates or delete skills removed upstream.
 
 ### Guest toolchain migration
 
