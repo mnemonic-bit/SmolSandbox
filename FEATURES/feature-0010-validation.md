@@ -945,6 +945,7 @@ previous observations and source revisions. Final cutover acceptance remains
 pending the existing native and real guest gates for every required profile
 and supported virtualization host.
 
+<<<<<<< Updated upstream
 ## Bug 0010 stale workspace guidance investigation: 2026-11-23
 
 Investigation used source revision
@@ -1023,3 +1024,32 @@ verified cause on the user's host. Preserve all previous observations and
 source revisions. Final cutover acceptance remains pending the existing
 native and real guest gates for every required profile and supported
 virtualization host.
+=======
+## Bug 0011 release tag visibility investigation: 2026-11-23
+
+The inspected checkout is `d7bf50ad4dcdb1390f05b47250ac58c108a7f058`,
+package `0.16.0`. [Bug 0011](../BUGS/bug-0011-release-tag-verification-race.md)
+records the reported `0.16.1` failure at
+`00cbf927ec509c76bb73f8a1197afb3d08c5e7dd`. GitHub contents reads confirmed
+that the release script, metadata tests, and workflow at the failing commit
+are identical to the inspected checkout. This investigation adds a bug
+report and validation evidence; both Cargo versions remain unchanged.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Hosted run and tag inspection | passed | Public REST reads identified run 45459182706 attempt 1: eligibility and all five native jobs succeeded; release job 138693345769 failed at publication after successful artifact download; tag v0.16.1 resolves to the reported commit |
+| Public release and authenticated logs | inconclusive | Release-by-tag read returned HTTP 404; no publicly readable release was found, but authenticated draft inventory was not inspected; the job-log endpoint returned HTTP 403 |
+| Exact diagnostic reproduction | passed | The command retained in Bug 0011 exited 0 after asserting the supplied v0.16.1 error, a matching persisted tag, no release, and one tag-creation write; a subsequent invocation published through the fake without creating the tag again |
+| Visibility and race controls | passed | Immediate visibility published; one missing read after successful creation produced the reported error; missing reads after simulated HTTP 409/422 races failed with the original API error |
+| Release automation regressions | passed | `python3 -m unittest discover -s .github/scripts -p 'test_*.py' -v` exited 0; 96 tests in 0.320 seconds; the existing suite does not catch the reproduced post-tag-creation failure |
+| Hosted rerun and eventual correction | not_run | No workflow was rerun and no production resource was changed; bounded tag-read retries, new regression tests, and disposable hosted recovery remain pending |
+| Rust and real guest checks | not_run | Report-only changes do not alter software; no Rust or real guest checks were repeated |
+
+GitHub returned run timestamps on 2026-11-24 while the session UTC clock
+reported 2026-11-23. The report preserves those values and does not infer
+delay duration from cross-system clocks. The reproduction establishes a
+sufficient failure mechanism; the hosted HTTP sequence and infrastructure
+cause remain unverified. Preserve previous observations and source revisions.
+Final cutover acceptance remains pending the existing native and real guest
+gates for supported virtualization hosts.
+>>>>>>> Stashed changes
