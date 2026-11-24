@@ -225,17 +225,38 @@ definitions, generation caches, host credentials, and persistent harness state
 survive removal. See the [removal rules](RUST-APPLICATION.md#remove-managed-machines)
 for validation, concurrency, and partial-failure behavior.
 
-Inspect stale machines before authorizing replacement:
+After an executable update, a workspace can require a newer creation-policy
+revision even when its definition has not changed. Stale candidate diagnostics
+show existing and required revisions or base identities when inventory supplies
+that evidence. Inspect stale machines before authorizing replacement:
 
 ```text
 smolsbx repair --check /path/to/project
 smolsbx repair --replace-stale /path/to/project
 ```
 
+Use the complete inspection and replacement commands displayed by the
+application: they retain the resolved workspace, selected definition, runtime,
+and additional `--allow-host` options. Displayed commands use POSIX shell
+quoting on Linux/macOS and PowerShell quoting on Windows.
+
+Inspection names the desired machine and eligible stale machines, explains
+replacement consequences, and supplies the next command. Ambiguous ownership
+requires inspection and resolution; `--force` cannot bypass ambiguity.
 Replacement verifies the desired machine before deleting eligible stale
 machines. Add `--force` only when authorizing a running stale machine to be
-stopped after that verification. Repeat the configuration's `--allow-host`
-options when repairing a workspace with additional hosts.
+stopped after that verification. Deletion discards each stale machine's
+guest-local writable disk state. Mounted project files, the selected
+definition, and the persistent harness home remain. Successful repair displays
+a complete `smolsbx start` command to launch the harness separately.
+
+Updating the executable preserves existing definitions. Replacement uses the
+selected definition. To adopt a newer embedded template, generate the selected
+profile into a new file, compare that file with the displayed selected
+definition, and explicitly select or edit the desired file. Generation refuses
+to overwrite an existing destination. Follow
+[template adoption](RUST-APPLICATION.md#template-adoption) for commands;
+machine replacement does not adopt a newer template.
 
 The cleanup commands delete managed machines and can discard their guest disk
 state. `clean --workspace` targets one workspace across generations; `clean`

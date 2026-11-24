@@ -824,6 +824,9 @@ mod lifecycle {
             .output()
             .unwrap();
         assert!(!output.status.success());
+        assert!(!String::from_utf8_lossy(&output.stdout).contains("Next: smolsbx start"));
+        assert!(String::from_utf8_lossy(&output.stderr)
+            .contains("stale workspace machines were left unchanged"));
         for machine in before {
             assert!(f.inventory().iter().any(|m| m["name"] == machine["name"]));
         }
@@ -1671,6 +1674,10 @@ mod lifecycle {
                 .unwrap();
             assert!(!output.status.success(), "{case}");
             assert!(
+                !String::from_utf8_lossy(&output.stdout).contains("Next: smolsbx start"),
+                "{case}"
+            );
+            assert!(
                 !f.log().contains("machine delete --name"),
                 "{case}: {}",
                 f.log()
@@ -1789,6 +1796,13 @@ mod lifecycle {
                 .output()
                 .unwrap();
             assert!(!output.status.success());
+            assert!(!String::from_utf8_lossy(&output.stdout).contains("Next: smolsbx start"));
+            let diagnostics = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                diagnostics.contains("1 deletion(s) completed"),
+                "{diagnostics}"
+            );
+            assert!(diagnostics.contains("compatibility caches were not changed"));
             let inventory = f.inventory();
             assert!(!inventory.iter().any(|m| m["name"] == first["name"]));
             for kept in [&desired, &second, &later] {
@@ -2474,7 +2488,276 @@ mod lifecycle {
         assert_caches_unchanged(&caches);
         let diagnostics = String::from_utf8_lossy(&output.stderr);
         assert!(diagnostics.contains(stale["name"].as_str().unwrap()));
-        assert!(diagnostics.contains("--replace-stale"));
+        assert!(diagnostics.contains("smolsbx repair --check"));
+        assert!(diagnostics.contains("explicit replacement is required"));
+    }
+
+    #[test]
+    fn stale_revision_upgrade_guidance_explains_revision_without_definition_changes() {
+        let f = Fixture::new();
+        f.configure("codex");
+        let definition = fs::read(f.definition()).unwrap();
+        assert_ok(&f.run(&["start"]));
+        let stale = stale_machine(&workspace_machine(&f), "5");
+        f.set_inventory(std::slice::from_ref(&stale));
+        let before = fs::read(f.root.path().join("inventory.json")).unwrap();
+        let caches = cache_files(&f);
+        for operation in ["build", "start"] {
+            reset_calls(&f);
+            let output = f.run(&[operation]);
+            assert_eq!(output.status.code(), Some(1));
+            let diagnostics = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                diagnostics.contains("creation-policy revision 5; required 7"),
+                "{diagnostics}"
+            );
+            assert!(diagnostics.contains("smolsbx repair --check"));
+            assert!(diagnostics.contains(&format!(
+                "--smolfile {}",
+                quoted_guidance_value(f.definition().to_str().unwrap())
+            )));
+            assert!(diagnostics.contains(&quoted_guidance_value(&guidance_workspace(&f))));
+            assert!(diagnostics.contains("no machines were created or deleted"));
+            assert_no_mutations(&f);
+            assert_eq!(fs::read(f.definition()).unwrap(), definition);
+            assert_eq!(
+                fs::read(f.root.path().join("inventory.json")).unwrap(),
+                before
+            );
+            assert_caches_unchanged(&caches);
+        }
+    }
+
+    fn quoted_guidance_value(value: &str) -> String {
+        if cfg!(windows) {
+            format!("'{}'", value.replace('\'', "''"))
+        } else {
+            format!("'{}'", value.replace('\'', "'\"'\"'"))
+        }
+    }
+
+    fn guidance_workspace(f: &Fixture) -> String {
+        let path = f.workspace.canonicalize().unwrap();
+        let path = path.to_str().unwrap();
+        if cfg!(windows) {
+            match path.strip_prefix(r"\\?\UNC\") {
+                Some(unc) => format!(r"\\{unc}"),
+                None => path.strip_prefix(r"\\?\").unwrap_or(path).to_owned(),
+            }
+        } else {
+            path.to_owned()
+        }
+    }
+
+    #[test]
+    fn stale_recovery_commands_preserve_definition_workspace_hosts_and_runtime_selections() {
+        for selection in ["default", "smolfile", "BASE_SMOLFILE"] {
+            let mut f = Fixture::new();
+            let workspace = f.root.path().join("project user's files");
+            fs::rename(&f.workspace, &workspace).unwrap();
+            f.workspace = workspace;
+            f.configure("codex");
+            let definition = if selection == "default" {
+                f.definition()
+            } else {
+                let path = f.workspace.join("user's definition.smlbx");
+                fs::copy(f.definition(), &path).unwrap();
+                path
+            };
+            let runtime_dir = f.root.path().join("user's runtime");
+            fs::create_dir(&runtime_dir).unwrap();
+            let runtime = runtime_dir.join(if cfg!(windows) {
+                "smolvm.exe"
+            } else {
+                "smolvm"
+            });
+            copy_executable(
+                Path::new(env!("CARGO_BIN_EXE_smolvm-test-double")),
+                &runtime,
+            );
+            let selected = || {
+                let mut command = f.command();
+                if selection == "BASE_SMOLFILE" {
+                    command.env("BASE_SMOLFILE", &definition);
+                }
+                command
+            };
+            let selection_args = || {
+                let mut args = vec!["--smolvm".to_owned(), runtime.to_str().unwrap().to_owned()];
+                if selection == "smolfile" {
+                    args.extend([
+                        "--smolfile".to_owned(),
+                        definition.to_str().unwrap().to_owned(),
+                    ]);
+                }
+                args.extend(["--allow-host".to_owned(), "user's host.example".to_owned()]);
+                args
+            };
+            assert_ok(
+                &selected()
+                    .arg("start")
+                    .args(selection_args())
+                    .output()
+                    .unwrap(),
+            );
+            let stale = stale_machine(&workspace_machine(&f), "5");
+            f.set_inventory(std::slice::from_ref(&stale));
+            let before = fs::read(&definition).unwrap();
+            let expected_suffix = format!(
+                "--smolfile {} --smolvm {} --allow-host {} {}",
+                quoted_guidance_value(definition.to_str().unwrap()),
+                quoted_guidance_value(runtime.canonicalize().unwrap().to_str().unwrap()),
+                quoted_guidance_value("user's host.example"),
+                quoted_guidance_value(&guidance_workspace(&f))
+            );
+            let refused = selected()
+                .env("OPENAI_API_KEY", "private-guidance-test-value")
+                .arg("start")
+                .args(selection_args())
+                .args(["--", "--guest-only-argument"])
+                .output()
+                .unwrap();
+            assert_eq!(refused.status.code(), Some(1));
+            let diagnostics = String::from_utf8_lossy(&refused.stderr);
+            assert!(
+                diagnostics.contains(&format!("smolsbx repair --check {expected_suffix}")),
+                "{selection}: {diagnostics}"
+            );
+            assert!(!diagnostics.contains("private-guidance-test-value"));
+            assert!(!diagnostics.contains("--guest-only-argument"));
+            let check = selected()
+                .args(["repair", "--check"])
+                .args(selection_args())
+                .output()
+                .unwrap();
+            assert_ok(&check);
+            let guidance = String::from_utf8_lossy(&check.stdout);
+            assert!(
+                guidance.contains(&format!("smolsbx repair --replace-stale {expected_suffix}")),
+                "{selection}: {guidance}"
+            );
+            let replacement = selected()
+                .args(["repair", "--replace-stale"])
+                .args(selection_args())
+                .output()
+                .unwrap();
+            assert_ok(&replacement);
+            let guidance = String::from_utf8_lossy(&replacement.stdout);
+            assert!(
+                guidance.contains(&format!("Next: smolsbx start {expected_suffix}")),
+                "{selection}: {guidance}"
+            );
+            assert!(guidance.contains("The guest harness has not been launched."));
+            assert_eq!(fs::read(&definition).unwrap(), before);
+        }
+    }
+
+    #[test]
+    fn stale_repair_check_explains_selection_consequences_and_ownership_without_writes() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["start"]));
+        let desired = workspace_machine(&f);
+        let mut stale = stale_machine(&desired, "5");
+        let mut ambiguous = stale.clone();
+        ambiguous["labels"]["SmolSandbox.base-id"] = json!("malformed");
+        let definition = fs::read(f.definition()).unwrap();
+        let caches = cache_files(&f);
+        fs::remove_dir_all(f.home.join(".smolsandbox/locks")).unwrap();
+        for case in ["stopped", "running", "ambiguous", "desired-plus-stale"] {
+            stale["state"] = json!(if case == "running" {
+                "running"
+            } else {
+                "stopped"
+            });
+            let inventory = match case {
+                "ambiguous" => vec![ambiguous.clone()],
+                "desired-plus-stale" => vec![desired.clone(), stale.clone()],
+                _ => vec![stale.clone()],
+            };
+            f.set_inventory(&inventory);
+            let before = fs::read(f.root.path().join("inventory.json")).unwrap();
+            reset_calls(&f);
+            let output = f.run(&["repair", "--check"]);
+            assert_ok(&output);
+            let guidance = String::from_utf8_lossy(&output.stdout);
+            if case == "ambiguous" {
+                assert!(guidance.contains("ambiguous ownership"), "{guidance}");
+                assert!(guidance.contains("inspect"));
+                assert!(!guidance.contains("--replace-stale"));
+                assert!(!guidance.contains("--force"));
+            } else {
+                assert!(
+                    guidance.contains("creation-policy revision 5; required 7"),
+                    "{guidance}"
+                );
+                assert!(guidance.contains("Replacement plan:"));
+                assert!(guidance.contains(&format!(
+                    "Eligible stale deletion candidate: {}",
+                    stale["name"].as_str().unwrap()
+                )));
+                assert!(guidance.contains("readiness is verified before deleting"));
+                assert!(guidance.contains("Deletion discards guest-local writable disk state"));
+                assert!(guidance.contains("mounted project files, the selected definition, and the persistent harness home remain"));
+                assert!(guidance.contains("RUST-APPLICATION.md#template-adoption"));
+                assert!(guidance.contains("Executable updates preserve"));
+                assert!(guidance.contains("smolsbx repair --replace-stale"));
+                assert_eq!(
+                    guidance.contains("explicit --force authorization"),
+                    case == "running"
+                );
+                let selected = if case == "desired-plus-stale" {
+                    desired["name"].as_str().unwrap()
+                } else {
+                    "none"
+                };
+                assert!(guidance.contains(&format!("Selected: {selected}")));
+            }
+            assert_no_mutations(&f);
+            assert!(!f.home.join(".smolsandbox/locks").exists());
+            assert_eq!(
+                fs::read(f.root.path().join("inventory.json")).unwrap(),
+                before
+            );
+            assert_eq!(fs::read(f.definition()).unwrap(), definition);
+            assert_caches_unchanged(&caches);
+        }
+    }
+
+    #[test]
+    fn stale_replacement_displays_plan_before_runtime_mutations_and_handoff_after_cleanup() {
+        let f = Fixture::new();
+        f.configure("codex");
+        assert_ok(&f.run(&["start"]));
+        let desired = workspace_machine(&f);
+        let stale = stale_machine(&desired, "5");
+        f.set_inventory(std::slice::from_ref(&stale));
+        reset_calls(&f);
+        let trace_path = f.root.path().join("replacement-output.log");
+        let trace = fs::File::create(&trace_path).unwrap();
+        let status = f
+            .command()
+            .env("SMOLVM_TEST_OUTPUT", "1")
+            .args(["--verbose", "repair", "--replace-stale"])
+            .stdout(trace.try_clone().unwrap())
+            .stderr(trace)
+            .status()
+            .unwrap();
+        let output = fs::read_to_string(trace_path).unwrap();
+        assert!(status.success(), "{output}");
+        let creation = output.find("runtime-create-").unwrap();
+        let deletion = output.find("runtime-delete-").unwrap();
+        for planned in [
+            "Replacement plan:",
+            "Eligible stale deletion candidate:",
+            "Deletion discards guest-local writable disk state",
+        ] {
+            assert!(output.find(planned).unwrap() < creation, "{output}");
+        }
+        assert!(creation < output.find("Verified desired workspace machine").unwrap());
+        assert!(output.find("Verified desired workspace machine").unwrap() < deletion);
+        assert!(deletion < output.find("Next: smolsbx start").unwrap());
+        assert!(!f.log().contains("machine exec"));
     }
 
     fn namespace_labels(machine: &Value, keep_current: bool) -> Value {

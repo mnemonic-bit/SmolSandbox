@@ -279,7 +279,51 @@ pub fn classify(inventory: &Inventory, identity: &Identity) -> Vec<Classified> {
                 machine: machine.clone(),
                 category,
                 source: source.into(),
-                reason: reason.into(),
+                reason: if category == Category::Stale {
+                    let mut reasons = Vec::new();
+                    if identity.override_name {
+                        reasons.push(format!(
+                            "explicit machine name {}; required {}",
+                            machine.name, identity.desired_name
+                        ));
+                    }
+                    let captures = legacy.captures(&machine.name);
+                    let evidence = if owned {
+                        Some((machine.label(1), machine.label(2)))
+                    } else {
+                        captures.as_ref().map(|name| {
+                            (name.get(1).unwrap().as_str(), name.get(2).unwrap().as_str())
+                        })
+                    };
+                    if let Some((base, revision)) = evidence {
+                        if revision != identity.revision {
+                            reasons.push(format!(
+                                "creation-policy revision {revision}; required {}",
+                                identity.revision
+                            ));
+                        }
+                        if base != identity.base_id {
+                            reasons.push(format!(
+                                "base identity {base}; required {}",
+                                identity.base_id
+                            ));
+                        }
+                    }
+                    if !owned {
+                        reasons.push(
+                            "identity inferred from legacy name; ownership metadata is unknown"
+                                .into(),
+                        );
+                    }
+                    if reasons.is_empty() {
+                        reasons.push(
+                            "workspace identity differs; mismatch evidence is unknown".into(),
+                        );
+                    }
+                    reasons.join("; ")
+                } else {
+                    reason.into()
+                },
             }
         })
         .collect()
@@ -647,6 +691,40 @@ mod tests {
         parse_inventory(&serde_json::to_vec(&json!([{"name":name,"state":state,"ports":0,"created_at":1,"labels":{
             MANAGED_KEYS[0]:"workspace",MANAGED_KEYS[1]:base,MANAGED_KEYS[2]:"7",MANAGED_KEYS[3]:hash,MANAGED_KEYS[4]:"c".repeat(64),MANAGED_KEYS[5]:configuration
         }}])).unwrap()).unwrap().remove(0)
+    }
+    #[test]
+    fn stale_reasons_explain_revision_base_and_explicit_selection_evidence() {
+        let mut id = identity();
+        let mut revision = workspace(&id.base_id, &id.workspace_hash, "default", "stopped");
+        revision.name = revision.name.replace("-r7-", "-r5-");
+        revision.labels.insert(MANAGED_KEYS[2].into(), "5".into());
+        let base = workspace("111111111111", &id.workspace_hash, "default", "stopped");
+        for (machine, expected) in [
+            (&revision, "creation-policy revision 5; required 7"),
+            (&base, "base identity 111111111111; required aaaaaaaaaaaa"),
+        ] {
+            let result = classify(&vec![machine.clone()], &id).remove(0);
+            assert_eq!(result.category, Category::Stale);
+            assert!(result.reason.contains(expected), "{}", result.reason);
+        }
+        let mut legacy = revision.clone();
+        legacy.labels.clear();
+        let result = classify(&vec![legacy], &id).remove(0);
+        assert_eq!(result.category, Category::Stale);
+        assert!(result
+            .reason
+            .contains("creation-policy revision 5; required 7"));
+        assert!(result.reason.contains("legacy name"));
+        assert!(result.reason.contains("unknown"));
+        id.override_name = true;
+        id.desired_name = "explicit-workspace".into();
+        let result = classify(&vec![revision], &id).remove(0);
+        assert_eq!(result.category, Category::Stale);
+        assert!(result.reason.contains("explicit-workspace"));
+        assert!(result.reason.contains("explicit machine name"));
+        assert!(result
+            .reason
+            .contains("creation-policy revision 5; required 7"));
     }
     #[test]
     fn descriptive_labels_preserve_legacy_classification_and_managed_inventory() {

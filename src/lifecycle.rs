@@ -81,6 +81,54 @@ fn pair(values: &mut Vec<OsString>, flag: &str, value: impl Into<OsString>) {
     values.push(value.into());
 }
 
+fn shell_argument(value: &str, powershell: bool) -> String {
+    let escaped = if powershell {
+        value.replace('\'', "''")
+    } else {
+        value.replace('\'', "'\"'\"'")
+    };
+    format!("'{escaped}'")
+}
+
+fn shell_path_argument(path: &Path) -> String {
+    if let Some(value) = path.to_str() {
+        return shell_argument(value, cfg!(windows));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+
+        let mut remaining = path.as_os_str().as_bytes();
+        let mut argument = String::new();
+        while !remaining.is_empty() {
+            match std::str::from_utf8(remaining) {
+                Ok(value) => {
+                    argument.push_str(&shell_argument(value, false));
+                    break;
+                }
+                Err(error) => {
+                    let (valid, invalid) = remaining.split_at(error.valid_up_to());
+                    if !valid.is_empty() {
+                        argument.push_str(&shell_argument(
+                            std::str::from_utf8(valid).expect("valid UTF-8 prefix"),
+                            false,
+                        ));
+                    }
+                    let invalid_len = error.error_len().unwrap_or(invalid.len());
+                    // Separate invalid bytes so command substitution cannot trim path newlines.
+                    for byte in &invalid[..invalid_len] {
+                        argument.push_str(&format!("\"$(printf '\\{byte:03o}')\""));
+                    }
+                    remaining = &invalid[invalid_len..];
+                }
+            }
+        }
+        argument
+    }
+    #[cfg(not(unix))]
+    shell_argument(&path.to_string_lossy(), cfg!(windows))
+}
+
 fn override_value(name: &str) -> Option<String> {
     env::var(name).ok().filter(|value| !value.is_empty())
 }
@@ -445,6 +493,64 @@ impl<'a> Lifecycle<'a> {
         Ok(())
     }
 
+    fn recovery_command(&self, options: &Options, action: &str, mode: Option<&str>) -> String {
+        let quote = |value: &str| shell_argument(value, cfg!(windows));
+        let mut command = format!("smolsbx {action}");
+        if let Some(mode) = mode {
+            command.push(' ');
+            command.push_str(mode);
+        }
+        command.push_str(&format!(
+            " --smolfile {} --smolvm {}",
+            quote(
+                self.config
+                    .definition
+                    .path
+                    .to_str()
+                    .expect("validated definition path")
+            ),
+            shell_path_argument(&self.smolvm.path)
+        ));
+        for host in &options.allow_hosts {
+            command.push_str(&format!(" --allow-host {}", quote(host)));
+        }
+        command.push(' ');
+        command.push_str(&quote(
+            self.config
+                .workspace
+                .to_str()
+                .expect("validated workspace path"),
+        ));
+        command
+    }
+
+    fn upgrade_guidance(&self) -> String {
+        format!(
+            "Executable updates preserve the selected definition; replacement uses that definition unchanged.\nTemplate adoption is separate: follow RUST-APPLICATION.md#template-adoption to generate the {} profile into a new, nonexisting file, compare it with {}, then explicitly select or edit the desired definition.",
+            self.config.definition.profile.id(),
+            self.config.definition.path.display()
+        )
+    }
+
+    fn replacement_plan(&self, desired_exists: bool, stale: &[&domain::Classified]) {
+        println!(
+            "Replacement plan: {} desired workspace machine {}.",
+            if desired_exists { "reuse" } else { "create" },
+            self.identity.desired_name
+        );
+        for item in stale {
+            println!(
+                "Eligible stale deletion candidate: {} ({}).",
+                item.machine.name, item.machine.state
+            );
+        }
+        if stale.is_empty() {
+            println!("No stale machines are scheduled for deletion.");
+        } else {
+            println!("Replacement readiness is verified before deleting stale machines. Deletion discards guest-local writable disk state; mounted project files, the selected definition, and the persistent harness home remain.");
+        }
+    }
+
     fn reconcile(&self, options: &Options, requested_ports: &[u16]) -> Result<()> {
         let inventory = self.smolvm.inventory()?;
         let classification = domain::classify(&inventory, &self.identity);
@@ -473,6 +579,31 @@ impl<'a> Lifecycle<'a> {
                     item.machine.name, item.machine.state, item.source, item.reason
                 );
             }
+            if !ambiguous.is_empty() {
+                println!("Replacement is blocked by ambiguous ownership; inspect the conflicting machine names and ownership labels in SmolVM inventory. Resolve the ownership conflict before replacement.");
+            } else if !stale.is_empty() {
+                self.replacement_plan(desired.is_some(), &stale);
+                if stale.iter().any(|item| item.machine.running()) {
+                    println!("Running stale machines require stopping first or explicit --force authorization.");
+                    println!(
+                        "After stopping the stale machines: {}",
+                        self.recovery_command(options, "repair", Some("--replace-stale"))
+                    );
+                    println!(
+                        "To authorize stopping them during replacement: {}",
+                        self.recovery_command(options, "repair", Some("--replace-stale --force"))
+                    );
+                } else {
+                    println!(
+                        "Next: {}",
+                        self.recovery_command(options, "repair", Some("--replace-stale"))
+                    );
+                }
+            } else {
+                println!("No stale workspace machines require replacement.");
+                println!("Next: {}", self.recovery_command(options, "start", None));
+            }
+            println!("{}", self.upgrade_guidance());
             return Ok(());
         }
         for item in stale.iter().chain(ambiguous.iter()) {
@@ -483,7 +614,15 @@ impl<'a> Lifecycle<'a> {
         }
         if !options.replace_stale {
             if desired.is_none() && (!stale.is_empty() || !ambiguous.is_empty()) {
-                bail!("no machine matches the current sandbox definition; run smolsbx repair --check, then repair --replace-stale with the same workspace and additional hosts; no machines were created or deleted");
+                eprintln!("{}", self.upgrade_guidance());
+                eprintln!(
+                    "Read-only inspection: run {}",
+                    self.recovery_command(options, "repair", Some("--check"))
+                );
+                if !ambiguous.is_empty() {
+                    bail!("no machine matches the selected workspace identity; resolve ambiguous ownership before replacement; no machines were created or deleted");
+                }
+                bail!("no machine matches the selected workspace identity; explicit replacement is required to preserve existing machines until the desired replacement passes readiness checks; no machines were created or deleted");
             }
             if let Some(desired) = desired {
                 if options.command == Command::Start {
@@ -521,6 +660,8 @@ impl<'a> Lifecycle<'a> {
                     );
                 }
             }
+            self.replacement_plan(desired.is_some(), &stale);
+            println!("{}", self.upgrade_guidance());
             self.ensure_base(&inventory).context(
                 "could not prepare desired base; stale workspace machines were left unchanged",
             )?;
@@ -1028,6 +1169,11 @@ pub fn run(options: &Options) -> Result<i32> {
                     "Workspace machine ready: {}",
                     lifecycle.identity.desired_name
                 );
+                println!("The guest harness has not been launched.");
+                println!(
+                    "Next: {}",
+                    lifecycle.recovery_command(options, "start", None)
+                );
             }
             Ok(0)
         }
@@ -1125,6 +1271,47 @@ fn list(options: &Options) -> Result<i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recovery_arguments_quote_metacharacters_for_posix_and_powershell() {
+        let value = "a path\\O'Reilly;$HOME`\"&()";
+        assert_eq!(
+            shell_argument(value, false),
+            "'a path\\O'\"'\"'Reilly;$HOME`\"&()'"
+        );
+        assert_eq!(
+            shell_argument(value, true),
+            "'a path\\O''Reilly;$HOME`\"&()'"
+        );
+        assert_eq!(shell_argument("", false), "''");
+        assert_eq!(shell_argument("", true), "''");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn recovery_runtime_path_preserves_non_utf8_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let cases: &[(&[u8], &str)] = &[
+            (b"/tmp/\xff smolvm", "'/tmp/'\"$(printf '\\377')\"' smolvm'"),
+            (
+                b"/tmp/\xff\xfe",
+                "'/tmp/'\"$(printf '\\377')\"\"$(printf '\\376')\"",
+            ),
+            (
+                b"/tmp/caf\xc3\xa9\n\xff\nsmolvm\n",
+                "'/tmp/café\n'\"$(printf '\\377')\"'\nsmolvm\n'",
+            ),
+            (
+                b"/tmp/\xe2\x82",
+                "'/tmp/'\"$(printf '\\342')\"\"$(printf '\\202')\"",
+            ),
+        ];
+        for (bytes, expected) in cases {
+            let path = PathBuf::from(OsString::from_vec(bytes.to_vec()));
+            assert_eq!(shell_path_argument(&path), *expected);
+        }
+    }
 
     #[cfg(unix)]
     #[test]
