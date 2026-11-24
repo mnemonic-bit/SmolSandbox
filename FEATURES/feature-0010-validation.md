@@ -944,3 +944,82 @@ not establish complete guest provisioning or Codex discovery. Preserve all
 previous observations and source revisions. Final cutover acceptance remains
 pending the existing native and real guest gates for every required profile
 and supported virtualization host.
+
+## Bug 0010 stale workspace guidance investigation: 2026-11-23
+
+Investigation used source revision
+`fc05a8db17f9deac61f21dad8f2c98619eb033c9`, package `0.16.0`, and lifecycle
+policy revision `7`. [Bug 0010](../BUGS/bug-0010-stale-workspace-upgrade-guidance.md)
+records the supplied error, source analysis, reproduction, and acceptance
+criteria. The new report and this appended record change no software;
+both Cargo versions remain `0.16.0`.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Focused existing stale regressions | passed | `cargo test --locked --features test-adapter --test application stale -- --nocapture` exited 0; six tests passed, 65 filtered out, in 3.20 seconds |
+| Disposable revision-only reproduction | passed | With unchanged definition bytes and runtime version, the test double's workspace name and revision label were changed from 7 to 5; `start` exited 1 with the reported generic error and blank candidate reason; inventory bytes were preserved |
+| Read-only inspection and recovery | passed | In that disposable reproduction, `repair --check` exited 0 with an r7 desired machine and an r5 candidate with no reason, preserving inventory; replacement and subsequent start exited 0, preserving selected definition bytes |
+| Enhanced output and seven full Rust checks | not_run | The diagnostic correction remains pending; this change adds a bug report and investigation record only |
+| User-host, other native targets, and real SmolVM guests | not_run | The supplied excerpt omits executable/runtime versions and full inventory; local reproduction used the Rust test double, not real machines |
+
+The reproduction establishes a revision mismatch as a sufficient cause,
+not the verified cause on the user's host. Existing regression success
+does not establish passing Bug 0010 diagnostic acceptance criteria.
+Previous observations, source revisions, and pending native and real guest
+cutover gates remain unchanged.
+
+## Bug 0010 stale workspace guidance implementation: 2026-11-23
+
+Source revision `fc05a8db17f9deac61f21dad8f2c98619eb033c9` plus the local
+[Bug 0010](../BUGS/bug-0010-stale-workspace-upgrade-guidance.md) correction
+uses package `0.16.1` in both Cargo files. Lifecycle policy revision remains
+`7`. The software diff SHA-256 is
+`3d2b4d84f6edb3649455245dd477907bee03dd043c34493d4e58a17535f74b66`,
+computed over the bytes of `git diff --binary -- Cargo.toml Cargo.lock
+src/domain.rs src/lifecycle.rs tests/application.rs
+tests/data/ownership-cases.json`. Documentation and the original report
+observations are outside that fingerprint.
+
+Stale candidates now explain revision, base-identity, and explicit-name
+differences using classification evidence. Legacy-name evidence identifies
+unknown ownership metadata. Inspection, replacement, and resume commands
+retain the resolved workspace, selected definition, runtime, and additional
+hosts. Inspection describes the replacement plan and discarded guest-local
+disk state; successful replacement supplies a separate start command.
+Ambiguous ownership remains a replacement blocker. Definition selection,
+identity inputs, readiness checks, mutation order, running-machine
+authorization, exit statuses, and failure preservation retain their existing
+behavior. Template adoption remains a separate user action.
+
+The following results were observed on native
+`x86_64-unknown-linux-gnu` with Rust/Cargo `1.100.0`. Runtime evidence uses
+the Rust SmolVM test double in disposable directories.
+
+| Command or check | Result | Evidence |
+| --- | --- | --- |
+| Initial revision-only regression | passed | Before the correction, `cargo test --locked --features test-adapter --test application stale_revision_upgrade_guidance_explains_revision_without_definition_changes -- --nocapture` exited 101 with the reported empty stale reason; the domain reason regression also exited 101 before the fix |
+| Fixed classification expectations | passed | All 384 cases retain their original inputs, category, source, and readiness expectations; exactly 64 stale reason expectations changed; focused differential check exited 0 |
+| Focused stale integration regressions | passed | `cargo test --locked --features test-adapter --test application stale_ -- --nocapture` exited 0; ten tests passed, 65 filtered out |
+| `cargo fmt --all -- --check` | passed | Exit 0 |
+| `cargo clippy --locked --all-targets -- -D warnings` | passed | Exit 0 |
+| `cargo clippy --locked --features test-adapter --all-targets -- -D warnings` | passed | Exit 0 |
+| `cargo test --locked --all-targets` | passed | Exit 0; 151 tests passed |
+| `cargo test --locked --features test-adapter --all-targets` | passed | Exit 0; 232 tests passed, including 75 application tests |
+| `cargo build --locked --release --bin smolsbx` | passed | Exit 0; production build uses default features |
+| `cargo run --locked --example check_baseline_independence` | passed | Exit 0; isolated source checks and production build passed; ten compiled test executables per feature configuration passed with empty `PATH` |
+| Definition selection and recovery commands | passed | Integration tests cover default selection, custom `--smolfile`, `BASE_SMOLFILE`, additional hosts, explicit runtime selection, spaces and apostrophes, and exclusion of secret values and guest arguments |
+| Inspection and replacement contracts | passed | Tests cover revision 5 to 7 with unchanged definition bytes, stopped/running/ambiguous/desired-plus-stale inventories, lock-free read-only inspection, plan output before runtime creation, readiness before deletion, success handoff after cleanup, and no success handoff after preparation, verification, or partial cleanup failure |
+| Template adoption and definition preservation | passed | Repair tests preserve selected definition bytes; `named_configuration_uses_invocation_directory_without_changing_default_or_permissions` retains separate-destination generation and overwrite-refusal coverage |
+| Native POSIX shell execution | passed | Disposable `/bin/sh` executions of displayed inspection, replacement, and resume commands exited 0 with spaces, apostrophes, semicolons, dollar signs, and command-substitution text; selected definition bytes were preserved |
+| Non-UTF-8 runtime path and independent review | passed | Review found and corrected lossy runtime-path rendering; a separate `/bin/sh` run executed all three displayed commands with runtime bytes FF FE after removing `SMOLVM_BIN`; all exited 0 and preserved definition bytes; no remaining concrete review defect was found |
+| PowerShell representation | passed | Fixed unit expectations cover spaces, apostrophes, backslashes, dollar signs, backticks, double quotes, and shell metacharacters; this checks representation without native PowerShell execution |
+| Other native targets and PowerShell execution | not_run | No new Linux ARM64, macOS ARM64, Windows x86-64/ARM64, hosted CI, or native PowerShell execution evidence was collected; PowerShell is absent on this Linux host |
+| User-host reproduction and real SmolVM guests | not_run | The user's installed version and complete inventory remain unknown; no real runtime provisioning, authentication, interactive terminal, or guest replacement was performed |
+
+Bug 0010 is implemented and locally validated. Native PowerShell command
+execution and real guest upgrade recovery remain pending. The earlier
+investigation records sufficient revision-mismatch reproduction, not the
+verified cause on the user's host. Preserve all previous observations and
+source revisions. Final cutover acceptance remains pending the existing
+native and real guest gates for every required profile and supported
+virtualization host.
