@@ -2,12 +2,12 @@
 
 ## Status
 
-In progress
+Implemented
 
-The command rename is implemented locally. Local checks and the pending
-native CI artifact verification are recorded in
-[Feature 0015 validation](feature-0015-validation.md). AC-07 remains
-`not_run`; the feature is not marked `Implemented`.
+Marked completed on 2026-11-23 at the user's request. See the
+[completion decision](feature-0015-validation.md#completion-decision-2026-11-23).
+Previously recorded validation results and pending native CI artifact checks
+remain recorded separately.
 
 ## Summary
 

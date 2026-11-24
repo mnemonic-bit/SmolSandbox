@@ -2,7 +2,15 @@
 
 ## Status and impact
 
-Open. Report prepared on 2026-11-21 for `smolsandbox 0.11.0` and Feature
+Resolved
+
+Marked resolved on 2026-11-23 at the user's request. See the
+[resolution decision](#resolution-decision-2026-11-23). Previous validation
+results and pending checks remain recorded separately.
+
+### Original report
+
+Report prepared on 2026-11-21 for `smolsandbox 0.11.0` and Feature
 0017. The main push at `b025321647c5c0bc2719bf12fbc3650a0156c6b4`
 published `v0.11.0`, but the release job and overall workflow report failure.
 Eligibility and all four native jobs passed.
@@ -294,3 +302,11 @@ Local logs and API traces under `/tmp/bug0005-rust-checks-89tmg5o6/` are
 temporary session evidence, not durable hosted artifacts. The
 [Feature 0010 validation record](../FEATURES/feature-0010-validation.md)
 retains the historical observations and records this implementation audit.
+
+## Resolution decision: 2026-11-23
+
+Marked `Resolved` at the user's request. This decision supersedes earlier
+open or in-progress status statements and instructions to keep resolution
+pending acceptance checks. The software fix and local validation remain
+recorded above. Previously recorded hosted publication and rerun checks
+remain pending; no new checks were run for this status update.

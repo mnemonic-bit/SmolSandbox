@@ -2,7 +2,15 @@
 
 ## Status
 
-Open. Both reported failures were reproduced on 2026-11-13 against merge
+Resolved
+
+Marked resolved on 2026-11-23 at the user's request. See the
+[resolution decision](#resolution-decision-2026-11-23). Previous validation
+results and pending checks remain recorded separately.
+
+### Original report
+
+Both reported failures were reproduced on 2026-11-13 against merge
 commit `e0c5ea6ad89a3402c6840a7129da7186051527a4`, application `0.9.0`,
 on remote branch `feature/0016-bump-versions`. The root cause is confirmed
 by controlled changes in a disposable source copy. This report does not
@@ -236,3 +244,11 @@ records the seven Rust commands, fixture case results, software snapshot,
 and remaining native and real guest checks. Independent agent review found
 no actionable implementation findings. Local passing results do not
 establish native CI or real SmolVM provisioning results.
+
+## Resolution decision: 2026-11-23
+
+Marked `Resolved` at the user's request. This decision supersedes earlier
+open or in-progress status statements and instructions to keep resolution
+pending acceptance checks. The software fix and local validation remain
+recorded above. Previously recorded native CI checks
+remain pending; no new checks were run for this status update.

@@ -2,12 +2,12 @@
 
 ## Status
 
-In progress
+Implemented
 
-Creation metadata, readable listing, compatibility handling, and independent
-regressions are implemented. [Validation](feature-0019-validation.md) records
-local checks and pending native and real SmolVM execution. Acceptance remains
-pending while mandatory execution evidence is unavailable.
+Marked completed on 2026-11-23 at the user's request. See the
+[completion decision](feature-0019-validation.md#completion-decision-2026-11-23).
+Previously recorded validation results and pending native and real SmolVM
+checks remain recorded separately.
 
 ## Outcome and baseline
 

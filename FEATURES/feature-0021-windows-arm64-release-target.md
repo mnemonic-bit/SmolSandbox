@@ -2,12 +2,12 @@
 
 ## Status
 
-In progress. Version `0.15.0` adds the Windows ARM64 workflow, packaging,
-publication requirements, and download guidance. Local validation is recorded
-in [Feature 0021 validation](feature-0021-validation.md). Native Windows ARM64
-execution and hosted publication checks remain pending; implementation
-acceptance requires those results. Specification preparation changed no
-workflow, release asset, runtime policy, or package version.
+Implemented
+
+Marked completed on 2026-11-23 at the user's request. See the
+[completion decision](feature-0021-validation.md#completion-decision-2026-11-23).
+Previously recorded validation results and pending native Windows ARM64
+execution and hosted publication checks remain recorded separately.
 
 ## Outcome and baseline
 
