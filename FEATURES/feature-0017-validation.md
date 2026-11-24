@@ -204,3 +204,13 @@ Primary interface references checked for this correction:
 - [GitHub release asset API](https://docs.github.com/en/rest/releases/assets?apiVersion=2022-11-28): raw binary uploads, paginated listing, octet-stream downloads, and duplicate-name failures.
 - [download-artifact v8.0.2 metadata](https://raw.githubusercontent.com/actions/download-artifact/v8.0.2/action.yml): same-run defaults and merged artifact extraction.
 - [upload-artifact v7.0.2 metadata](https://raw.githubusercontent.com/actions/upload-artifact/v7.0.2/action.yml): ZIP artifact upload and overwrite behavior for workflow reruns.
+
+## Completion decision: 2026-11-23
+
+Feature 0017 is marked `Implemented` at the user's request.
+This decision supersedes earlier `In progress` status statements and
+instructions to keep the feature open until all mandatory criteria pass.
+The status change records the user's completion decision. Previously
+recorded check results, source revisions, and pending validation remain
+unchanged. No new native, hosted, or real SmolVM checks were run for this
+status update.

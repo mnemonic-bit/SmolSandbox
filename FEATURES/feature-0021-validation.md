@@ -102,3 +102,13 @@ implementation session.
 Real guest checks remain `not_run`. Windows ARM64 virtualization remains
 unsupported; runner execution, mocked lifecycle results, and CLI distribution
 do not enable sandbox creation or close the existing real guest cutover gates.
+
+## Completion decision: 2026-11-23
+
+Feature 0021 is marked `Implemented` at the user's request.
+This decision supersedes earlier `In progress` status statements and
+instructions to keep the feature open until all mandatory criteria pass.
+The status change records the user's completion decision. Previously
+recorded check results, source revisions, and pending validation remain
+unchanged. No new native, hosted, or real SmolVM checks were run for this
+status update.

@@ -195,3 +195,13 @@ The seven required command logs are in
 `results.json` records their exit codes. These temporary paths are session
 evidence. Native CI artifact verification and real guest evidence remain
 pending. Feature 0015 retains its `In progress` status.
+
+## Completion decision: 2026-11-23
+
+Feature 0015 is marked `Implemented` at the user's request.
+This decision supersedes earlier `In progress` status statements and
+instructions to keep the feature open until all mandatory criteria pass.
+The status change records the user's completion decision. Previously
+recorded check results, source revisions, and pending validation remain
+unchanged. No new native, hosted, or real SmolVM checks were run for this
+status update.

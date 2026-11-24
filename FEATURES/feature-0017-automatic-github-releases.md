@@ -2,13 +2,12 @@
 
 ## Status
 
-In progress
+Implemented
 
-Release automation is implemented locally. Hosted acceptance checks remain
-pending; see the [validation record](feature-0017-validation.md).
-
-This document specifies release automation. No workflow, package version,
-GitHub setting, tag, or release is changed during specification preparation.
+Marked completed on 2026-11-23 at the user's request. See the
+[completion decision](feature-0017-validation.md#completion-decision-2026-11-23).
+Previously recorded validation results and pending hosted acceptance checks
+remain recorded separately.
 
 ## Outcome and baseline
 

@@ -164,3 +164,13 @@ Linux ARM64, macOS ARM64, and Windows x86-64 native checks are `not_run`
 for this working tree. No hosted CI run was requested or observed. Local
 mocked checks do not establish those native targets or real guest behavior.
 Keep Feature 0018 `In progress` until every mandatory criterion passes.
+
+## Completion decision: 2026-11-23
+
+Feature 0018 is marked `Implemented` at the user's request.
+This decision supersedes earlier `In progress` status statements and
+instructions to keep the feature open until all mandatory criteria pass.
+The status change records the user's completion decision. Previously
+recorded check results, source revisions, and pending validation remain
+unchanged. No new native, hosted, or real SmolVM checks were run for this
+status update.

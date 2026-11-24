@@ -139,3 +139,14 @@ inspection or the Rust test double for these observations.
 
 Final Feature 0019 acceptance and the broader Feature 0010 cutover remain
 pending the missing execution evidence.
+
+## Completion decision: 2026-11-23
+
+Both Feature 0019 specifications, readable machine identity metadata and
+README licence and download badges, are marked `Implemented` at the user's request.
+This decision supersedes earlier `In progress` status statements and
+instructions to keep the feature open until all mandatory criteria pass.
+The status change records the user's completion decision. Previously
+recorded check results, source revisions, and pending validation remain
+unchanged. No new native, hosted, or real SmolVM checks were run for this
+status update.
