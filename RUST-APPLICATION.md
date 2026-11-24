@@ -193,6 +193,12 @@ a separate destination with `create-config --harness <profile> --smolfile
 file. Existing edits and harness state are preserved. Changing definition
 bytes selects a new base generation on the next lifecycle operation.
 
+Choose a destination that does not exist: `create-config` refuses to overwrite
+an existing file. Repair always uses the displayed selected definition;
+replacement alone does not adopt an embedded template. A creation-policy
+revision mismatch can require replacement with unchanged definition bytes and
+does not establish that a newer template caused the mismatch.
+
 For the Feature 0022 Codex skills update, generate a separate file and compare it
 with the definition currently selected for the workspace:
 
@@ -643,6 +649,14 @@ ambiguous candidates remain; the application warns about those candidates.
 If only stale machines match the workspace, normal startup refuses rather
 than creating or deleting machines.
 
+Every stale candidate includes an explanation. Diagnostics show the existing
+and required creation-policy revisions, base identities, or explicit machine
+names when those differences are established. Legacy-name evidence is marked
+as inferred, with ownership metadata unknown. A base-identity difference alone
+does not identify whether definition bytes or the runtime version changed.
+An executable update can advance the required policy revision while leaving
+the selected definition unchanged.
+
 Inspect candidates and then explicitly authorize replacement:
 
 ```text
@@ -651,7 +665,24 @@ smolsbx repair --replace-stale /path/to/project
 smolsbx repair --replace-stale --force /path/to/project
 ```
 
-`repair --check` is read-only and lock-free. Replacement prepares the current
+The application displays complete commands with the resolved workspace,
+selected definition path, runtime executable, and additional hosts. Use those
+commands to retain the effective selection, including a definition chosen
+through `BASE_SMOLFILE`. Commands use POSIX shell quoting on Linux/macOS and
+PowerShell quoting on Windows. Guest harness arguments and secret values are
+excluded from recovery commands.
+
+`repair --check` is read-only and lock-free. Inspection reports whether the
+desired machine exists, names eligible stale deletion candidates, explains
+replacement consequences, and supplies the applicable replacement command.
+A running stale machine requires stopping or explicit `--force`
+authorization. Ambiguous ownership requires inspection and resolution;
+replacement and `--force` cannot bypass that conflict.
+
+Before mutation, replacement displays its desired machine and stale deletion
+candidates. Deletion discards guest-local writable disk state in the deleted
+machines. Mounted project files, the selected definition, and persistent
+harness home remain. Replacement prepares the current
 base, creates the desired machine if needed, and verifies readiness from fresh
 inventory before deleting eligible stale machines. `--force` authorizes
 stopping running stale machines only after that readiness verification. Only
@@ -663,6 +694,14 @@ A newly registered desired machine is retained for inspection after failure.
 If later deletion fails, cleanup stops, leaving the verified desired machine
 and unprocessed stale machines available; compatibility caches are not
 rewritten after that partial handoff.
+
+Successful replacement prints a complete `smolsbx start` command with the
+same effective selection. Repair does not launch the guest harness. Failed
+preparation, verification, or partial deletion does not print a successful
+handoff command. Updating the executable and replacing machines preserve
+user-owned definitions; follow [template adoption](#template-adoption) to
+generate a separate file, compare it with the selected definition, and
+explicitly select or edit the desired file.
 
 ### Session completion and failures
 
