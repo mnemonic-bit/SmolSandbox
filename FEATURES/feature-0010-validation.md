@@ -1053,3 +1053,27 @@ cause remain unverified. Preserve previous observations and source revisions.
 Final cutover acceptance remains pending the existing native and real guest
 gates for supported virtualization hosts.
 >>>>>>> Stashed changes
+
+## Feature status decisions: 2026-11-23
+
+At the user's request, Features 0015, 0017, 0018, both specifications
+numbered 0019, and Feature 0021 are marked `Implemented`. Feature 0001 is
+marked `Dropped`; its specification remains available as a historical record.
+These decisions supersede earlier instructions to keep the selected
+features open pending mandatory acceptance checks.
+
+This update changes feature records only. Previous validation observations,
+source revisions, and pending native, hosted, and real SmolVM checks remain
+unchanged. No new runtime validation was performed. Final cutover acceptance
+remains pending the existing native and real guest gates.
+
+## Bug resolution decisions: 2026-11-23
+
+At the user's request, Bugs 0003, 0005, and 0006 are marked `Resolved`.
+These decisions supersede earlier open or in-progress status statements and
+instructions to keep the selected bugs open pending acceptance checks.
+
+This update changes bug records only. Previous validation observations,
+source revisions, and pending native, hosted, and real SmolVM checks remain
+unchanged. No new runtime validation was performed. Final cutover acceptance
+remains pending the existing native and real guest gates.

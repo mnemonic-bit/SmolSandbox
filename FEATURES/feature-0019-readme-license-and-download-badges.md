@@ -2,15 +2,13 @@
 
 ## Status
 
-In progress
+Implemented
 
-Specification preparation added no README badges, licence grant, release
-assets, workflow changes, or software version bump. Local implementation and
-remaining acceptance checks are recorded in
-[Feature 0019 validation](feature-0019-validation.md). Implementation acceptance
-is pending. The repository owner selected the MIT licence in the follow-up
-request. Implementation must add a root `LICENSE` file and a README licence
-badge linking to that file.
+Marked completed on 2026-11-23 at the user's request, including both
+specifications numbered 0019. See the
+[completion decision](feature-0019-validation.md#completion-decision-2026-11-23).
+Previously recorded validation results and pending acceptance checks remain
+recorded separately.
 
 ## Outcome and baseline
 

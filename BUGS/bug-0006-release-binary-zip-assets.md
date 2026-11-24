@@ -2,7 +2,15 @@
 
 ## Status and outcome
 
-In progress. Report prepared on 2026-11-21 for `smolsandbox 0.11.0`, release
+Resolved
+
+Marked resolved on 2026-11-23 at the user's request. See the
+[resolution decision](#resolution-decision-2026-11-23). Previous validation
+results and pending checks remain recorded separately.
+
+### Original report
+
+Report prepared on 2026-11-21 for `smolsandbox 0.11.0`, release
 `v0.11.0`, and main commit `b025321647c5c0bc2719bf12fbc3650a0156c6b4`.
 The user followed the README release badge and found a source-code ZIP
 instead of ready-to-run software. Users cannot download the compiled
@@ -266,3 +274,11 @@ AC-07 passed locally, including all seven required Rust commands.
 The next hosted run must record run and release URLs, tag SHA, asset IDs,
 public download archive listings, all four native `--version` results,
 partial recovery, and a complete rerun preserving asset IDs and bytes.
+
+## Resolution decision: 2026-11-23
+
+Marked `Resolved` at the user's request. This decision supersedes earlier
+open or in-progress status statements and instructions to keep resolution
+pending acceptance checks. The software fix and local validation remain
+recorded above. Previously recorded hosted publication, binary download, and recovery checks
+remain pending; no new checks were run for this status update.

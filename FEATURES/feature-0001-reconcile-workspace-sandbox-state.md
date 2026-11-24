@@ -2,7 +2,10 @@
 
 ## Status
 
-Proposed
+Dropped
+
+Dropped on 2026-11-23 at the user's request. The specification below is
+retained as a historical record.
 
 ## Summary
 

@@ -2,12 +2,12 @@
 
 ## Status
 
-In progress
+Implemented
 
-The software update selects Codex `0.171.0` and application version `0.12.0`.
-Implementation acceptance remains pending required real SmolVM guest
-validation. The [validation record](feature-0018-validation.md) separates
-local checks from outstanding acceptance criteria.
+Marked completed on 2026-11-23 at the user's request. See the
+[completion decision](feature-0018-validation.md#completion-decision-2026-11-23).
+Previously recorded validation results and pending native and real SmolVM
+checks remain recorded separately.
 
 ## Outcome and baseline
 
