@@ -282,6 +282,8 @@ def resolve_tag(api, tag):
     reference = api.request("GET", f"/git/ref/tags/{encoded_tag}", allow_missing=True)
     commit = None
     if reference is not None:
+        if not isinstance(reference, dict) or not isinstance(reference.get("object"), dict):
+            raise ReleaseError(f"Tag {tag} returned invalid reference metadata")
         obj = reference.get("object", {})
         visited = set()
         while obj.get("type") == "tag":
@@ -289,11 +291,31 @@ def resolve_tag(api, tag):
             if not isinstance(sha, str) or sha in visited or len(visited) >= 64:
                 raise ReleaseError(f"Cannot resolve annotated tag {tag}")
             visited.add(sha)
-            obj = api.request("GET", f"/git/tags/{urllib.parse.quote(sha, safe='')}").get("object", {})
+            annotation = api.request("GET", f"/git/tags/{urllib.parse.quote(sha, safe='')}")
+            if not isinstance(annotation, dict) or not isinstance(annotation.get("object"), dict):
+                raise ReleaseError(f"Cannot resolve annotated tag {tag}: invalid tag metadata")
+            obj = annotation["object"]
         if obj.get("type") != "commit" or not isinstance(obj.get("sha"), str):
             raise ReleaseError(f"Tag {tag} does not resolve to a commit")
         commit = obj["sha"]
     return commit
+
+
+def verify_created_tag(api, tag, sha, report):
+    for attempt in range(1, VERIFICATION_ATTEMPTS + 1):
+        commit = resolve_tag(api, tag)
+        if commit is not None:
+            report(f"Tag: {tag} resolves to {commit}")
+            if commit != sha:
+                raise ReleaseError(f"Tag {tag} resolves to {commit}, expected {sha}; the existing tag is preserved")
+            return
+        report(f"Tag verification for {tag}, expected {sha}, attempt {attempt}/{VERIFICATION_ATTEMPTS}: tag is not visible")
+        if attempt < VERIFICATION_ATTEMPTS:
+            time.sleep(VERIFICATION_DELAY_SECONDS)
+    raise ReleaseError(
+        f"Created tag {tag}, expected {sha}, cannot be verified after "
+        f"{VERIFICATION_ATTEMPTS} attempts; rerun the original workflow"
+    )
 
 
 def release_state(api, tag):
@@ -385,9 +407,7 @@ def publish(api, tag, sha, report):
         except APIError as error:
             if error.status not in (409, 422):
                 raise
-            commit, release = checked_state(api, tag, sha, report)
-            if commit is None:
-                raise error
+        verify_created_tag(api, tag, sha, report)
         commit, release = checked_state(api, tag, sha, report)
         if commit is None:
             raise ReleaseError(f"Created tag {tag} cannot be verified")

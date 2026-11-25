@@ -50,6 +50,7 @@ class FakeAPI:
         self.list_missing_reads = 0
         self.direct_missing_reads = 0
         self.direct_draft_reads = 0
+        self.tag_missing_reads = 0
 
     def add_release(self, tag=TAG, draft=False, body="Retained release notes", **fields):
         item = {
@@ -94,6 +95,11 @@ class FakeAPI:
             return {"encoding": "base64", "content": base64.b64encode(source.encode()).decode()}
         if method == "GET" and url.path.startswith("/git/ref/tags/"):
             tag = url.path.removeprefix("/git/ref/tags/")
+            if self.tag_missing_reads:
+                self.tag_missing_reads -= 1
+                if allow_missing:
+                    return None
+                raise release.APIError(404, "Tag temporarily absent")
             if tag in self.tags:
                 return {"ref": "refs/tags/" + tag, "object": copy.deepcopy(self.tags[tag])}
             if allow_missing:
@@ -163,6 +169,173 @@ class ReleaseTests(unittest.TestCase):
 
     def assert_no_writes(self):
         self.assertEqual(self.api.writes, [])
+
+    def delay_created_tag(self, missing_reads, status=None, sha=SHA, concurrent_release=False):
+        def create_tag(api, data):
+            api.tag_missing_reads = missing_reads
+            if concurrent_release:
+                api.add_release(body="Concurrent publication notes")
+            if status is not None:
+                api.tags[TAG] = {"type": "commit", "sha": sha}
+                raise release.APIError(status, "Reference already exists")
+            if sha != SHA:
+                def conflict(api, data):
+                    api.tags[TAG] = {"type": "commit", "sha": sha}
+                api.at_next("GET", "/git/ref/tags/" + TAG, conflict)
+        self.api.at_next("POST", "/git/refs", create_tag)
+
+    def test_created_tag_retries_missing_reads_and_accepts_last_attempt(self):
+        for missing_reads in (1, 2, 4):
+            with self.subTest(missing_reads=missing_reads):
+                self.api = FakeAPI()
+                self.delay_created_tag(missing_reads)
+                with mock.patch.object(release.time, "sleep") as sleep:
+                    self.assertEqual(self.run_release(), "published")
+                self.assertEqual(sleep.call_args_list, [mock.call(1)] * missing_reads)
+                self.assertEqual(self.api.tags[TAG], {"type": "commit", "sha": SHA})
+                self.assertEqual(len(self.api.releases), 1)
+                self.assertEqual(sum(path == "/git/refs" for _, path, _ in self.api.writes), 1)
+                self.assertTrue(all(method == "POST" for method, _, _ in self.api.writes))
+
+    def test_tag_creation_races_retry_missing_reads_without_repeating_creation(self):
+        for status in (409, 422):
+            for missing_reads in (1, 4):
+                with self.subTest(status=status, missing_reads=missing_reads):
+                    self.api = FakeAPI()
+                    self.delay_created_tag(missing_reads, status)
+                    with mock.patch.object(release.time, "sleep") as sleep:
+                        self.assertEqual(self.run_release(), "published")
+                    self.assertEqual(sleep.call_args_list, [mock.call(1)] * missing_reads)
+                    self.assertEqual(sum(path == "/git/refs" for _, path, _ in self.api.writes), 1)
+                    self.assertEqual(len(self.api.releases), 1)
+                    self.assertEqual(self.api.tags[TAG]["sha"], SHA)
+
+    def test_visible_concurrent_release_does_not_bypass_or_prevent_tag_verification(self):
+        for status in (None, 409, 422):
+            with self.subTest(status=status):
+                self.api = FakeAPI()
+                self.delay_created_tag(2, status, concurrent_release=True)
+                with mock.patch.object(release.time, "sleep") as sleep:
+                    self.assertEqual(self.run_release(), "already-published")
+                self.assertEqual(sleep.call_args_list, [mock.call(1)] * 2)
+                self.assertEqual([call[:2] for call in self.api.writes], [("POST", "/git/refs")])
+                self.assertEqual(self.api.releases[0]["body"], "Concurrent publication notes")
+
+    def test_created_tag_verification_exhaustion_preserves_tag_and_supports_rerun(self):
+        for status in (None, 409, 422):
+            for concurrent_release in (False, True):
+                with self.subTest(status=status, concurrent_release=concurrent_release):
+                    self.api = FakeAPI()
+                    self.delay_created_tag(100, status, concurrent_release=concurrent_release)
+                    with mock.patch.object(release, "load_binary_assets", return_value={}), mock.patch.object(release, "ensure_binary_assets") as ensure_assets, mock.patch.object(release.time, "sleep") as sleep:
+                        with self.assertRaises(release.ReleaseError) as raised:
+                            release.run("publish", self.api, SHA, report=self.messages.append)
+                    for expected in (TAG, SHA, "5 attempts", "rerun the original workflow"):
+                        self.assertIn(expected, str(raised.exception))
+                    self.assertEqual(sleep.call_args_list, [mock.call(1)] * 4)
+                    self.assertEqual(self.api.calls.count(("GET", "/git/ref/tags/" + TAG, None)), 6)
+                    self.assertEqual([call[:2] for call in self.api.writes], [("POST", "/git/refs")])
+                    self.assertEqual(self.api.tags[TAG]["sha"], SHA)
+                    self.assertEqual(len(self.api.releases), int(concurrent_release))
+                    ensure_assets.assert_not_called()
+                    self.api.tag_missing_reads = 0
+                    self.api.calls.clear()
+                    self.assertEqual(self.run_release(), "already-published" if concurrent_release else "published")
+                    self.assertFalse(any(path == "/git/refs" for _, path, _ in self.api.writes))
+                    before = copy.deepcopy((self.api.tags, self.api.releases))
+                    self.api.calls.clear()
+                    self.assertEqual(self.run_release(), "already-published")
+                    self.assertEqual((self.api.tags, self.api.releases), before)
+                    self.assert_no_writes()
+
+    def test_created_tag_verification_rejects_conflicts_without_retrying_conflict(self):
+        for status in (None, 409, 422):
+            with self.subTest(status=status):
+                self.api = FakeAPI()
+                self.delay_created_tag(1, status, sha=OTHER_SHA)
+                with mock.patch.object(release.time, "sleep") as sleep:
+                    with self.assertRaisesRegex(release.ReleaseError, "expected " + SHA):
+                        self.run_release()
+                self.assertEqual(sleep.call_args_list, [mock.call(1)])
+                self.assertEqual(self.api.tags[TAG]["sha"], OTHER_SHA)
+                self.assertEqual(self.api.releases, [])
+                self.assertEqual([call[:2] for call in self.api.writes], [("POST", "/git/refs")])
+
+    def test_created_tag_verification_http_errors_fail_without_visibility_retry(self):
+        for creation_status in (None, 409, 422):
+            for read_status in (401, 403, 429, 500):
+                with self.subTest(creation_status=creation_status, read_status=read_status):
+                    self.api = FakeAPI()
+                    def create_tag(api, data):
+                        api.error_next("GET", "/git/ref/tags/" + TAG, read_status)
+                        if creation_status is not None:
+                            api.tags[TAG] = {"type": "commit", "sha": SHA}
+                            raise release.APIError(creation_status, "Reference already exists")
+                    self.api.at_next("POST", "/git/refs", create_tag)
+                    with mock.patch.object(release.time, "sleep") as sleep:
+                        with self.assertRaises(release.APIError) as raised:
+                            self.run_release()
+                    self.assertEqual(raised.exception.status, read_status)
+                    sleep.assert_not_called()
+                    self.assertEqual(self.api.releases, [])
+                    self.assertEqual([call[:2] for call in self.api.writes], [("POST", "/git/refs")])
+
+    def test_created_tag_verification_malformed_metadata_fails_without_visibility_retry(self):
+        invalid = [[], {}, {"object": None}, {"object": []}, {"object": {"type": "tree", "sha": SHA}}, {"object": {"type": "commit", "sha": 1}}]
+        for response in invalid:
+            with self.subTest(response=response):
+                self.api = FakeAPI()
+                def create_tag(api, data):
+                    api.at_next("GET", "/git/ref/tags/" + TAG, lambda api, data: response)
+                self.api.at_next("POST", "/git/refs", create_tag)
+                with mock.patch.object(release.time, "sleep") as sleep:
+                    with self.assertRaises(release.ReleaseError):
+                        self.run_release()
+                sleep.assert_not_called()
+                self.assertEqual(self.api.releases, [])
+                self.assertEqual([call[:2] for call in self.api.writes], [("POST", "/git/refs")])
+
+    def test_delayed_created_annotated_tag_resolves_validated_commit(self):
+        self.delay_created_tag(1, 422)
+        def annotate(delay):
+            self.api.tags[TAG] = {"type": "tag", "sha": "a" * 40}
+            self.api.annotations["a" * 40] = {"type": "tag", "sha": "b" * 40}
+            self.api.annotations["b" * 40] = {"type": "commit", "sha": SHA}
+        with mock.patch.object(release.time, "sleep", side_effect=annotate) as sleep:
+            self.assertEqual(self.run_release(), "published")
+        sleep.assert_called_once_with(1)
+        self.assertEqual(len(self.api.releases), 1)
+
+    def test_created_annotated_tag_malformed_metadata_fails_without_visibility_retry(self):
+        for annotation in ([], {}, {"object": None}, {"object": []}):
+            with self.subTest(annotation=annotation):
+                self.api = FakeAPI()
+                def create_tag(api, data):
+                    api.tags[TAG] = {"type": "tag", "sha": "a" * 40}
+                    api.at_next("GET", "/git/tags/" + "a" * 40, lambda api, data: annotation)
+                    raise release.APIError(422, "Reference already exists")
+                self.api.at_next("POST", "/git/refs", create_tag)
+                with mock.patch.object(release.time, "sleep") as sleep:
+                    with self.assertRaisesRegex(release.ReleaseError, "invalid tag metadata"):
+                        self.run_release()
+                sleep.assert_not_called()
+                self.assertEqual(self.api.releases, [])
+                self.assertEqual([call[:2] for call in self.api.writes], [("POST", "/git/refs")])
+
+    def test_conflict_after_created_tag_visibility_is_caught_before_publication(self):
+        self.delay_created_tag(1)
+        def schedule_conflict(delay):
+            def match_then_conflict(api, data):
+                def conflict(api, data):
+                    api.tags[TAG] = {"type": "commit", "sha": OTHER_SHA}
+                api.at_next("GET", "/git/ref/tags/" + TAG, conflict)
+            self.api.at_next("GET", "/git/ref/tags/" + TAG, match_then_conflict)
+        with mock.patch.object(release.time, "sleep", side_effect=schedule_conflict):
+            with self.assertRaisesRegex(release.ReleaseError, "expected " + SHA):
+                self.run_release()
+        self.assertEqual(self.api.tags[TAG]["sha"], OTHER_SHA)
+        self.assertEqual(self.api.releases, [])
+        self.assertEqual([call[:2] for call in self.api.writes], [("POST", "/git/refs")])
 
     def test_new_release_uses_committed_version_exact_sha_and_generated_notes(self):
         self.run_release()
@@ -599,7 +772,7 @@ class ReleaseTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.api = FakeAPI()
                 self.api.error_next("POST", path, 422)
-                with self.assertRaises((release.APIError, release.ReleaseError)):
+                with mock.patch.object(release.time, "sleep"), self.assertRaises((release.APIError, release.ReleaseError)):
                     self.run_release()
                 self.assertEqual(self.api.releases, [])
 

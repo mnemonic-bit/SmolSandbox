@@ -122,6 +122,43 @@ class BinaryReleaseTests(unittest.TestCase):
         self.assertEqual(self.api.tags[TAG], {"type": "commit", "sha": SHA})
         self.assertTrue(any("Verified complete binary release" in message for message in self.messages))
 
+    def test_delayed_created_tag_publishes_five_zips_and_rerun_preserves_every_asset(self):
+        def delay_tag(api, data):
+            api.tag_missing_reads = 4
+
+        self.api.at_next("POST", "/git/refs", delay_tag)
+        with mock.patch.object(release.time, "sleep") as sleep:
+            self.assertEqual(self.run_release(), "published")
+        self.assertEqual(sleep.call_args_list, [mock.call(1)] * 4)
+        self.assertEqual({name: data for _, name, data in self.api.uploads}, self.packages)
+        self.assertEqual(len(self.api.releases), 1)
+        self.assertEqual(self.api.tags[TAG], {"type": "commit", "sha": SHA})
+        before = copy.deepcopy((self.api.releases, self.api.assets, self.api.asset_bytes, self.api.tags))
+        self.api.calls.clear()
+        self.api.uploads.clear()
+        self.assertEqual(self.run_release(), "already-published")
+        self.assertEqual((self.api.releases, self.api.assets, self.api.asset_bytes, self.api.tags), before)
+        self.assertEqual(self.api.uploads, [])
+        self.assertEqual(self.api.writes, [])
+
+    def test_unverified_created_tag_uploads_nothing_and_later_recovers_all_five_zips(self):
+        def delay_tag(api, data):
+            api.tag_missing_reads = 5
+
+        self.api.at_next("POST", "/git/refs", delay_tag)
+        with mock.patch.object(release.time, "sleep") as sleep:
+            with self.assertRaisesRegex(release.ReleaseError, "cannot be verified.*5.*rerun"):
+                self.run_release()
+        self.assertEqual(sleep.call_args_list, [mock.call(1)] * 4)
+        self.assertEqual(self.api.tags[TAG], {"type": "commit", "sha": SHA})
+        self.assertEqual(self.api.releases, [])
+        self.assertEqual(self.api.uploads, [])
+        self.assertEqual([call[:2] for call in self.api.writes], [("POST", "/git/refs")])
+        self.assertEqual(self.run_release(), "published")
+        self.assertEqual({name: data for _, name, data in self.api.uploads}, self.packages)
+        self.assertEqual(len(self.api.releases), 1)
+        self.assertEqual(sum(call[:2] == ("POST", "/git/refs") for call in self.api.writes), 1)
+
     def test_later_version_uses_the_same_names_and_preserves_the_previous_release(self):
         self.run_release()
         previous = copy.deepcopy((self.api.releases[0], self.api.assets[1], self.api.asset_bytes))
