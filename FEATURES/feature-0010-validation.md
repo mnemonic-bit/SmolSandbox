@@ -1077,3 +1077,52 @@ This update changes bug records only. Previous validation observations,
 source revisions, and pending native, hosted, and real SmolVM checks remain
 unchanged. No new runtime validation was performed. Final cutover acceptance
 remains pending the existing native and real guest gates.
+
+
+## Bug 0011 implementation validation: 2026-11-23
+
+The working tree based on `895d9fe787c79d052620ec545924a978f3eba993`
+implements [Bug 0011](../BUGS/bug-0011-release-tag-verification-race.md)
+and changes both Cargo package versions from `0.16.2` to `0.16.3`.
+The corrected `.github/scripts/release.py` has SHA-256
+`6f0cf14c1319f75e077c8bbe4b298abf3f449a9fd78239d1eda22ecc07b5caf3`.
+The earlier investigation and its source revisions remain historical evidence.
+
+Tag creation remains a single write. Successful creation and HTTP 409/422
+creation races now verify the tag through at most five reads, with one second
+between missing reads. A read must resolve to the immutable validated commit.
+Conflicting commits, malformed reference or annotation metadata, and other API
+errors fail immediately. Exhaustion preserves the tag, creates no release,
+uploads no assets, and identifies the tag, expected commit, attempt count,
+and original-workflow rerun guidance. Existing pre-publication conflict
+checks, annotated-tag resolution, release-ID verification, and five-target
+binary verification remain covered. The embedded workflow script matches
+the canonical script, and the operating recovery reference describes the
+new verification stage.
+
+These local results use native `x86_64-unknown-linux-gnu` with Rust/Cargo
+`1.100.0`. Runtime checks use the Rust SmolVM test double. Release automation
+checks use stateful API fakes and local ZIPs without GitHub writes.
+
+| Command or check | Result | Evidence |
+| --- | --- | --- |
+| Delayed-read regression before correction | passed | New metadata regression exited 1 on the original code for one, two, and four missing reads with the original Created tag error; the two new binary integration regressions also failed before the correction |
+| Original reported reproduction after correction | passed | The original v0.16.2/a446657d1aa46c92042f9993592f93f1d2b055cf delayed-read harness now publishes after one missing read and one wait; a subsequent invocation returns already-published without API writes |
+| `python3 -m unittest discover -s .github/scripts -p 'test_*.py'` | passed | Exit 0; 108 tests, including 12 new regressions; implementation agent, coordinator, and independent reviewer observed passing results |
+| Creation races, errors, and recovery | passed | Tests cover successful POST and HTTP 409/422, last-attempt visibility, concurrent published release visibility, conflicting commits, HTTP 401/403/429/500, malformed reference and annotation metadata, retry exhaustion, and preserved tags |
+| Five binary ZIPs and repeated recovery | passed | New integration regressions verify all five ZIPs after delayed visibility, no uploads before tag verification, recovery after exhaustion, and preservation of asset IDs, bytes, notes, and tags without writes on repeated recovery |
+| `cargo fmt --all -- --check` | passed | Exit 0 |
+| `cargo clippy --locked --all-targets -- -D warnings` | passed | Exit 0 |
+| `cargo clippy --locked --features test-adapter --all-targets -- -D warnings` | passed | Exit 0 |
+| `cargo test --locked --all-targets` | passed | Exit 0; 151 tests |
+| `cargo test --locked --features test-adapter --all-targets` | passed | Exit 0; 232 tests, including 75 application tests |
+| `cargo build --locked --release --bin smolsbx` | passed | Exit 0; production build excludes test-adapter; target/release/smolsbx --version reports smolsbx 0.16.3 |
+| `cargo run --locked --example check_baseline_independence` | passed | Exit 0; isolated source formatting, both Clippy and test configurations, and production build passed; ten compiled test executables per feature configuration passed with empty PATH |
+| Independent review | passed | No actionable correctness findings; reviewer independently ran the 108 release tests and adversarial annotated-object API-error and pre-publication tag-disappearance probes |
+| Disposable hosted release and rerun, AC-06 | not_run | No GitHub token or authenticated GitHub CLI is available; no disposable run URL, hosted release ID, or five hosted asset identities were collected |
+| Other native targets and real SmolVM guests | not_run | No new Linux ARM64, macOS ARM64, Windows x86-64/ARM64, native PowerShell, or real guest evidence was collected |
+
+Bug 0011 is implemented and locally exercised; disposable hosted correction
+and recovery remain pending. No production tag, release, asset, workflow run,
+or repository setting was changed. Final cutover acceptance retains the
+existing pending native and real guest gates for supported virtualization hosts.

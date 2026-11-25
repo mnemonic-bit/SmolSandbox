@@ -2,7 +2,13 @@
 
 ## Status and impact
 
-Open. The user reported a publication failure for `smolsandbox 0.16.1` at
+Implemented in `smolsandbox 0.16.3`; local regression checks passed.
+Repository check results are recorded in the implementation validation
+section below. Disposable hosted validation under AC-06 remains pending.
+
+### Original investigation
+
+The user reported a publication failure for `smolsandbox 0.16.1` at
 `00cbf927ec509c76bb73f8a1197afb3d08c5e7dd`. A single missing tag-reference
 read immediately after successful tag creation reproduces the exact error.
 The matching tag persists, but that invocation stops before creating a
@@ -105,7 +111,12 @@ the cause by the supplied diagnostic.
 
 ## Deterministic reproduction
 
-Run this command from the repository root. It exercises the real release
+This historical reproduction applies to the uncorrected release script at
+`d7bf50ad4dcdb1390f05b47250ac58c108a7f058`. Its assertions expect the old
+failure; use that revision to reproduce the investigation. The corrected
+implementation's regressions expect delayed tag visibility to recover.
+
+Run this command from that revision's repository root. It exercises the real release
 decision functions through the existing stateful API fake, without network
 writes. Binary loading and transfer are mocked by `ReleaseTests.run_release`;
 this reproduction establishes metadata behavior, not ZIP publication.
@@ -247,3 +258,43 @@ cause. Authenticated log/draft inspection, a hosted rerun, and eventual-fix
 checks are `not_run`. The seven Rust checks were not repeated for this
 report-only change. No production tag, release, asset, workflow, or
 repository setting was changed.
+
+## Implementation validation: 2026-11-23
+
+The implementation changes the working tree based on
+`895d9fe787c79d052620ec545924a978f3eba993` from package `0.16.2` to `0.16.3`.
+The original investigation and source revisions above remain historical
+evidence. The existing report commit `9c9977fa8d8766a80681183682181d3ba6473b8e`
+did not contain a software correction.
+
+`verify_created_tag` now resolves the selected tag at most five times,
+waiting one second between missing reads. Successful creation and HTTP
+409/422 creation races share this verification without another creation
+write. A matching read is required; a creation response alone is insufficient.
+Only missing tag reads retry. Conflicting commits, malformed reference or
+annotation metadata, and other API failures stop immediately. Exhaustion
+identifies the tag, expected commit, five attempts, and original-workflow
+rerun guidance. Verification preserves the tag and performs no release or
+asset writes until the commit is established.
+
+The workflow's embedded script matches the canonical script. Existing
+pre-publication conflict checks, annotated-tag resolution, release-ID
+verification, and all five binary-asset checks remain covered. Operating
+recovery documentation describes the new tag verification separately from
+the later release verification.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| AC-01 delayed visibility | passed | New metadata regression failed on the original code for one, two, and four missing reads; the corrected implementation publishes on each path, including visibility on attempt five |
+| AC-02 creation races and explicit failures | passed | Regressions cover HTTP 409/422 races without repeated creation, conflicting commits, HTTP 401/403/429/500 reads, malformed references and annotations, and a concurrently visible release |
+| AC-03 exhaustion and preservation | passed | Five missing verification reads fail with tag, expected commit, attempt count, and rerun guidance; metadata and binary integration regressions assert no release writes or asset uploads and preserve the tag |
+| AC-04 identity and recovery | passed | Nested annotated tags and later conflicts remain checked; integration regressions upload and verify all five local ZIPs, recover after exhaustion, and preserve asset IDs, bytes, notes, and tag without writes on repeated recovery |
+| Original reported scenario | passed | The original delayed-read harness, using v0.16.2 at a446657d1aa46c92042f9993592f93f1d2b055cf, publishes after one missing read and one wait; rerunning preserves the release without API writes |
+| Release automation suite | passed | `python3 -m unittest discover -s .github/scripts -p 'test_*.py'` exited 0; 108 tests, including 12 new regressions; independent review repeated the suite and found no actionable defect |
+| AC-05 repository checks | passed | All seven required Rust commands exited 0, including isolated baseline-independence checks and ten compiled test executables per feature configuration with empty PATH; both Cargo package versions are 0.16.3; results are appended to Feature 0010 validation |
+| AC-06 disposable hosted validation | not_run | This environment has no GitHub token or authenticated GitHub CLI; no disposable hosted workflow, release ID, or five uploaded hosted assets were collected |
+
+The correction is implemented and locally exercised; hosted correction is
+not claimed. Pending native checks outside Linux x86-64 and real SmolVM guest
+checks retain their prior status. No production tag, release, asset, workflow
+run, or repository setting was changed during implementation.
