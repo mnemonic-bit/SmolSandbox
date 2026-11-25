@@ -998,6 +998,16 @@ the release and its notes. A failure after tag creation leaves the tag
 available for recovery. Concurrent attempts verify resulting state before
 accepting a duplicate.
 
+After successful tag creation, or an HTTP 409/422 creation response,
+publication verifies the tag through at most five reads, with a one-second
+wait between missing reads. Publication creates the tag only once and
+requires a read that resolves to the original push commit before proceeding.
+Conflicting commits, malformed tag metadata, and other API failures stop
+verification immediately. If the five reads remain missing, publication
+preserves the tag and fails before creating a release or uploading assets.
+The diagnostic identifies the tag, expected commit, attempt count, and
+original-workflow rerun procedure.
+
 Recovery compares existing asset bytes against the expected ZIPs from the
 original run. Matching assets retain their IDs and bytes; missing ZIPs are
 uploaded. A complete matching release succeeds without duplicate uploads or

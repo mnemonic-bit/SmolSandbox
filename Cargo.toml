@@ -1,6 +1,6 @@
 [package]
 name = "smolsandbox"
-version = "0.16.2"
+version = "0.16.3"
 edition = "2021"
 description = "Persistent coding-agent sandboxes through SmolVM"
 license = "MIT"
